@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of.h>
@@ -41,6 +42,7 @@ struct dsi_clk_mngr {
 	pre_clockon_cb pre_clkon_cb;
 
 	bool is_cont_splash_enabled;
+	bool phy_pll_bypass;
 	void *priv_data;
 };
 
@@ -119,6 +121,10 @@ int dsi_clk_set_pixel_clk_rate(void *client, u64 pixel_clk, u32 index)
 	struct dsi_clk_mngr *mngr;
 
 	mngr = c->mngr;
+
+	if (mngr->phy_pll_bypass)
+		return 0;
+
 	rc = clk_set_rate(mngr->link_clks[index].hs_clks.pixel_clk, pixel_clk);
 	if (rc)
 		DSI_ERR("failed to set clk rate for pixel clk, rc=%d\n", rc);
@@ -144,6 +150,10 @@ int dsi_clk_set_byte_clk_rate(void *client, u64 byte_clk,
 	struct dsi_clk_mngr *mngr;
 
 	mngr = c->mngr;
+
+	if (mngr->phy_pll_bypass)
+		return 0;
+
 	rc = clk_set_rate(mngr->link_clks[index].hs_clks.byte_clk, byte_clk);
 	if (rc)
 		DSI_ERR("failed to set clk rate for byte clk, rc=%d\n", rc);
@@ -331,6 +341,9 @@ static int dsi_link_hs_clk_set_rate(struct dsi_link_hs_clk_info *link_hs_clks,
 	 * associated with this flag setting.
 	 */
 	if (mngr->is_cont_splash_enabled)
+		return 0;
+
+	if (mngr->phy_pll_bypass)
 		return 0;
 
 	rc = clk_set_rate(link_hs_clks->byte_clk,
@@ -1451,6 +1464,7 @@ void *dsi_display_clk_mngr_register(struct dsi_clk_info *info)
 	mngr->phy_config_cb = info->phy_config_cb;
 	mngr->phy_pll_toggle_cb = info->phy_pll_toggle_cb;
 	mngr->priv_data = info->priv_data;
+	mngr->phy_pll_bypass = info->phy_pll_bypass;
 	memcpy(mngr->name, info->name, MAX_STRING_LEN);
 
 error:

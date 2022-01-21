@@ -2066,6 +2066,9 @@ static int dsi_ctrl_dts_parse(struct dsi_ctrl *dsi_ctrl,
 	dsi_ctrl->split_link_supported = of_property_read_bool(of_node,
 					"qcom,split-link-supported");
 
+	dsi_ctrl->phy_pll_bypass = of_property_read_bool(of_node,
+					"qcom,dsi-phy-pll-bypass");
+
 	rc = of_property_read_u32(of_node, "frame-threshold-time-us",
 			&frame_threshold_time_us);
 	if (rc) {
@@ -2139,7 +2142,7 @@ static int dsi_ctrl_dev_probe(struct platform_device *pdev)
 
 	rc = dsi_catalog_ctrl_setup(&dsi_ctrl->hw, dsi_ctrl->version,
 		dsi_ctrl->cell_index, dsi_ctrl->phy_isolation_enabled,
-		dsi_ctrl->null_insertion_enabled);
+		dsi_ctrl->phy_pll_bypass, dsi_ctrl->null_insertion_enabled);
 	if (rc) {
 		DSI_CTRL_ERR(dsi_ctrl, "Catalog does not support version (%d)\n",
 		       dsi_ctrl->version);

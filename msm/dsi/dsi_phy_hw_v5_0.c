@@ -119,6 +119,9 @@ static int dsi_phy_hw_v5_0_is_pll_on(struct dsi_phy_hw *phy)
 {
 	u32 data = 0;
 
+	if (phy->phy_pll_bypass)
+		return 0;
+
 	data = DSI_R32(phy, DSIPHY_CMN_PLL_CNTRL);
 	mb(); /*make sure read happened */
 	return (data & BIT(0));
@@ -435,12 +438,14 @@ void dsi_phy_hw_v5_0_enable(struct dsi_phy_hw *phy,
 	DSI_W32(phy, DSIPHY_CMN_GLBL_DIGTOP_SPARE10, 0x1);
 	udelay(500);
 
-	/* wait for REFGEN READY */
-	rc = DSI_READ_POLL_TIMEOUT_ATOMIC(phy, DSIPHY_CMN_PHY_STATUS,
-		status, (status & BIT(0)), delay_us, timeout_us);
-	if (rc) {
-		DSI_PHY_ERR(phy, "Ref gen not ready. Aborting\n");
-		return;
+	if (!phy->phy_pll_bypass) {
+		/* wait for REFGEN READY */
+		rc = DSI_READ_POLL_TIMEOUT_ATOMIC(phy, DSIPHY_CMN_PHY_STATUS,
+			status, (status & BIT(0)), delay_us, timeout_us);
+		if (rc) {
+			DSI_PHY_ERR(phy, "Ref gen not ready. Aborting\n");
+			return;
+		}
 	}
 
 	if (cfg->phy_type == DSI_PHY_TYPE_CPHY)
@@ -458,6 +463,9 @@ void dsi_phy_hw_v5_0_disable(struct dsi_phy_hw *phy,
 			    struct dsi_phy_cfg *cfg)
 {
 	u32 data = 0;
+
+	if (phy->phy_pll_bypass)
+		return;
 
 	if (dsi_phy_hw_v5_0_is_pll_on(phy))
 		DSI_PHY_WARN(phy, "Turning OFF PHY while PLL is on\n");
@@ -497,6 +505,9 @@ void dsi_phy_hw_v5_0_reset_clk_en_sel(struct dsi_phy_hw *phy)
 {
 	u32 data = 0;
 
+	if (phy->phy_pll_bypass)
+		return;
+
 	/*Turning off CLK_EN_SEL after retime buffer sync */
 	data = DSI_R32(phy, DSIPHY_CMN_CLK_CFG1);
 	data &= ~BIT(4);
@@ -513,6 +524,9 @@ int dsi_phy_hw_v5_0_wait_for_lane_idle(
 	u32 const sleep_us = 10;
 	u32 const timeout_us = 100;
 	bool split_link_enabled = dsi_phy_hw_v5_0_is_split_link_enabled(phy);
+
+	if (phy->phy_pll_bypass)
+		return 0;
 
 	stop_state_mask = BIT(4); /* clock lane */
 	if (split_link_enabled)

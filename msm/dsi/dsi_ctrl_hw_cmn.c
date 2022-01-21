@@ -1440,6 +1440,11 @@ void dsi_ctrl_hw_cmn_enable_error_interrupts(struct dsi_ctrl_hw *ctrl,
 	else
 		int_ctrl &= ~BIT(25);
 
+	if (ctrl->phy_pll_bypass) {
+		int_ctrl &= ~BIT(25);
+		goto dsi_write;
+	}
+
 	/* Do not clear interrupt status */
 	int_ctrl &= 0xAAEEAAFE;
 
@@ -1499,6 +1504,7 @@ void dsi_ctrl_hw_cmn_enable_error_interrupts(struct dsi_ctrl_hw *ctrl,
 	if (errors & DSI_INTERLEAVE_OP_CONTENTION)
 		int_mask0 &= ~BIT(8);
 
+dsi_write:
 	DSI_W32(ctrl, DSI_INT_CTRL, int_ctrl);
 	DSI_W32(ctrl, DSI_ERR_INT_MASK0, int_mask0);
 

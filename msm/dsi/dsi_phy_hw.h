@@ -392,6 +392,7 @@ struct dsi_phy_hw_ops {
  * @dyn_pll_base:      VA for the DSI dynamic refresh base address.
  * @length:                Length of the DSI dynamic refresh register base map.
  * @index:                 Instance ID of the controller.
+ * @phy_pll_bypass:        DSI PHY bypass
  * @version:               DSI PHY version.
  * @phy_clamp_base:        Base address of phy clamp register map.
  * @feature_map:           Features supported by DSI PHY.
@@ -403,6 +404,7 @@ struct dsi_phy_hw {
 	void __iomem *dyn_pll_base;
 	u32 dyn_refresh_len;
 	u32 index;
+	bool phy_pll_bypass;
 
 	enum dsi_phy_version version;
 	void __iomem *phy_clamp_base;

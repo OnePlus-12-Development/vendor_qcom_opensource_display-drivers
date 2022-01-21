@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DSI_CLK_H_
@@ -209,6 +210,7 @@ typedef int (*pll_toggle_cb)(void *priv, bool prepare);
  * @priv_data                pointer to private data
  * @master_ndx               master DSI controller index
  * @dsi_ctrl_count           number of DSI controllers
+ * @phy_pll_bypass           bypass PLL clock related operations
  */
 struct dsi_clk_info {
 	char name[MAX_STRING_LEN];
@@ -225,6 +227,7 @@ struct dsi_clk_info {
 	void *priv_data;
 	u32 master_ndx;
 	u32 dsi_ctrl_count;
+	bool phy_pll_bypass;
 };
 
 /**

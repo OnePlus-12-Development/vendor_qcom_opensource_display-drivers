@@ -169,6 +169,8 @@ struct dsi_pll_resource {
 	int bpp;
 	int lanes;
 
+	bool phy_pll_bypass;
+
 	/*
 	 * DSI PHY type DPHY/CPHY
 	 */

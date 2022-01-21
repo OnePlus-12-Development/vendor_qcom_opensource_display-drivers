@@ -948,6 +948,8 @@ struct dsi_ctrl_hw_ops {
  * @supported_errors:       Number of supported errors.
  * @phy_isolation_enabled:    A boolean property allows to isolate the phy from
  *                          dsi controller and run only dsi controller.
+ * @phy_pll_bypass:         A boolean property that enables skipping HW access in
+ *                          PHY/PLL drivers for running on emulation platforms.
  * @null_insertion_enabled:  A boolean property to allow dsi controller to
  *                           insert null packet.
  * @widebus_support:        48 bit wide data bus is supported.
@@ -973,6 +975,7 @@ struct dsi_ctrl_hw {
 	u64 supported_errors;
 
 	bool phy_isolation_enabled;
+	bool phy_pll_bypass;
 	bool null_insertion_enabled;
 	bool widebus_support;
 	bool reset_trig_ctrl;
