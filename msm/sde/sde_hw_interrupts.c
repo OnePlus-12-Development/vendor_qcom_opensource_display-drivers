@@ -106,6 +106,7 @@
  * Concurrent WB overflow interrupt status bit definitions
  */
 #define SDE_INTR_CWB_OVERFLOW BIT(29)
+#define SDE_INTR_CWB_2_OVERFLOW BIT(28)
 
 /**
  * Histogram VIG done interrupt status bit definitions
@@ -308,6 +309,7 @@ static struct sde_irq_type sde_irq_intr2_map[] = {
 		SDE_INTR_CTL_5_DONE, -1},
 
 	{ SDE_IRQ_TYPE_CWB_OVERFLOW, PINGPONG_CWB_0, SDE_INTR_CWB_OVERFLOW, -1},
+	{ SDE_IRQ_TYPE_CWB_OVERFLOW, PINGPONG_CWB_2, SDE_INTR_CWB_2_OVERFLOW, -1},
 
 	{ SDE_IRQ_TYPE_PING_PONG_COMP, PINGPONG_4,
 		SDE_INTR_PING_PONG_4_DONE, -1},
