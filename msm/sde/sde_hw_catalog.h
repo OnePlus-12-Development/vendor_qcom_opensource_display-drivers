@@ -1487,7 +1487,8 @@ struct sde_intf_cfg  {
  * @base               register offset of this block
  * @features           bit mask identifying sub-blocks/features
  * @sblk               sub-block information
- * @format_list: Pointer to list of supported formats
+ * @format_list:       Pointer to list of supported output formats
+ * @rot_format_list:   Pointer to list of supported output formats in WB rotation
  * @vbif_idx           vbif identifier
  * @xin_id             client interface identifier
  * @clk_ctrl           clock control identifier
@@ -1496,6 +1497,7 @@ struct sde_wb_cfg {
 	SDE_HW_BLK_INFO;
 	const struct sde_wb_sub_blocks *sblk;
 	const struct sde_format_extended *format_list;
+	const struct sde_format_extended *rot_format_list;
 	u32 vbif_idx;
 	u32 xin_id;
 	enum sde_clk_ctrl_type clk_ctrl;
@@ -1867,6 +1869,7 @@ struct sde_perf_cfg {
  * @dma_formats         supported formats for dma pipe
  * @vig_formats         supported formats for vig pipe
  * @wb_formats          supported formats for wb
+ * @wb_rot_formats      supported output formats for wb rotation operation
  * @virt_vig_formats    supported formats for virtual vig pipe
  * @inline_rot_formats  supported formats for inline rotation
  * @inline_rot_restricted_formats       restricted formats for inline rotation
@@ -1985,6 +1988,7 @@ struct sde_mdss_cfg {
 	struct sde_format_extended *dma_formats;
 	struct sde_format_extended *vig_formats;
 	struct sde_format_extended *wb_formats;
+	struct sde_format_extended *wb_rot_formats;
 	struct sde_format_extended *virt_vig_formats;
 	struct sde_format_extended *inline_rot_formats;
 	struct sde_format_extended *inline_rot_restricted_formats;

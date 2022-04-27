@@ -532,6 +532,18 @@ int sde_wb_connector_set_info_blob(struct drm_connector *connector,
 		sde_kms_info_stop(info);
 	}
 
+	/* Populate info buffer with WB rotation output formats */
+	format_list = wb_dev->wb_cfg->rot_format_list;
+	if (format_list) {
+		sde_kms_info_start(info, "rot_output_formats");
+		while (format_list->fourcc_format) {
+			sde_kms_info_append_format(info, format_list->fourcc_format,
+					format_list->modifier);
+			++format_list;
+		}
+		sde_kms_info_stop(info);
+	}
+
 	sde_kms_info_add_keyint(info, "wb_intf_index", wb_dev->wb_idx - WB_0);
 	sde_kms_info_add_keyint(info, "maxlinewidth", wb_dev->wb_cfg->sblk->maxlinewidth);
 	sde_kms_info_add_keyint(info, "maxlinewidth_linear",

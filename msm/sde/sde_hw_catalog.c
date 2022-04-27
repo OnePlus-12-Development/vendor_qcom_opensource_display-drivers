@@ -2550,8 +2550,10 @@ static int sde_wb_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 					sde_cfg->mdp[0].clk_ctrls[wb->clk_ctrl].bit_off);
 		}
 
-		if (test_bit(SDE_FEATURE_WB_ROTATION, sde_cfg->features))
+		if (test_bit(SDE_FEATURE_WB_ROTATION, sde_cfg->features)) {
 			set_bit(SDE_WB_LINEAR_ROTATION, &wb->features);
+			wb->rot_format_list = sde_cfg->wb_rot_formats;
+		}
 
 		wb->format_list = sde_cfg->wb_formats;
 	}
@@ -4668,7 +4670,7 @@ static int sde_hardware_format_caps(struct sde_mdss_cfg *sde_cfg,
 	uint32_t hw_rev)
 {
 	int rc = 0;
-	uint32_t dma_list_size, vig_list_size, wb2_list_size;
+	uint32_t dma_list_size, vig_list_size, wb2_list_size, wb_rot_fmt_list_size;
 	uint32_t virt_vig_list_size, in_rot_list_size = 0;
 	uint32_t index = 0;
 	uint32_t in_rot_restricted_list_size = 0;
@@ -4749,6 +4751,18 @@ static int sde_hardware_format_caps(struct sde_mdss_cfg *sde_cfg,
 	index = sde_copy_formats(sde_cfg->wb_formats, wb2_list_size,
 			0, wb2_formats, ARRAY_SIZE(wb2_formats));
 
+	/* WB rotation output formats */
+	wb_rot_fmt_list_size = ARRAY_SIZE(wb_rot_formats);
+	sde_cfg->wb_rot_formats = kcalloc(wb_rot_fmt_list_size,
+			sizeof(struct sde_format_extended), GFP_KERNEL);
+	if (!sde_cfg->wb_rot_formats) {
+		rc = -ENOMEM;
+		goto free_wb;
+	}
+
+	index = sde_copy_formats(sde_cfg->wb_rot_formats, wb_rot_fmt_list_size,
+			0, wb_rot_formats, ARRAY_SIZE(wb_rot_formats));
+
 	/* Rotation enabled input formats */
 	if (IS_SDE_INLINE_ROT_REV_100(sde_cfg->true_inline_rot_rev)) {
 		inline_fmt_tbl = true_inline_rot_v1_fmts;
@@ -4769,7 +4783,7 @@ static int sde_hardware_format_caps(struct sde_mdss_cfg *sde_cfg,
 		if (!sde_cfg->inline_rot_formats) {
 			SDE_ERROR("failed to alloc inline rot format list\n");
 			rc = -ENOMEM;
-			goto free_wb;
+			goto free_wb_rot;
 		}
 
 		index = sde_copy_formats(sde_cfg->inline_rot_formats,
@@ -4793,6 +4807,8 @@ static int sde_hardware_format_caps(struct sde_mdss_cfg *sde_cfg,
 	return 0;
 free_in_rot:
 	kfree(sde_cfg->inline_rot_formats);
+free_wb_rot:
+	kfree(sde_cfg->wb_rot_formats);
 free_wb:
 	kfree(sde_cfg->wb_formats);
 free_virt:
@@ -5421,6 +5437,7 @@ void sde_hw_catalog_deinit(struct sde_mdss_cfg *sde_cfg)
 	kfree(sde_cfg->dma_formats);
 	kfree(sde_cfg->vig_formats);
 	kfree(sde_cfg->wb_formats);
+	kfree(sde_cfg->wb_rot_formats);
 	kfree(sde_cfg->virt_vig_formats);
 	kfree(sde_cfg->inline_rot_formats);
 
