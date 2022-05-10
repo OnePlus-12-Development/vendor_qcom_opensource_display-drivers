@@ -22,6 +22,7 @@ struct sde_hw_wb_cfg {
 	struct sde_rect roi;
 	struct sde_rect crop;
 	bool is_secure;
+	bool rotate_90;
 };
 
 /**

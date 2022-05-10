@@ -200,6 +200,13 @@ static void sde_hw_wb_setup_format(struct sde_hw_wb *ctx,
 	if (SDE_FORMAT_IS_DX(fmt))
 		dst_format |= BIT(21);
 
+	/* Set A5x tile bit for uncompressed tile formats also */
+	if (SDE_FORMAT_IS_TILE(fmt))
+		dst_format |= BIT(31);
+
+	if (data->rotate_90)
+		dst_format |= BIT(11);
+
 	pattern = (fmt->element[3] << 24) |
 			(fmt->element[2] << 16) |
 			(fmt->element[1] << 8)  |
