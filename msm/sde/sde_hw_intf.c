@@ -40,6 +40,7 @@
 #define INTF_DISPLAY_DATA_HCTL          0x064
 #define INTF_ACTIVE_DATA_HCTL           0x068
 #define INTF_FRAME_LINE_COUNT_EN        0x0A8
+#define INTF_MDP_FRAME_COUNT            0x0A4
 #define INTF_FRAME_COUNT                0x0AC
 #define INTF_LINE_COUNT                 0x0B0
 
@@ -541,6 +542,24 @@ static void sde_hw_intf_bind_pingpong_blk(
 	SDE_REG_WRITE(c, INTF_MUX, mux_cfg);
 }
 
+static u32 sde_hw_intf_get_frame_count(struct sde_hw_intf *intf)
+{
+	struct sde_hw_blk_reg_map *c = &intf->hw;
+	bool en;
+
+	/*
+	 * MDP VSync Frame Count is enabled with programmable fetch
+	 * or with auto-refresh enabled.
+	 */
+	en  = (SDE_REG_READ(c, INTF_TEAR_AUTOREFRESH_CONFIG) & BIT(31)) |
+			(SDE_REG_READ(c, INTF_CONFIG) & BIT(31));
+
+	if (en && (intf->cap->features & BIT(SDE_INTF_MDP_VSYNC_FC)))
+		return SDE_REG_READ(c, INTF_MDP_FRAME_COUNT);
+	else
+		return SDE_REG_READ(c, INTF_FRAME_COUNT);
+}
+
 static void sde_hw_intf_get_status(
 		struct sde_hw_intf *intf,
 		struct intf_status *s)
@@ -566,7 +585,7 @@ static void sde_hw_intf_v1_get_status(
 	s->is_en = SDE_REG_READ(c, INTF_STATUS) & BIT(0);
 	s->is_prog_fetch_en = (SDE_REG_READ(c, INTF_CONFIG) & BIT(31));
 	if (s->is_en) {
-		s->frame_count = SDE_REG_READ(c, INTF_FRAME_COUNT);
+		s->frame_count = sde_hw_intf_get_frame_count(intf);
 		s->line_count = SDE_REG_READ(c, INTF_LINE_COUNT) & 0xffff;
 	} else {
 		s->line_count = 0;
@@ -826,7 +845,7 @@ static int sde_hw_intf_get_vsync_info(struct sde_hw_intf *intf,
 	val = SDE_REG_READ(c, INTF_TEAR_LINE_COUNT);
 	info->wr_ptr_line_count = val & 0xffff;
 
-	val = SDE_REG_READ(c, INTF_FRAME_COUNT);
+	val = sde_hw_intf_get_frame_count(intf);
 	info->intf_frame_count = val;
 
 	return 0;
