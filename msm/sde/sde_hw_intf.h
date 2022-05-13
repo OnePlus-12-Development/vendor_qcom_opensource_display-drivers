@@ -56,8 +56,10 @@ struct intf_status {
 };
 
 struct intf_tear_status {
-	u32 read_count;		/* frame & line count for tear init value */
-	u32 write_count;	/* frame & line count for tear write */
+	u32 read_frame_count;	/* frame count for tear init value */
+	u32 read_line_count;	/* line count for tear init value */
+	u32 write_frame_count;	/* frame count for tear write */
+	u32 write_line_count;	/* line count for tear write */
 };
 
 struct intf_avr_params {

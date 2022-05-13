@@ -2381,8 +2381,11 @@ static int sde_intf_parse_dt(struct device_node *np,
 			set_bit(SDE_INTF_WD_JITTER, &intf->features);
 		}
 
-		if (SDE_HW_MAJOR(sde_cfg->hw_rev) >= SDE_HW_MAJOR(SDE_HW_VER_A00))
+		if (SDE_HW_MAJOR(sde_cfg->hw_rev) >= SDE_HW_MAJOR(SDE_HW_VER_A00)) {
 			set_bit(SDE_INTF_MDP_VSYNC_FC, &intf->features);
+			set_bit(SDE_INTF_TE_32BIT, &intf->features);
+			set_bit(SDE_INTF_TE_SINGLE_UPDATE, &intf->features);
+		}
 	}
 
 end:

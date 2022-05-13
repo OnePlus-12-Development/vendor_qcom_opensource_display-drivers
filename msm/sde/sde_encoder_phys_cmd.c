@@ -384,7 +384,8 @@ static void sde_encoder_phys_cmd_wr_ptr_irq(void *arg, int irq_idx)
 		info[0].pp_idx, info[0].intf_idx, info[0].wr_ptr_line_count,
 		info[1].pp_idx, info[1].intf_idx, info[1].wr_ptr_line_count, qsync_mode);
 
-	if (qsync_mode)
+	if (qsync_mode &&
+			!test_bit(SDE_INTF_TE_SINGLE_UPDATE, &phys_enc->hw_intf->cap->features))
 		sde_encoder_override_tearcheck_rd_ptr(phys_enc);
 
 	/* Signal any waiting wr_ptr start interrupt */
@@ -1904,12 +1905,16 @@ static void _sde_encoder_autorefresh_disable_seq2(
 		autorefresh_status = hw_mdp->ops.get_autorefresh_status(hw_mdp,
 					phys_enc->intf_idx);
 		hw_intf->ops.check_and_reset_tearcheck(hw_intf, &tear_status);
-		pr_err("enc:%d autofresh status:0x%x intf:%d tear_read:0x%x tear_write:0x%x\n",
-			DRMID(phys_enc->parent), autorefresh_status, phys_enc->intf_idx - INTF_0,
-			tear_status.read_count, tear_status.write_count);
-		SDE_EVT32(DRMID(phys_enc->parent), phys_enc->intf_idx - INTF_0,
-			autorefresh_status, tear_status.read_count,
-			tear_status.write_count);
+		pr_err("enc:%d autofresh status:0x%x intf:%d\n",
+				DRMID(phys_enc->parent), autorefresh_status,
+				phys_enc->intf_idx - INTF_0);
+		pr_err("tear_read_frame_count:%d tear_read_line_count:%d\n",
+				tear_status.read_frame_count, tear_status.read_line_count);
+		pr_err("tear_write_frame_count:%d tear_write_line_count:%d\n",
+				tear_status.write_frame_count, tear_status.write_line_count);
+		SDE_EVT32(DRMID(phys_enc->parent), phys_enc->intf_idx - INTF_0, autorefresh_status,
+			tear_status.read_frame_count, tear_status.read_line_count,
+			tear_status.write_frame_count, tear_status.write_line_count);
 	}
 }
 static void _sde_encoder_phys_disable_autorefresh(struct sde_encoder_phys *phys_enc)
