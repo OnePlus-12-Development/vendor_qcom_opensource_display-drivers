@@ -647,6 +647,9 @@ static void dp_ctrl_set_clock_rate(struct dp_ctrl_private *ctrl,
 	u32 num = ctrl->parser->mp[clk_type].num_clk;
 	struct dss_clk *cfg = ctrl->parser->mp[clk_type].clk_config;
 
+	/* convert to HZ for byte2 ops */
+	rate *= ctrl->pll->clk_factor;
+
 	while (num && strcmp(cfg->clk_name, name)) {
 		num--;
 		cfg++;

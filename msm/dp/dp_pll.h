@@ -95,6 +95,7 @@ struct dp_pll {
 	struct dp_pll_io io;
 	struct clk_onecell_data *clk_data;
 	u32 dp_core_revision;
+	u32 clk_factor;
 
 	int (*pll_cfg)(struct dp_pll *pll, unsigned long rate);
 	int (*pll_prepare)(struct dp_pll *pll);

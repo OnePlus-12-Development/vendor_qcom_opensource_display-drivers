@@ -22,6 +22,8 @@ struct dp_power_private {
 	struct clk *pixel_parent;
 	struct clk *pixel1_clk_rcg;
 	struct clk *xo_clk;
+	struct clk *link_clk_rcg;
+	struct clk *link_parent;
 
 	struct dp_power dp_power;
 
@@ -245,6 +247,25 @@ static int dp_power_clk_init(struct dp_power_private *power, bool enable)
 				goto err_pixel1_clk_rcg;
 			}
 		}
+
+		power->link_clk_rcg = clk_get(dev, "link_clk_src");
+		if (IS_ERR(power->link_clk_rcg)) {
+			DP_ERR("Unable to get DP link clk RCG: %ld\n",
+					PTR_ERR(power->link_clk_rcg));
+			rc = PTR_ERR(power->link_clk_rcg);
+			power->link_clk_rcg = NULL;
+			goto err_link_clk_rcg;
+		}
+
+		/* If link_parent node is available, convert clk rates to HZ for byte2 ops */
+		power->pll->clk_factor = 1000;
+		power->link_parent = clk_get(dev, "link_parent");
+		if (IS_ERR(power->link_parent)) {
+			DP_WARN("Unable to get DP link parent: %ld\n",
+					PTR_ERR(power->link_parent));
+			power->link_parent = NULL;
+			power->pll->clk_factor = 1;
+		}
 	} else {
 		if (power->pixel1_clk_rcg)
 			clk_put(power->pixel1_clk_rcg);
@@ -255,10 +276,19 @@ static int dp_power_clk_init(struct dp_power_private *power, bool enable)
 		if (power->pixel_clk_rcg)
 			clk_put(power->pixel_clk_rcg);
 
+		if (power->link_parent)
+			clk_put(power->link_parent);
+
+		if (power->link_clk_rcg)
+			clk_put(power->link_clk_rcg);
+
 		dp_power_clk_put(power);
 	}
 
 	return rc;
+err_link_clk_rcg:
+	if (power->pixel1_clk_rcg)
+		clk_put(power->pixel1_clk_rcg);
 err_pixel1_clk_rcg:
 	clk_put(power->xo_clk);
 err_xo_clk:
@@ -363,6 +393,29 @@ exit:
 	return rc;
 }
 
+static bool dp_power_clk_status(struct dp_power *dp_power, enum dp_pm_type pm_type)
+{
+	struct dp_power_private *power;
+
+	if (!dp_power) {
+		DP_ERR("invalid power data\n");
+		return false;
+	}
+
+	power = container_of(dp_power, struct dp_power_private, dp_power);
+
+	if (pm_type == DP_LINK_PM)
+		return power->link_clks_on;
+	else if (pm_type == DP_CORE_PM)
+		return power->core_clks_on;
+	else if (pm_type == DP_STREAM0_PM)
+		return power->strm0_clks_on;
+	else if (pm_type == DP_STREAM1_PM)
+		return power->strm1_clks_on;
+	else
+		return false;
+}
+
 static int dp_power_clk_enable(struct dp_power *dp_power,
 		enum dp_pm_type pm_type, bool enable)
 {
@@ -387,18 +440,8 @@ static int dp_power_clk_enable(struct dp_power *dp_power,
 	}
 
 	if (enable) {
-		if (pm_type == DP_CORE_PM && power->core_clks_on) {
-			DP_DEBUG("core clks already enabled\n");
-			return 0;
-		}
-
-		if ((pm_type == DP_STREAM0_PM) && (power->strm0_clks_on)) {
-			DP_DEBUG("strm0 clks already enabled\n");
-			return 0;
-		}
-
-		if ((pm_type == DP_STREAM1_PM) && (power->strm1_clks_on)) {
-			DP_DEBUG("strm1 clks already enabled\n");
+		if (dp_power_clk_status(dp_power, pm_type)) {
+			DP_DEBUG("%s clks already enabled\n", dp_parser_pm_name(pm_type));
 			return 0;
 		}
 
@@ -415,9 +458,12 @@ static int dp_power_clk_enable(struct dp_power *dp_power,
 			}
 		}
 
-		if (pm_type == DP_LINK_PM && power->link_clks_on) {
-			DP_DEBUG("links clks already enabled\n");
-			return 0;
+		if (pm_type == DP_LINK_PM && power->link_parent) {
+			rc = clk_set_parent(power->link_clk_rcg, power->link_parent);
+			if (rc) {
+				DP_ERR("failed to set link parent\n");
+				goto error;
+			}
 		}
 	}
 
@@ -456,29 +502,6 @@ static int dp_power_clk_enable(struct dp_power *dp_power,
 		power->strm1_clks_on ? "on" : "off");
 error:
 	return rc;
-}
-
-static bool dp_power_clk_status(struct dp_power *dp_power, enum dp_pm_type pm_type)
-{
-	struct dp_power_private *power;
-
-	if (!dp_power) {
-		DP_ERR("invalid power data\n");
-		return false;
-	}
-
-	power = container_of(dp_power, struct dp_power_private, dp_power);
-
-	if (pm_type == DP_LINK_PM)
-		return power->link_clks_on;
-	else if (pm_type == DP_CORE_PM)
-		return power->core_clks_on;
-	else if (pm_type == DP_STREAM0_PM)
-		return power->strm0_clks_on;
-	else if (pm_type == DP_STREAM1_PM)
-		return power->strm1_clks_on;
-	else
-		return false;
 }
 
 static int dp_power_request_gpios(struct dp_power_private *power)
