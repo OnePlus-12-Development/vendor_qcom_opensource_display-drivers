@@ -609,6 +609,14 @@ int sde_wb_connector_post_init(struct drm_connector *connector, void *display)
 		{WB_USAGE_WFD, "wb_usage_wfd"},
 		{WB_USAGE_CWB, "wb_usage_cwb"},
 		{WB_USAGE_OFFLINE_WB, "wb_usage_offline_wb"},
+		{WB_USAGE_ROT, "wb_usage_rot"},
+	};
+
+	static const struct drm_prop_enum_list e_wb_rotate_type[] = {
+		{WB_ROT_NONE, "wb_rot_none"},
+		{WB_ROT_SINGLE, "wb_rot_single"},
+		{WB_ROT_JOB1, "wb_rot_job1"},
+		{WB_ROT_JOB2, "wb_rot_job2"},
 	};
 
 	if (!connector || !display || !wb_dev->wb_cfg || !wb_dev->drm_dev->dev_private) {
@@ -661,6 +669,11 @@ int sde_wb_connector_post_init(struct drm_connector *connector, void *display)
 	if (catalog->dnsc_blur_count && catalog->dnsc_blur_filters)
 		msm_property_install_range(&c_conn->property_info, "dnsc_blur",
 			0x0, 0, ~0, 0, CONNECTOR_PROP_DNSC_BLUR);
+
+	if (wb_dev->wb_cfg->features & BIT(SDE_WB_LINEAR_ROTATION))
+		msm_property_install_enum(&c_conn->property_info, "wb_rotate_type",
+			0x0, 0, e_wb_rotate_type, ARRAY_SIZE(e_wb_rotate_type),
+			0, CONNECTOR_PROP_WB_ROT_TYPE);
 
 	msm_property_install_enum(&c_conn->property_info, "wb_usage_type",
 			0x0, 0, e_wb_usage_type, ARRAY_SIZE(e_wb_usage_type),

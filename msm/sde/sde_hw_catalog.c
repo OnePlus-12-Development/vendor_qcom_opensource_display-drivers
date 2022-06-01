@@ -2550,6 +2550,9 @@ static int sde_wb_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 					sde_cfg->mdp[0].clk_ctrls[wb->clk_ctrl].bit_off);
 		}
 
+		if (test_bit(SDE_FEATURE_WB_ROTATION, sde_cfg->features))
+			set_bit(SDE_WB_LINEAR_ROTATION, &wb->features);
+
 		wb->format_list = sde_cfg->wb_formats;
 	}
 
