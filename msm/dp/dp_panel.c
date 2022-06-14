@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -19,6 +19,7 @@
 #define DP_KHZ_TO_HZ 1000
 #define DP_PANEL_DEFAULT_BPP 24
 #define DP_MAX_DS_PORT_COUNT 1
+#define DP_PANEL_MAX_SUPPORTED_BPP 30
 
 #define DSC_TGT_BPP 8
 #define DPRX_FEATURE_ENUMERATION_LIST 0x2210
@@ -71,6 +72,7 @@ struct dp_panel_private {
 	struct dp_link *link;
 	struct dp_parser *parser;
 	struct dp_catalog_panel *catalog;
+	struct dp_panel *base;
 	bool panel_on;
 	bool vsc_supported;
 	bool vscext_supported;
@@ -1921,12 +1923,15 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 {
 	struct dp_link_params *link_params;
 	struct dp_panel_private *panel;
-	const u32 max_supported_bpp = 30;
+	u32 max_supported_bpp = dp_panel->max_supported_bpp;
 	u32 min_supported_bpp = 18;
 	u32 bpp = 0, link_bitrate = 0, mode_bitrate;
 	s64 rate_fp = 0;
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+
+	if (dp_panel->mst_state && panel->base)
+		max_supported_bpp = panel->base->max_supported_bpp;
 
 	if (dsc_en)
 		min_supported_bpp = 24;
@@ -3155,6 +3160,8 @@ struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 	dp_panel->spd_enabled = true;
 	dp_panel->link_bw_code = 0;
 	dp_panel->lane_count = 0;
+	dp_panel->max_supported_bpp = DP_PANEL_MAX_SUPPORTED_BPP;
+
 	memcpy(panel->spd_vendor_name, vendor_name, (sizeof(u8) * 8));
 	memcpy(panel->spd_product_description, product_desc, (sizeof(u8) * 16));
 	dp_panel->connector = in->connector;
@@ -3164,6 +3171,7 @@ struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 	dp_panel->dsc_continuous_pps = panel->parser->dsc_continuous_pps;
 
 	if (in->base_panel) {
+		panel->base = in->base_panel;
 		memcpy(dp_panel->dpcd, in->base_panel->dpcd,
 				DP_RECEIVER_CAP_SIZE + 1);
 		memcpy(dp_panel->dsc_dpcd, in->base_panel->dsc_dpcd,

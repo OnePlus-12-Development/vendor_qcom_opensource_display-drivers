@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2134,6 +2134,8 @@ static int dp_debug_init_link(struct dp_debug_private *debug,
 	debugfs_create_u32("lane_count", 0644, dir, &debug->panel->lane_count);
 
 	debugfs_create_u32("link_bw_code", 0644, dir, &debug->panel->link_bw_code);
+
+	debugfs_create_u32("max_bpp", 0644, dir, &debug->panel->max_supported_bpp);
 
 	file = debugfs_create_file("mmrm_clk_cb", 0644, dir, debug, &mmrm_clk_cb_fops);
 	if (IS_ERR_OR_NULL(file)) {
