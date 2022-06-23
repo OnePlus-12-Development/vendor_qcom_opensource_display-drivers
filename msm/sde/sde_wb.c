@@ -682,10 +682,14 @@ int sde_wb_connector_post_init(struct drm_connector *connector, void *display)
 		msm_property_install_range(&c_conn->property_info, "dnsc_blur",
 			0x0, 0, ~0, 0, CONNECTOR_PROP_DNSC_BLUR);
 
-	if (wb_dev->wb_cfg->features & BIT(SDE_WB_LINEAR_ROTATION))
+	if (wb_dev->wb_cfg->features & BIT(SDE_WB_LINEAR_ROTATION)) {
 		msm_property_install_enum(&c_conn->property_info, "wb_rotate_type",
 			0x0, 0, e_wb_rotate_type, ARRAY_SIZE(e_wb_rotate_type),
 			0, CONNECTOR_PROP_WB_ROT_TYPE);
+
+		msm_property_install_range(&c_conn->property_info, "wb_rot_bytes_per_clk",
+			0x0, 0, UINT_MAX, 0, CONNECTOR_PROP_WB_ROT_BYTES_PER_CLK);
+	}
 
 	msm_property_install_enum(&c_conn->property_info, "wb_usage_type",
 			0x0, 0, e_wb_usage_type, ARRAY_SIZE(e_wb_usage_type),

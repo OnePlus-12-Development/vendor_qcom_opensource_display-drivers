@@ -101,8 +101,7 @@ static void sde_encoder_phys_wb_set_ot_limit(struct sde_encoder_phys *phys_enc)
 	ot_params.num = hw_wb->idx - WB_0;
 	ot_params.width = wb_enc->wb_roi.w;
 	ot_params.height = wb_enc->wb_roi.h;
-	ot_params.is_wfd = ((phys_enc->in_clone_mode) || (usage_type == WB_USAGE_OFFLINE_WB)) ?
-					false : true;
+	ot_params.is_wfd = (usage_type == WB_USAGE_WFD);
 	ot_params.frame_rate = drm_mode_vrefresh(&phys_enc->cached_mode);
 	ot_params.vbif_idx = hw_wb->caps->vbif_idx;
 	ot_params.clk_ctrl = hw_wb->caps->clk_ctrl;
@@ -153,7 +152,7 @@ static void sde_encoder_phys_wb_set_qos_remap(struct sde_encoder_phys *phys_enc)
 	qos_params.num = hw_wb->idx - WB_0;
 	if (phys_enc->in_clone_mode)
 		qos_params.client_type = VBIF_CWB_CLIENT;
-	else if (usage_type == WB_USAGE_OFFLINE_WB)
+	else if (usage_type == WB_USAGE_OFFLINE_WB || usage_type == WB_USAGE_ROT)
 		qos_params.client_type = VBIF_OFFLINE_WB_CLIENT;
 	else
 		qos_params.client_type = VBIF_NRT_CLIENT;
@@ -206,13 +205,19 @@ static void sde_encoder_phys_wb_set_qos(struct sde_encoder_phys *phys_enc)
 	}
 
 	qos_cfg.danger_safe_en = true;
+	if (usage_type == WB_USAGE_ROT) {
+		qos_cfg.danger_safe_en = false;
+		qos_cfg.qos_mode = SDE_WB_QOS_MODE_DYNAMIC;
+		qos_cfg.bytes_per_clk = sde_connector_get_property(conn_state,
+				CONNECTOR_PROP_WB_ROT_BYTES_PER_CLK);
+	}
 
 	if (phys_enc->in_clone_mode)
 		lut_index = (SDE_FORMAT_IS_TILE(wb_enc->wb_fmt)
 				|| SDE_FORMAT_IS_UBWC(wb_enc->wb_fmt)) ?
 					SDE_QOS_LUT_USAGE_CWB_TILE : SDE_QOS_LUT_USAGE_CWB;
 	else
-		lut_index = (usage_type == WB_USAGE_OFFLINE_WB) ?
+		lut_index = (usage_type == WB_USAGE_OFFLINE_WB || usage_type == WB_USAGE_ROT) ?
 					SDE_QOS_LUT_USAGE_OFFLINE_WB : SDE_QOS_LUT_USAGE_NRT;
 
 	creq_index = lut_index * SDE_CREQ_LUT_TYPE_MAX;
@@ -996,14 +1001,15 @@ static int _sde_encoder_phys_wb_validate_rotation(struct sde_encoder_phys *phys_
 	enum sde_wb_rot_type rotation_type;
 	int ret = 0;
 	u32 src_w, src_h;
+	u32 bytes_per_clk;
 	struct sde_rect wb_src, wb_roi = {0,};
 	struct sde_io_res dnsc_res = {0,};
 	const struct sde_rect *crtc_roi = NULL;
 	struct drm_display_mode *mode;
+	enum sde_wb_usage_type usage_type;
 	struct sde_encoder_phys_wb *wb_enc = to_sde_encoder_phys_wb(phys_enc);
 
 	rotation_type = sde_connector_get_property(conn_state, CONNECTOR_PROP_WB_ROT_TYPE);
-
 	if (rotation_type == WB_ROT_NONE)
 		return ret;
 
@@ -1011,6 +1017,13 @@ static int _sde_encoder_phys_wb_validate_rotation(struct sde_encoder_phys *phys_
 	if (usage_type != WB_USAGE_ROT) {
 		SDE_ERROR("[enc:%d wb:%d] invalid WB usage_ype:%d for rotation_type:%d\n",
 				DRMID(phys_enc->parent), WBID(wb_enc), usage_type, rotation_type);
+		return -EINVAL;
+	}
+
+	bytes_per_clk = sde_connector_get_property(conn_state, CONNECTOR_PROP_WB_ROT_BYTES_PER_CLK);
+	if (!bytes_per_clk) {
+		SDE_ERROR("[enc:%d wb:%d] WB output bytes per XO clock is must for rotation\n",
+				DRMID(phys_enc->parent), WBID(wb_enc));
 		return -EINVAL;
 	}
 
