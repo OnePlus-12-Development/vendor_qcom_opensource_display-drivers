@@ -3208,6 +3208,8 @@ static int sde_dsc_parse_dt(struct device_node *np,
 						&dsc->features);
 			if (SDE_HW_MAJOR(sde_cfg->hw_rev) >= SDE_HW_MAJOR(SDE_HW_VER_900))
 				set_bit(SDE_DSC_4HS, &dsc->features);
+			if (SDE_HW_MAJOR(sde_cfg->hw_rev) >= SDE_HW_MAJOR(SDE_HW_VER_A00))
+				set_bit(SDE_DSC_FULL_ICH_PREC, &dsc->features);
 			if (sde_cfg->has_reduced_ob_max)
 				set_bit(SDE_DSC_REDUCED_OB_MAX, &dsc->features);
 		} else {

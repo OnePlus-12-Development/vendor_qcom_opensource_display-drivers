@@ -188,6 +188,10 @@ static void sde_hw_dsc_config(struct sde_hw_dsc *hw_dsc,
 		data |= 0xC00; // set bit 10 and 11
 	data |= (_dsc_calc_ob_max_addr(hw_dsc, dsc->num_active_ss_per_enc) << 18);
 
+	if (test_bit(SDE_DSC_FULL_ICH_PREC, &hw_dsc->caps->features) &&
+			dsc->config.bits_per_component > 8)
+		data |= BIT(12);
+
 	SDE_REG_WRITE(dsc_c, ENC_DF_CTRL + idx, data);
 
 	data = (dsc->config.dsc_version_minor & 0xf) << 28;

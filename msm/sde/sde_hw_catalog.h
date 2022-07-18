@@ -511,6 +511,7 @@ enum {
  * @SDE_DSC_ENC,                DSC encoder sub block
  * @SDE_DSC_CTL,                DSC ctl sub block
  * @SDE_DSC_4HS,                Dedicated DSC 4HS config registers
+ * @SDE_DSC_FULL_ICH_PREC,      DSC use full ICH error precision
  * @SDE_DSC_MAX
  */
 enum {
@@ -522,6 +523,7 @@ enum {
 	SDE_DSC_ENC,
 	SDE_DSC_CTL,
 	SDE_DSC_4HS,
+	SDE_DSC_FULL_ICH_PREC,
 	SDE_DSC_MAX
 };
 
