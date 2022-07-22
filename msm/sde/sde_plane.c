@@ -1163,9 +1163,11 @@ static void sde_color_process_plane_setup(struct drm_plane *plane)
 	size_t memcol_sz = 0, size = 0;
 	struct sde_hw_cp_cfg hw_cfg = {};
 	struct sde_hw_ctl *ctl = _sde_plane_get_hw_ctl(plane);
-	bool fp16_igc, fp16_unmult;
+	bool fp16_igc, fp16_unmult, ucsc_unmult, ucsc_alpha_dither;
+	int ucsc_gc, ucsc_igc;
 	struct drm_msm_fp16_gc *fp16_gc = NULL;
 	struct drm_msm_fp16_csc *fp16_csc = NULL;
+	struct drm_msm_ucsc_csc *ucsc_csc = NULL;
 
 	psde = to_sde_plane(plane);
 	pstate = to_sde_plane_state(plane->state);
@@ -1315,6 +1317,68 @@ static void sde_color_process_plane_setup(struct drm_plane *plane)
 		hw_cfg.len = sizeof(bool);
 		hw_cfg.payload = &fp16_unmult;
 		psde->pipe_hw->ops.setup_fp16_unmult(psde->pipe_hw,
+				pstate->multirect_index, &hw_cfg);
+	}
+
+	if (pstate->dirty & SDE_PLANE_DIRTY_UCSC_IGC &&
+			psde->pipe_hw->ops.setup_ucsc_igc) {
+		ucsc_igc = sde_plane_get_property(pstate,
+				PLANE_PROP_UCSC_IGC);
+		hw_cfg.last_feature = 0;
+		hw_cfg.ctl = ctl;
+		hw_cfg.len = sizeof(int);
+		hw_cfg.payload = &ucsc_igc;
+		psde->pipe_hw->ops.setup_ucsc_igc(psde->pipe_hw,
+				pstate->multirect_index, &hw_cfg);
+	}
+
+	if (pstate->dirty & SDE_PLANE_DIRTY_UCSC_GC &&
+			psde->pipe_hw->ops.setup_ucsc_gc) {
+		ucsc_gc = sde_plane_get_property(pstate,
+				PLANE_PROP_UCSC_GC);
+		hw_cfg.last_feature = 0;
+		hw_cfg.ctl = ctl;
+		hw_cfg.len = sizeof(int);
+		hw_cfg.payload = &ucsc_gc;
+		psde->pipe_hw->ops.setup_ucsc_gc(psde->pipe_hw,
+				pstate->multirect_index, &hw_cfg);
+	}
+
+	if (pstate->dirty & SDE_PLANE_DIRTY_UCSC_CSC &&
+			psde->pipe_hw->ops.setup_ucsc_csc) {
+		ucsc_csc = msm_property_get_blob(&psde->property_info,
+				&pstate->property_state,
+				&size,
+				PLANE_PROP_UCSC_CSC);
+		hw_cfg.last_feature = 0;
+		hw_cfg.ctl = ctl;
+		hw_cfg.len = size;
+		hw_cfg.payload = ucsc_csc;
+		psde->pipe_hw->ops.setup_ucsc_csc(psde->pipe_hw,
+				pstate->multirect_index, &hw_cfg);
+	}
+
+	if (pstate->dirty & SDE_PLANE_DIRTY_UCSC_UNMULT &&
+			psde->pipe_hw->ops.setup_ucsc_unmult) {
+		ucsc_unmult = !!sde_plane_get_property(pstate,
+				PLANE_PROP_UCSC_UNMULT);
+		hw_cfg.last_feature = 0;
+		hw_cfg.ctl = ctl;
+		hw_cfg.len = sizeof(bool);
+		hw_cfg.payload = &ucsc_unmult;
+		psde->pipe_hw->ops.setup_ucsc_unmult(psde->pipe_hw,
+				pstate->multirect_index, &hw_cfg);
+	}
+
+	if (pstate->dirty & SDE_PLANE_DIRTY_UCSC_ALPHA_DITHER &&
+			psde->pipe_hw->ops.setup_ucsc_alpha_dither) {
+		ucsc_alpha_dither = !!sde_plane_get_property(pstate,
+				PLANE_PROP_UCSC_ALPHA_DITHER);
+		hw_cfg.last_feature = 0;
+		hw_cfg.ctl = ctl;
+		hw_cfg.len = sizeof(bool);
+		hw_cfg.payload = &ucsc_alpha_dither;
+		psde->pipe_hw->ops.setup_ucsc_alpha_dither(psde->pipe_hw,
 				pstate->multirect_index, &hw_cfg);
 	}
 }
@@ -3669,6 +3733,23 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 	char feature_name[256];
 	bool is_master = !psde->is_virtual;
 
+	static const struct drm_prop_enum_list ucsc_gc[] = {
+		{UCSC_GC_MODE_DISABLE, "disable"},
+		{UCSC_GC_MODE_SRGB, "srgb"},
+		{UCSC_GC_MODE_PQ, "pq"},
+		{UCSC_GC_MODE_GAMMA2_2, "gamma2_2"},
+		{UCSC_GC_MODE_HLG, "hlg"},
+	};
+
+	static const struct drm_prop_enum_list ucsc_igc[] = {
+		{UCSC_IGC_MODE_DISABLE, "disable"},
+		{UCSC_IGC_MODE_SRGB, "srgb"},
+		{UCSC_IGC_MODE_REC709, "rec709"},
+		{UCSC_IGC_MODE_GAMMA2_2, "gamma2_2"},
+		{UCSC_IGC_MODE_HLG, "hlg"},
+		{UCSC_IGC_MODE_PQ, "pq"},
+	};
+
 	if ((is_master &&
 		(psde->features & BIT(SDE_SSPP_INVERSE_PMA))) ||
 		(psde->features & BIT(SDE_SSPP_DGM_INVERSE_PMA))) {
@@ -3764,6 +3845,46 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 			psde->pipe_sblk->fp16_unmult_blk[0].version >> 16);
 		msm_property_install_range(&psde->property_info, feature_name,
 			0x0, 0, 1, 0, PLANE_PROP_FP16_UNMULT);
+	}
+
+	if (psde->features & BIT(SDE_SSPP_UCSC_IGC)) {
+		snprintf(feature_name, sizeof(feature_name), "%s%d",
+			"SDE_SSPP_UCSC_IGC_V",
+			psde->pipe_sblk->ucsc_igc_blk[0].version >> 16);
+		msm_property_install_enum(&psde->property_info, feature_name,
+				0x0, 0, ucsc_igc, ARRAY_SIZE(ucsc_igc), 0, PLANE_PROP_UCSC_IGC);
+	}
+
+	if (psde->features & BIT(SDE_SSPP_UCSC_GC)) {
+		snprintf(feature_name, sizeof(feature_name), "%s%d",
+			"SDE_SSPP_UCSC_GC_V",
+			psde->pipe_sblk->ucsc_gc_blk[0].version >> 16);
+		msm_property_install_enum(&psde->property_info, feature_name,
+		0x0, 0, ucsc_gc, ARRAY_SIZE(ucsc_gc), 0, PLANE_PROP_UCSC_GC);
+	}
+
+	if (psde->features & BIT(SDE_SSPP_UCSC_CSC)) {
+		snprintf(feature_name, sizeof(feature_name), "%s%d",
+			"SDE_SSPP_UCSC_CSC_V",
+			psde->pipe_sblk->ucsc_csc_blk[0].version >> 16);
+		msm_property_install_blob(&psde->property_info, feature_name, 0,
+			PLANE_PROP_UCSC_CSC);
+	}
+
+	if (psde->features & BIT(SDE_SSPP_UCSC_UNMULT)) {
+		snprintf(feature_name, sizeof(feature_name), "%s%d",
+			"SDE_SSPP_UCSC_UNMULT_V",
+			psde->pipe_sblk->ucsc_unmult_blk[0].version >> 16);
+		msm_property_install_range(&psde->property_info, feature_name,
+			0x0, 0, 1, 0, PLANE_PROP_UCSC_UNMULT);
+	}
+
+	if (psde->features & BIT(SDE_SSPP_UCSC_ALPHA_DITHER)) {
+		snprintf(feature_name, sizeof(feature_name), "%s%d",
+			"SDE_SSPP_UCSC_ALPHA_DITHER_V",
+			psde->pipe_sblk->ucsc_alpha_dither_blk[0].version >> 16);
+		msm_property_install_range(&psde->property_info, feature_name,
+			0x0, 0, 1, 0, PLANE_PROP_UCSC_ALPHA_DITHER);
 	}
 }
 

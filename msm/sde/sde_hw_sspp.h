@@ -97,6 +97,23 @@ enum sde_hw_filter_yuv {
 	SDE_SCALE_BIL
 };
 
+enum sde_sspp_ucsc_gc {
+	UCSC_GC_MODE_DISABLE = 0,
+	UCSC_GC_MODE_SRGB,
+	UCSC_GC_MODE_PQ,
+	UCSC_GC_MODE_GAMMA2_2,
+	UCSC_GC_MODE_HLG,
+};
+
+enum sde_sspp_ucsc_igc {
+	UCSC_IGC_MODE_DISABLE = 0,
+	UCSC_IGC_MODE_SRGB,
+	UCSC_IGC_MODE_REC709,
+	UCSC_IGC_MODE_GAMMA2_2,
+	UCSC_IGC_MODE_HLG,
+	UCSC_IGC_MODE_PQ,
+};
+
 struct sde_hw_sharp_cfg {
 	u32 strength;
 	u32 edge_thr;
@@ -713,6 +730,51 @@ struct sde_hw_sspp_ops {
 	void (*setup_line_insertion)(struct sde_hw_pipe *ctx,
 				     enum sde_sspp_multirect_index index,
 				     struct sde_hw_pipe_line_insertion_cfg *cfg);
+
+	/**
+	 * setup_ucsc_csc - set UCSC CSC cp block
+	 * @ctx: Pointer to pipe object
+	 * @index: Pipe rectangle to operate on
+	 * @data: Pointer to sde_hw_cp_cfg object holding drm_msm_ucsc_csc data
+	 */
+	void (*setup_ucsc_csc)(struct sde_hw_pipe *ctx,
+		enum sde_sspp_multirect_index index, void *data);
+
+	/**
+	 * sde_setup_ucsc_gcv1 - set UCSC GC cp block
+	 * @ctx: Pointer to pipe object
+	 * @index: Pipe rectangle to operate on
+	 * @mode: Pointer to sde_hw_cp_cfg object holding GC mode data
+	 */
+	void (*setup_ucsc_gc)(struct sde_hw_pipe *ctx,
+		enum sde_sspp_multirect_index index, void *data);
+
+	/**
+	 * sde_setup_ucsc_igcv1 - set UCSC IGC cp block
+	 * @ctx: Pointer to pipe object
+	 * @index: Pipe rectangle to operate on
+	 * @mode: Pointer to sde_hw_cp_cfg object containing IGC mode data
+	 */
+	void (*setup_ucsc_igc)(struct sde_hw_pipe *ctx,
+		enum sde_sspp_multirect_index index, void *data);
+
+	/**
+	 * sde_setup_ucsc_unmultv1 - set UCSC UNMULT cp block
+	 * @ctx: Pointer to pipe object
+	 * @index: Pipe rectangle to operate on
+	 * @data: Pointer to sde_hw_cp_cfg object containing bool data
+	 */
+	void (*setup_ucsc_unmult)(struct sde_hw_pipe *ctx,
+		enum sde_sspp_multirect_index index, void *data);
+
+	/**
+	 * sde_setup_ucsc_alpha_ditherv1 - set UCSC ALPHA DITHER cp block
+	 * @ctx: Pointer to pipe object
+	 * @index: Pipe rectangle to operate on
+	 * @data: Pointer to sde_hw_cp_cfg object containing bool data
+	 */
+	void (*setup_ucsc_alpha_dither)(struct sde_hw_pipe *ctx,
+		enum sde_sspp_multirect_index index, void *data);
 };
 
 /**
