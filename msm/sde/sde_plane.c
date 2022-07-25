@@ -3946,7 +3946,8 @@ static void _sde_plane_setup_capabilities_blob(struct sde_plane *psde,
 	index = (master_plane_id == 0) ? 0 : 1;
 	if (test_bit(SDE_FEATURE_DEMURA, catalog->features) &&
 	    catalog->demura_supported[psde->pipe][index] != ~0x0)
-		sde_kms_info_add_keyint(info, "demura_block", index);
+		sde_kms_info_add_keyint(info, "demura_block",
+			catalog->demura_supported[psde->pipe][index]);
 
 	if (psde->features & BIT(SDE_SSPP_SEC_UI_ALLOWED))
 		sde_kms_info_add_keyint(info, "sec_ui_allowed", 1);

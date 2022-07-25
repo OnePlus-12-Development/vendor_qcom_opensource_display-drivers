@@ -228,6 +228,14 @@ enum sde_rc {
 	RC_MAX
 };
 
+enum sde_demura {
+	DEMURA_0,
+	DEMURA_1,
+	DEMURA_2,
+	DEMURA_3,
+	DEMURA_MAX
+};
+
 enum sde_ds {
 	DS_TOP,
 	DS_0,

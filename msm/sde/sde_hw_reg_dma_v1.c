@@ -1029,6 +1029,8 @@ int init_v3(struct sde_hw_reg_dma *cfg)
 		reg_dma_ctl0_reset_offset[i][DMA_CTL_QUEUE0] = 4096 * i + 0x54;
 		reg_dma_ctl0_reset_offset[i][DMA_CTL_QUEUE1] = 4096 * i + 0x54;
 	}
+
+	v1_supported[DEMURA_CFG] = v1_supported[DEMURA_CFG] | DSPP2 | DSPP3;
 	return 0;
 }
 

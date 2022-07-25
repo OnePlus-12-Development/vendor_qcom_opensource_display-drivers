@@ -5381,10 +5381,10 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->uidle_cfg.uidle_rev = SDE_UIDLE_VERSION_1_0_4;
 		sde_cfg->sid_rev = SDE_SID_VERSION_2_0_0;
 		sde_cfg->mdss_hw_block_size = 0x158;
-		sde_cfg->demura_supported[SSPP_DMA1][0] = 0;
-		sde_cfg->demura_supported[SSPP_DMA1][1] = 1;
-		sde_cfg->demura_supported[SSPP_DMA3][0] = 0;
-		sde_cfg->demura_supported[SSPP_DMA3][1] = 1;
+		sde_cfg->demura_supported[SSPP_DMA1][0] = BIT(DEMURA_0) | BIT(DEMURA_2);
+		sde_cfg->demura_supported[SSPP_DMA1][1] = BIT(DEMURA_1) | BIT(DEMURA_3);
+		sde_cfg->demura_supported[SSPP_DMA3][0] = BIT(DEMURA_0) | BIT(DEMURA_2);
+		sde_cfg->demura_supported[SSPP_DMA3][1] = BIT(DEMURA_1) | BIT(DEMURA_3);
 		sde_cfg->has_line_insertion = true;
 	} else {
 		SDE_ERROR("unsupported chipset id:%X\n", hw_rev);

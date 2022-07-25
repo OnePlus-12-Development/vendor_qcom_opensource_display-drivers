@@ -386,6 +386,20 @@ static void dspp_demura(struct sde_hw_dspp *c)
 					sde_demura_read_plane_status;
 			c->ops.setup_demura_pu_config = sde_demura_pu_cfg;
 		}
+	} else if (c->cap->sblk->demura.version == SDE_COLOR_PROCESS_VER(0x2, 0x0)) {
+		ret = reg_dmav1_init_dspp_op_v4(SDE_DSPP_DEMURA, c->idx);
+		c->ops.setup_demura_cfg = NULL;
+		c->ops.setup_demura_backlight_cfg = NULL;
+		if (!ret) {
+			c->ops.setup_demura_cfg = reg_dmav1_setup_demurav2;
+			c->ops.setup_demura_backlight_cfg =
+					sde_demura_backlight_cfg;
+			c->ops.demura_read_plane_status =
+					sde_demura_read_plane_status;
+			c->ops.setup_demura_pu_config = sde_demura_pu_cfg;
+		} else {
+			SDE_ERROR("Regdma init dspp op failed for DemuraV2");
+		}
 	}
 }
 
