@@ -157,6 +157,7 @@
 #define SDE_UIDLE_FAL1_MAX_THRESHOLD 15
 #define SDE_UIDLE_FAL1_MAX_THRESHOLD_EXT_REV_102 255
 #define SDE_UIDLE_FAL1_MAX_THRESHOLD_EXT_REV_103 255
+#define SDE_UIDLE_FAL1_MAX_THRESHOLD_EXT_REV_104 255
 #define SDE_UIDLE_FAL10_THRESHOLD_60 12
 #define SDE_UIDLE_FAL10_THRESHOLD_90 13
 #define SDE_UIDLE_MAX_DWNSCALE 1500
@@ -2035,7 +2036,8 @@ static int sde_ctl_parse_dt(struct device_node *np,
 			set_bit(SDE_CTL_PINGPONG_SPLIT, &ctl->features);
 		if (IS_SDE_CTL_REV_100(sde_cfg->ctl_rev))
 			set_bit(SDE_CTL_ACTIVE_CFG, &ctl->features);
-		if (SDE_UIDLE_MAJOR(sde_cfg->uidle_cfg.uidle_rev))
+		if (SDE_UIDLE_MAJOR(sde_cfg->uidle_cfg.uidle_rev) &&
+				sde_cfg->uidle_cfg.uidle_rev < SDE_UIDLE_VERSION_1_0_4)
 			set_bit(SDE_CTL_UIDLE, &ctl->features);
 		if (SDE_HW_MAJOR(sde_cfg->hw_rev) >= SDE_HW_MAJOR(SDE_HW_VER_700))
 			set_bit(SDE_CTL_UNIFIED_DSPP_FLUSH, &ctl->features);
@@ -4860,6 +4862,13 @@ static void _sde_hw_setup_uidle(struct sde_uidle_cfg *uidle_cfg)
 		uidle_cfg->max_fal1_fps = SDE_UIDLE_MAX_FPS_240;
 		uidle_cfg->fal1_max_threshold = SDE_UIDLE_FAL1_MAX_THRESHOLD_EXT_REV_103;
 		uidle_cfg->fal10_threshold = SDE_UIDLE_FAL10_THRESHOLD_60;
+	} else if (IS_SDE_UIDLE_REV_104(uidle_cfg->uidle_rev)) {
+		set_bit(SDE_UIDLE_QACTIVE_OVERRIDE, &uidle_cfg->features);
+		uidle_cfg->max_fps = SDE_UIDLE_MAX_FPS_240;
+		uidle_cfg->max_fal1_fps = SDE_UIDLE_MAX_FPS_240;
+		uidle_cfg->fal1_max_threshold = SDE_UIDLE_FAL1_MAX_THRESHOLD_EXT_REV_104;
+		uidle_cfg->fal10_threshold = SDE_UIDLE_FAL10_THRESHOLD_60;
+		set_bit(SDE_UIDLE_WB_FAL_STATUS, &uidle_cfg->features);
 	}
 }
 
@@ -5262,6 +5271,7 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->ts_prefill_rev = 2;
 		sde_cfg->ctl_rev = SDE_CTL_CFG_VERSION_1_0_0;
 		sde_cfg->true_inline_rot_rev = SDE_INLINE_ROT_VERSION_2_0_1;
+		sde_cfg->uidle_cfg.uidle_rev = SDE_UIDLE_VERSION_1_0_4;
 		sde_cfg->sid_rev = SDE_SID_VERSION_2_0_0;
 		sde_cfg->mdss_hw_block_size = 0x158;
 		sde_cfg->demura_supported[SSPP_DMA1][0] = 0;
