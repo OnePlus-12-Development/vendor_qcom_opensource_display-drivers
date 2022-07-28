@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -20,6 +21,7 @@
 #include "msm_gem.h"
 #include "msm_mmu.h"
 #include "msm_kms.h"
+#include <linux/module.h>
 
 #include <drm/drm_drv.h>
 
@@ -210,3 +212,7 @@ fail_put:
 
 	return ERR_PTR(ret);
 }
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+MODULE_IMPORT_NS(DMA_BUF);
+#endif

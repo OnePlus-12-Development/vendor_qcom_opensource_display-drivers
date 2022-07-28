@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012, 2015-2019, 2021, The Linux Foundation. All rights reserved.
  */
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -20,6 +21,7 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/regulator/consumer.h>
+#include <linux/module.h>
 #include <media/msm_media_info.h>
 #include <linux/videodev2.h>
 #include <linux/ion.h>
@@ -1226,3 +1228,7 @@ struct dma_buf *sde_rot_get_dmabuf(struct sde_mdp_img_data *data)
 
 	return dma_buf_export(&exp_info);
 }
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+MODULE_IMPORT_NS(DMA_BUF);
+#endif
