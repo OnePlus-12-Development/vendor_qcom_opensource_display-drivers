@@ -74,7 +74,11 @@ struct dp_drm_mst_fw_helper_ops {
 	bool (*allocate_vcpi)(struct drm_dp_mst_topology_mgr *mgr,
 			      struct drm_dp_mst_port *port,
 			      int pbn, int slots);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+	int (*update_payload_part1)(struct drm_dp_mst_topology_mgr *mgr, int start_slot);
+#else
 	int (*update_payload_part1)(struct drm_dp_mst_topology_mgr *mgr);
+#endif
 	int (*check_act_status)(struct drm_dp_mst_topology_mgr *mgr);
 	int (*update_payload_part2)(struct drm_dp_mst_topology_mgr *mgr);
 	int (*detect_port_ctx)(
@@ -409,8 +413,14 @@ static void _dp_mst_update_timeslots(struct dp_mst_private *mst,
 			pbn = dp_bridge->pbn;
 		}
 
-		if (mst_bridge == dp_bridge)
+		if (mst_bridge == dp_bridge) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+			mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, start_slot);
+#else
+			mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr);
+#endif
 			dp_bridge->num_slots = num_slots;
+		}
 
 		mst->dp_display->set_stream_info(mst->dp_display,
 				dp_bridge->dp_panel,
@@ -484,9 +494,6 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 
 	dp_bridge->vcpi = port->vcpi.vcpi;
 	dp_bridge->pbn = pbn;
-
-	ret = mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr);
-
 	_dp_mst_update_timeslots(mst, dp_bridge);
 }
 
@@ -528,8 +535,6 @@ static void _dp_mst_bridge_pre_disable_part1(struct dp_mst_bridge *dp_bridge)
 	}
 
 	mst->mst_fw_cbs->reset_vcpi_slots(&mst->mst_mgr, port);
-
-	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr);
 
 	_dp_mst_update_timeslots(mst, dp_bridge);
 
