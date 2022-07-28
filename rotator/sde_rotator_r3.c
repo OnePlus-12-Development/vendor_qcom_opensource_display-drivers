@@ -1213,7 +1213,11 @@ static struct sde_hw_rotator_context *sde_hw_rotator_get_ctx(
 static void sde_hw_rotator_map_vaddr(struct sde_dbg_buf *dbgbuf,
 		struct sde_layer_buffer *buf, struct sde_mdp_data *data)
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+	struct iosys_map map;
+#else
 	struct dma_buf_map map;
+#endif
 
 	dbgbuf->dmabuf = data->p[0].srcp_dma_buf;
 	dbgbuf->buflen = data->p[0].srcp_dma_buf->size;
