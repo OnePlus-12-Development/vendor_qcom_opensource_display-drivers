@@ -39,6 +39,7 @@
 #include <linux/sizes.h>
 #include <linux/kthread.h>
 #include <linux/version.h>
+#include <linux/delay.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
