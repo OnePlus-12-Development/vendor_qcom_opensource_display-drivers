@@ -767,6 +767,7 @@ enum {
  * @SDE_FEATURE_SUI_BLENDSTAGE SecureUI Blendstage supported
  * @SDE_FEATURE_SUI_NS_ALLOWED SecureUI allowed to access non-secure context banks
  * @SDE_FEATURE_TRUSTED_VM     Trusted VM supported
+ * @SDE_FEATURE_EPT            Expected present time supported
  * @SDE_FEATURE_UBWC_STATS     UBWC statistics supported
  * @SDE_FEATURE_VBIF_CLK_SPLIT VBIF clock split supported
  * @SDE_FEATURE_CTL_DONE       Support for CTL DONE irq
@@ -813,6 +814,7 @@ enum sde_mdss_features {
 	SDE_FEATURE_SUI_BLENDSTAGE,
 	SDE_FEATURE_SUI_NS_ALLOWED,
 	SDE_FEATURE_TRUSTED_VM,
+	SDE_FEATURE_EPT,
 	SDE_FEATURE_UBWC_STATS,
 	SDE_FEATURE_VBIF_CLK_SPLIT,
 	SDE_FEATURE_CTL_DONE,
