@@ -25,6 +25,9 @@
 #include "msm_kms.h"
 #include "sde_trace.h"
 #include <drm/drm_atomic_uapi.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+#include <linux/dma-fence-chain.h>
+#endif
 
 #define MULTIPLE_CONN_DETECTED(x) (x > 1)
 
@@ -530,6 +533,45 @@ static void msm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 	SDE_ATRACE_END("msm_enable");
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+struct dma_fence *msm_dma_resv_get_excl(struct drm_plane_state *new_plane_state,
+		struct msm_gem_object *msm_obj)
+{
+	enum dma_resv_usage usage;
+	struct dma_fence *fence;
+	struct dma_fence *new;
+	int ret;
+
+	if (!msm_obj)
+		return NULL;
+
+	fence = dma_fence_get(new_plane_state->fence);
+	usage = fence ? DMA_RESV_USAGE_KERNEL : DMA_RESV_USAGE_WRITE;
+
+	ret = dma_resv_get_singleton(msm_obj->resv, usage, &new);
+	if (ret)
+		goto error;
+
+	if (new && fence) {
+		struct dma_fence_chain *chain = dma_fence_chain_alloc();
+
+		if (!chain) {
+			ret = -ENOMEM;
+			goto error;
+		}
+
+		dma_fence_chain_init(chain, fence, new, 1);
+		fence = &chain->base;
+	} else if (new) {
+		fence = new;
+	}
+
+error:
+	dma_fence_put(fence);
+	return NULL;
+}
+#endif
+
 int msm_atomic_prepare_fb(struct drm_plane *plane,
 			  struct drm_plane_state *new_state)
 {
@@ -538,10 +580,22 @@ int msm_atomic_prepare_fb(struct drm_plane *plane,
 	struct drm_gem_object *obj;
 	struct msm_gem_object *msm_obj;
 	struct dma_fence *fence;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+	int i;
+#endif
 
 	if (!new_state->fb)
 		return 0;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+	for (i = 0; i < new_state->fb->format->num_planes; ++i) {
+		obj = msm_framebuffer_bo(new_state->fb, i);
+		msm_obj = to_msm_bo(obj);
+		fence = msm_dma_resv_get_excl(new_state, msm_obj);
+		dma_fence_put(new_state->fence);
+		new_state->fence = fence;
+	}
+#else
 	obj = msm_framebuffer_bo(new_state->fb, 0);
 	msm_obj = to_msm_bo(obj);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
@@ -549,8 +603,8 @@ int msm_atomic_prepare_fb(struct drm_plane *plane,
 #else
 	fence = dma_resv_get_excl_rcu(msm_obj->resv);
 #endif
-
 	drm_atomic_set_fence_for_plane(new_state, fence);
+#endif
 
 	return msm_framebuffer_prepare(new_state->fb, kms->aspace);
 }
@@ -753,16 +807,27 @@ int msm_atomic_commit(struct drm_device *dev,
 		if ((new_plane_state->fb != old_plane_state->fb)
 				&& new_plane_state->fb) {
 			struct drm_gem_object *obj =
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+				msm_framebuffer_bo(new_plane_state->fb, i);
+#else
 				msm_framebuffer_bo(new_plane_state->fb, 0);
+#endif
 			struct msm_gem_object *msm_obj = to_msm_bo(obj);
 			struct dma_fence *fence =
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+				msm_dma_resv_get_excl(new_plane_state, msm_obj);
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 				dma_resv_get_excl_unlocked(msm_obj->resv);
 #else
 				dma_resv_get_excl_rcu(msm_obj->resv);
 #endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+			dma_fence_put(new_plane_state->fence);
+			new_plane_state->fence = fence;
+#else
 			drm_atomic_set_fence_for_plane(new_plane_state, fence);
+#endif
 		}
 		c->plane_mask |= (1 << drm_plane_index(plane));
 	}
