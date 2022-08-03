@@ -5196,7 +5196,9 @@ static int sde_kms_hw_init(struct msm_kms *kms)
 	/*
 	 * Support format modifiers for compression etc.
 	 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 19, 0))
 	dev->mode_config.allow_fb_modifiers = true;
+#endif
 
 	sde_kms->affinity_notify.notify = sde_kms_irq_affinity_notify;
 	sde_kms->affinity_notify.release = sde_kms_irq_affinity_release;
