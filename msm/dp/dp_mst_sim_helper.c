@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -44,7 +45,9 @@
 #include "dp_debug.h"
 
 #define DP_MST_DEBUG(fmt, ...) DP_DEBUG(fmt, ##__VA_ARGS__)
-#define DP_MST_INFO(fmt, ...) DP_DEBUG(fmt, ##__VA_ARGS__)
+#define DP_MST_INFO(fmt, ...) DP_INFO(fmt, ##__VA_ARGS__)
+#define DP_MST_DEBUG_V(fmt, ...) DP_DEBUG_V(fmt, ##__VA_ARGS__)
+#define DP_MST_INFO_V(fmt, ...) DP_INFO_V(fmt, ##__VA_ARGS__)
 
 #define DDC_SEGMENT_ADDR 0x30
 
@@ -84,7 +87,7 @@ struct dp_mst_notify_work {
 	u32 port_mask;
 };
 
-#ifdef CONFIG_DYNAMIC_DEBUG
+#if IS_ENABLED(CONFIG_DYNAMIC_DEBUG)
 static void dp_sideband_hex_dump(const char *name,
 		u32 address, u8 *buffer, size_t size)
 {
@@ -103,7 +106,7 @@ static void dp_sideband_hex_dump(const char *name,
 		hex_dump_to_buffer(buffer + i, linelen, rowsize, 1,
 			linebuf, sizeof(linebuf), false);
 
-		DP_MST_DEBUG("%s%s\n", prefix, linebuf);
+		DP_MST_DEBUG_V("%s%s\n", prefix, linebuf);
 	}
 }
 #else
@@ -111,7 +114,7 @@ static void dp_sideband_hex_dump(const char *name,
 		u32 address, u8 *buffer, size_t size)
 {
 }
-#endif
+#endif /* CONFIG_DYNAMIC_DEBUG */
 
 static u8 dp_mst_sim_msg_header_crc4(const uint8_t *data, size_t num_nibbles)
 {

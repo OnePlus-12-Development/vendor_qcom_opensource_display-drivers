@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -11,6 +11,7 @@
 #include "msm_drv.h"
 #include "msm_mmu.h"
 #include "sde_dbg.h"
+#include "sde_vbif.h"
 
 #define GUARD_BYTES (BIT(8) - 1)
 #define ALIGNED_OFFSET (U32_MAX & ~(GUARD_BYTES))
@@ -43,7 +44,7 @@
 #define GRP_VIG_HW_BLK_SELECT (VIG0 | VIG1 | VIG2 | VIG3)
 #define GRP_DMA_HW_BLK_SELECT (DMA0 | DMA1 | DMA2 | DMA3 | DMA4 | DMA5)
 #define GRP_DSPP_HW_BLK_SELECT (DSPP0 | DSPP1 | DSPP2 | DSPP3)
-#define GRP_LTM_HW_BLK_SELECT (LTM0 | LTM1)
+#define GRP_LTM_HW_BLK_SELECT (LTM0 | LTM1 | LTM2 | LTM3)
 #define GRP_MDSS_HW_BLK_SELECT (MDSS)
 #define BUFFER_SPACE_LEFT(cfg) ((cfg)->dma_buf->buffer_size - \
 			(cfg)->dma_buf->index)
@@ -66,6 +67,8 @@
 #define LUTBUS_BLOCK_SEL_MASK 0xffff
 #define LUTBUS_TRANS_SZ_MASK 0xff0000
 #define LUTBUS_LUT_SIZE_MASK 0x3fff
+
+#define PMU_CLK_CTRL  0x1F0
 
 static uint32_t reg_dma_register_count;
 static uint32_t reg_dma_decode_sel;
@@ -240,6 +243,12 @@ static void get_decode_sel(unsigned long blk, u32 *decode_sel)
 			break;
 		case LTM1:
 			*decode_sel |= BIT(23);
+			break;
+		case LTM2:
+			*decode_sel |= BIT(24);
+			break;
+		case LTM3:
+			*decode_sel |= BIT(25);
 			break;
 		case MDSS:
 			*decode_sel |= BIT(31);
@@ -437,7 +446,8 @@ static int validate_blk_lut_write(struct sde_reg_dma_setup_ops_cfg *cfg)
 	if (cfg->table_sel >= LUTBUS_TABLE_SELECT_MAX ||
 			cfg->block_sel >= LUTBUS_BLOCK_MAX ||
 			(cfg->trans_size != LUTBUS_IGC_TRANS_SIZE &&
-			cfg->trans_size != LUTBUS_GAMUT_TRANS_SIZE)) {
+			cfg->trans_size != LUTBUS_GAMUT_TRANS_SIZE &&
+			cfg->trans_size != LUTBUS_SIXZONE_TRANS_SIZE)) {
 		DRM_ERROR("invalid table_sel %d block_sel %d trans_size %d\n",
 				cfg->table_sel, cfg->block_sel,
 				cfg->trans_size);
@@ -734,6 +744,30 @@ static int write_kick_off_v1(struct sde_reg_dma_kickoff_cfg *cfg)
 	return 0;
 }
 
+static bool setup_clk_force_ctrl(struct sde_hw_blk_reg_map *hw,
+		enum sde_clk_ctrl_type clk_ctrl, bool enable)
+{
+	u32 reg_val, new_val;
+
+	if (!hw)
+		return false;
+
+	if (!SDE_CLK_CTRL_LUTDMA_VALID(clk_ctrl))
+		return false;
+
+	reg_val = SDE_REG_READ(hw, PMU_CLK_CTRL);
+
+	if (enable)
+		new_val = reg_val | (BIT(0) | BIT(16));
+	else
+		new_val = reg_val & ~(BIT(0) | BIT(16));
+
+	SDE_REG_WRITE(hw, PMU_CLK_CTRL, new_val);
+	wmb(); /* ensure write finished before progressing */
+
+	return !(reg_val & (BIT(0) | BIT(16)));
+}
+
 int init_v1(struct sde_hw_reg_dma *cfg)
 {
 	int i = 0, rc = 0;
@@ -881,6 +915,42 @@ int init_v12(struct sde_hw_reg_dma *cfg)
 	return 0;
 }
 
+static int init_reg_dma_vbif(struct sde_hw_reg_dma *cfg)
+{
+	int ret = 0;
+	struct sde_hw_blk_reg_map *hw;
+	struct sde_vbif_clk_client clk_client;
+	struct msm_drm_private *priv = cfg->drm_dev->dev_private;
+	struct msm_kms *kms = priv->kms;
+	struct sde_kms *sde_kms = to_sde_kms(kms);
+
+	if (cfg->caps->clk_ctrl != SDE_CLK_CTRL_LUTDMA) {
+		SDE_ERROR("invalid lutdma clk ctrl type %d\n", cfg->caps->clk_ctrl);
+		return -EINVAL;
+	}
+
+	hw = kzalloc(sizeof(*hw), GFP_KERNEL);
+	if (!hw) {
+		SDE_ERROR("failed to create hw block\n");
+		return -ENOMEM;
+	}
+
+	hw->base_off = cfg->addr;
+	hw->blk_off = cfg->caps->reg_dma_blks[REG_DMA_TYPE_DB].base;
+
+	clk_client.hw = hw;
+	clk_client.clk_ctrl = cfg->caps->clk_ctrl;
+	clk_client.ops.setup_clk_force_ctrl = setup_clk_force_ctrl;
+
+	ret = sde_vbif_clk_register(sde_kms, &clk_client);
+	if (ret) {
+		SDE_ERROR("failed to register vbif client %d\n", cfg->caps->clk_ctrl);
+		kfree(hw);
+	}
+
+	return ret;
+}
+
 int init_v2(struct sde_hw_reg_dma *cfg)
 {
 	int ret = 0, i = 0;
@@ -906,7 +976,10 @@ int init_v2(struct sde_hw_reg_dma *cfg)
 	if (cfg->caps->reg_dma_blks[REG_DMA_TYPE_SB].valid == true)
 		reg_dma->ops.last_command_sb = last_cmd_sb_v2;
 
-	return 0;
+	if (cfg->caps->split_vbif_supported)
+		ret = init_reg_dma_vbif(cfg);
+
+	return ret;
 }
 
 static int check_support_v1(enum sde_reg_dma_features feature,
@@ -1234,10 +1307,9 @@ static int last_cmd_v1(struct sde_hw_ctl *ctl, enum sde_reg_dma_queue q,
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY, mode, ctl->idx, kick_off.queue_select,
 			kick_off.dma_type, kick_off.op);
 	if (mode == REG_DMA_WAIT4_COMP) {
-		rc = readl_poll_timeout(hw.base_off + hw.blk_off +
-			reg_dma_intr_status_offset, val,
-			(val & ctl_trigger_done_mask[ctl->idx][q]),
-			10, 20000);
+		rc = read_poll_timeout(sde_reg_read, val,
+				(val & ctl_trigger_done_mask[ctl->idx][q]), 10, false, 20000,
+				&hw, reg_dma_intr_status_offset);
 		if (rc)
 			DRM_ERROR("poll wait failed %d val %x mask %x\n",
 			    rc, val, ctl_trigger_done_mask[ctl->idx][q]);

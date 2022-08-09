@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -14,6 +15,7 @@
 #include <linux/usb/phy.h>
 #include <linux/jiffies.h>
 #include <linux/pm_qos.h>
+#include <linux/ipc_logging.h>
 
 #include "sde_connector.h"
 
@@ -33,10 +35,16 @@
 #include "dp_pll.h"
 #include "sde_dbg.h"
 
+#define DRM_DP_IPC_NUM_PAGES 10
 #define DP_MST_DEBUG(fmt, ...) DP_DEBUG(fmt, ##__VA_ARGS__)
 
 #define dp_display_state_show(x) { \
 	DP_ERR("%s: state (0x%x): %s\n", x, dp->state, \
+		dp_display_state_name(dp->state)); \
+	SDE_EVT32_EXTERNAL(dp->state); }
+
+#define dp_display_state_warn(x) { \
+	DP_WARN("%s: state (0x%x): %s\n", x, dp->state, \
 		dp_display_state_name(dp->state)); \
 	SDE_EVT32_EXTERNAL(dp->state); }
 
@@ -195,6 +203,7 @@ struct dp_display_private {
 	struct work_struct attention_work;
 	struct mutex session_lock;
 	bool hdcp_delayed_off;
+	bool no_aux_switch;
 
 	u32 active_stream_cnt;
 	struct dp_mst mst;
@@ -1138,7 +1147,7 @@ static int dp_display_host_ready(struct dp_display_private *dp)
 static void dp_display_host_unready(struct dp_display_private *dp)
 {
 	if (!dp_display_state_is(DP_STATE_INITIALIZED)) {
-		dp_display_state_show("[not initialized]");
+		dp_display_state_warn("[not initialized]");
 		return;
 	}
 
@@ -1435,7 +1444,7 @@ static int dp_display_usbpd_configure_cb(struct device *dev)
 		return -ENODEV;
 	}
 
-	if (!dp->debug->sim_mode && !dp->parser->no_aux_switch
+	if (!dp->debug->sim_mode && !dp->no_aux_switch
 	    && !dp->parser->gpio_aux_switch && dp->aux_switch_node) {
 		rc = dp_display_init_aux_switch(dp);
 		if (rc)
@@ -1474,29 +1483,11 @@ static int dp_display_usbpd_configure_cb(struct device *dev)
 	return 0;
 }
 
-static void dp_display_update_dsc_resources(struct dp_display_private *dp,
-		struct dp_panel *panel, bool enable)
+static void dp_display_clear_dsc_resources(struct dp_display_private *dp,
+		struct dp_panel *panel)
 {
-	int rc;
-	u32 dsc_blk_cnt = 0;
-	struct msm_drm_private *priv = dp->priv;
-
-	if (enable) {
-		if (panel->pinfo.comp_info.comp_type == MSM_DISPLAY_COMPRESSION_DSC &&
-				(panel->pinfo.comp_info.enabled)) {
-			rc = msm_get_dsc_count(priv, panel->pinfo.h_active,
-					&dsc_blk_cnt);
-			if (rc) {
-				DP_ERR("error getting dsc count. rc:%d\n", rc);
-				return;
-			}
-		}
-		dp->tot_dsc_blks_in_use += dsc_blk_cnt;
-		panel->dsc_blks_in_use += dsc_blk_cnt;
-	} else {
-		dp->tot_dsc_blks_in_use -= panel->dsc_blks_in_use;
-		panel->dsc_blks_in_use = 0;
-	}
+	dp->tot_dsc_blks_in_use -= panel->dsc_blks_in_use;
+	panel->dsc_blks_in_use = 0;
 }
 
 static int dp_display_stream_pre_disable(struct dp_display_private *dp,
@@ -1528,7 +1519,7 @@ static void dp_display_stream_disable(struct dp_display_private *dp,
 		return;
 	}
 
-	dp_display_update_dsc_resources(dp, dp_panel, false);
+	dp_display_clear_dsc_resources(dp, dp_panel);
 
 	DP_DEBUG("stream_id=%d, active_stream_cnt=%d, tot_dsc_blks_in_use=%d\n",
 			dp_panel->stream_id, dp->active_stream_cnt,
@@ -1677,7 +1668,7 @@ static int dp_display_usbpd_disconnect_cb(struct device *dev)
 	dp_display_state_remove(DP_STATE_CONFIGURED);
 	mutex_unlock(&dp->session_lock);
 
-	if (!dp->debug->sim_mode && !dp->parser->no_aux_switch
+	if (!dp->debug->sim_mode && !dp->no_aux_switch
 	    && !dp->parser->gpio_aux_switch)
 		dp->aux->aux_switch(dp->aux, false, ORIENTATION_NONE);
 
@@ -1693,15 +1684,14 @@ static int dp_display_stream_enable(struct dp_display_private *dp,
 
 	rc = dp->ctrl->stream_on(dp->ctrl, dp_panel);
 
-	if (dp->debug->tpg_state)
-		dp_panel->tpg_config(dp_panel, true);
+	if (dp->debug->tpg_pattern)
+		dp_panel->tpg_config(dp_panel, dp->debug->tpg_pattern);
 
 	if (!rc) {
 		dp->active_panels[dp_panel->stream_id] = dp_panel;
 		dp->active_stream_cnt++;
 	}
 
-	dp_display_update_dsc_resources(dp, dp_panel, true);
 
 	DP_DEBUG("dp active_stream_cnt:%d, tot_dsc_blks_in_use=%d\n",
 			dp->active_stream_cnt, dp->tot_dsc_blks_in_use);
@@ -2041,8 +2031,10 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 	dp_core_revision = dp_catalog_get_dp_core_version(dp->catalog);
 
 	dp->aux_switch_node = of_parse_phandle(dp->pdev->dev.of_node, phandle, 0);
-	if (!dp->aux_switch_node)
+	if (!dp->aux_switch_node) {
 		DP_DEBUG("cannot parse %s handle\n", phandle);
+		dp->no_aux_switch = true;
+	}
 
 	dp->aux = dp_aux_get(dev, &dp->catalog->aux, dp->parser,
 			dp->aux_switch_node, dp->aux_bridge);
@@ -2053,7 +2045,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		goto error_aux;
 	}
 
-	rc = dp->aux->drm_aux_register(dp->aux);
+	rc = dp->aux->drm_aux_register(dp->aux, dp->dp_display.drm_dev);
 	if (rc) {
 		DP_ERR("DRM DP AUX register failed\n");
 		goto error_pll;
@@ -2289,6 +2281,7 @@ static int dp_display_set_mode(struct dp_display *dp_display, void *panel,
 	const u32 num_components = 3, default_bpp = 24;
 	struct dp_display_private *dp;
 	struct dp_panel *dp_panel;
+	bool dsc_en = (mode->capabilities & DP_PANEL_CAPS_DSC) ? true : false;
 
 	if (!dp_display || !panel) {
 		DP_ERR("invalid input\n");
@@ -2313,7 +2306,7 @@ static int dp_display_set_mode(struct dp_display *dp_display, void *panel,
 		mode->timing.bpp = default_bpp;
 
 	mode->timing.bpp = dp->panel->get_mode_bpp(dp->panel,
-			mode->timing.bpp, mode->timing.pixel_clk_khz);
+			mode->timing.bpp, mode->timing.pixel_clk_khz, dsc_en);
 
 	dp_panel->pinfo = mode->timing;
 	mutex_unlock(&dp->session_lock);
@@ -2386,10 +2379,10 @@ static int dp_display_prepare(struct dp_display *dp_display, void *panel)
 
 	/*
 	 * If DP_STATE_ENABLED, there is nothing left to do.
-	 * However, this should not happen ideally. So, log this.
+	 * This would happen during MST flow. So, log this.
 	 */
 	if (dp_display_state_is(DP_STATE_ENABLED)) {
-		dp_display_state_show("[already enabled]");
+		dp_display_state_warn("[already enabled]");
 		goto end;
 	}
 
@@ -2581,12 +2574,13 @@ static int dp_display_post_enable(struct dp_display *dp_display, void *panel)
 		dp_panel->audio->lane_count = dp->link->link_params.lane_count;
 		dp_panel->audio->on(dp_panel->audio);
 	}
-end:
-	dp->aux->state |= DP_STATE_CTRL_POWERED_ON;
 
+	dp->aux->state &= ~DP_STATE_CTRL_POWERED_OFF;
+	dp->aux->state |= DP_STATE_CTRL_POWERED_ON;
 	complete_all(&dp->notification_comp);
-	mutex_unlock(&dp->session_lock);
 	DP_DEBUG("display post enable complete. state: 0x%x\n", dp->state);
+end:
+	mutex_unlock(&dp->session_lock);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
 	return 0;
 }
@@ -2806,7 +2800,9 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	}
 
 	dp_display_state_remove(DP_STATE_ENABLED);
-	dp->aux->state = DP_STATE_CTRL_POWERED_OFF;
+
+	dp->aux->state &= ~DP_STATE_CTRL_POWERED_ON;
+	dp->aux->state |= DP_STATE_CTRL_POWERED_OFF;
 
 	complete_all(&dp->notification_comp);
 
@@ -2918,7 +2914,7 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 		return -EPERM;
 	}
 
-	DP_DEBUG("mode %sx%d is valid, supported DP topology lm:%d dsc:%d 3dmux:%d\n",
+	DP_DEBUG_V("mode %sx%d is valid, supported DP topology lm:%d dsc:%d 3dmux:%d\n",
 				mode->name, fps, num_lm, num_dsc, num_3dmux);
 
 	return 0;
@@ -2978,7 +2974,8 @@ static enum drm_mode_status dp_display_validate_mode(
 	mode_status = MODE_OK;
 end:
 	mutex_unlock(&dp->session_lock);
-	DP_DEBUG("[%s] mode is %s\n", mode->name,
+
+	DP_DEBUG_V("[%s] mode is %s\n", mode->name,
 			(mode_status == MODE_OK) ? "valid" : "invalid");
 
 	return mode_status;
@@ -3001,11 +2998,11 @@ static int dp_display_get_available_dp_resources(struct dp_display *dp_display,
 	max_dp_avail_res->num_dsc = min(avail_res->num_dsc,
 			dp_display->max_dsc_count);
 
-	DP_DEBUG("max_lm:%d, avail_lm:%d, dp_avail_lm:%d\n",
+	DP_DEBUG_V("max_lm:%d, avail_lm:%d, dp_avail_lm:%d\n",
 			dp_display->max_mixer_count, avail_res->num_lm,
 			max_dp_avail_res->num_lm);
 
-	DP_DEBUG("max_dsc:%d, avail_dsc:%d, dp_avail_dsc:%d\n",
+	DP_DEBUG_V("max_dsc:%d, avail_dsc:%d, dp_avail_dsc:%d\n",
 			dp_display->max_dsc_count, avail_res->num_dsc,
 			max_dp_avail_res->num_dsc);
 
@@ -3046,7 +3043,7 @@ static void dp_display_convert_to_dp_mode(struct dp_display *dp_display,
 	int rc;
 	struct dp_display_private *dp;
 	struct dp_panel *dp_panel;
-	u32 free_dsc_blks = 0, required_dsc_blks = 0;
+	u32 free_dsc_blks = 0, required_dsc_blks = 0, curr_dsc = 0, new_dsc = 0;
 
 	if (!dp_display || !drm_mode || !dp_mode || !panel) {
 		DP_ERR("invalid input\n");
@@ -3058,26 +3055,38 @@ static void dp_display_convert_to_dp_mode(struct dp_display *dp_display,
 
 	memset(dp_mode, 0, sizeof(*dp_mode));
 
-	free_dsc_blks = dp_display->max_dsc_count -
+	if (dp_panel->dsc_en) {
+		free_dsc_blks = dp_display->max_dsc_count -
 				dp->tot_dsc_blks_in_use +
 				dp_panel->dsc_blks_in_use;
+		DP_DEBUG_V("Before: in_use:%d, max:%d, free:%d\n",
+				dp->tot_dsc_blks_in_use,
+				dp_display->max_dsc_count, free_dsc_blks);
 
-	rc = msm_get_dsc_count(dp->priv, drm_mode->hdisplay,
-			&required_dsc_blks);
-	if (rc) {
-		DP_ERR("error getting dsc count. rc:%d\n", rc);
-		return;
-	}
+		rc = msm_get_dsc_count(dp->priv, drm_mode->hdisplay,
+				&required_dsc_blks);
+		if (rc) {
+			DP_ERR("error getting dsc count. rc:%d\n", rc);
+			return;
+		}
 
-	if (free_dsc_blks >= required_dsc_blks)
-		dp_mode->capabilities |= DP_PANEL_CAPS_DSC;
+		curr_dsc = dp_panel->dsc_blks_in_use;
+		dp->tot_dsc_blks_in_use -= dp_panel->dsc_blks_in_use;
+		dp_panel->dsc_blks_in_use = 0;
 
-	if (dp_mode->capabilities & DP_PANEL_CAPS_DSC)
-		DP_DEBUG("in_use:%d, max:%d, free:%d, req:%d, caps:0x%x\n",
+		if (free_dsc_blks >= required_dsc_blks) {
+			dp_mode->capabilities |= DP_PANEL_CAPS_DSC;
+			new_dsc = max(curr_dsc, required_dsc_blks);
+			dp_panel->dsc_blks_in_use = new_dsc;
+			dp->tot_dsc_blks_in_use += new_dsc;
+		}
+
+		DP_DEBUG_V("After: in_use:%d, max:%d, free:%d, req:%d, caps:0x%x\n",
 				dp->tot_dsc_blks_in_use,
 				dp_display->max_dsc_count,
 				free_dsc_blks, required_dsc_blks,
 				dp_mode->capabilities);
+	}
 
 	dp_panel->convert_to_dp_mode(dp_panel, drm_mode, dp_mode);
 }
@@ -3341,6 +3350,7 @@ static int dp_display_mst_connector_uninstall(struct dp_display *dp_display,
 	struct sde_connector *sde_conn;
 	struct dp_panel *dp_panel;
 	struct dp_display_private *dp;
+	struct dp_audio *audio = NULL;
 
 	if (!dp_display || !connector) {
 		DP_ERR("invalid input\n");
@@ -3366,13 +3376,17 @@ static int dp_display_mst_connector_uninstall(struct dp_display *dp_display,
 	}
 
 	dp_panel = sde_conn->drv_panel;
-	dp_audio_put(dp_panel->audio);
+
+	/* Make a copy of audio structure to call into dp_audio_put later */
+	audio = dp_panel->audio;
 	dp_panel_put(dp_panel);
 
 	DP_MST_DEBUG("dp mst connector uninstalled. conn:%d\n",
 			connector->base.id);
 
 	mutex_unlock(&dp->session_lock);
+
+	dp_audio_put(audio);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
 
 	return rc;
@@ -3593,6 +3607,10 @@ static int dp_display_probe(struct platform_device *pdev)
 
 	g_dp_display = &dp->dp_display;
 
+	g_dp_display->dp_ipc_log = ipc_log_context_create(DRM_DP_IPC_NUM_PAGES, "drm_dp", 0);
+	if (!g_dp_display->dp_ipc_log)
+		DP_WARN("Error in creating ipc_log_context\n");
+
 	g_dp_display->enable        = dp_display_enable;
 	g_dp_display->post_enable   = dp_display_post_enable;
 	g_dp_display->pre_disable   = dp_display_pre_disable;
@@ -3704,6 +3722,11 @@ static int dp_display_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, dp);
 
+	if (g_dp_display->dp_ipc_log) {
+		ipc_log_context_destroy(g_dp_display->dp_ipc_log);
+		g_dp_display->dp_ipc_log = NULL;
+	}
+
 	return 0;
 }
 
@@ -3763,6 +3786,13 @@ static void dp_pm_complete(struct device *dev)
 	dp_display_state_remove(DP_STATE_SUSPENDED);
 	mutex_unlock(&dp->session_lock);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
+}
+
+void *get_ipc_log_context(void)
+{
+	if (g_dp_display && g_dp_display->dp_ipc_log)
+		return g_dp_display->dp_ipc_log;
+	return NULL;
 }
 
 static const struct dev_pm_ops dp_pm_ops = {

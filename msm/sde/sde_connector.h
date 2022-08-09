@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -430,6 +431,13 @@ struct sde_connector_ops {
 	 */
 	int (*get_num_lm_from_mode)(void *display, const struct drm_display_mode *mode);
 
+	/*
+	 * update_transfer_time - Update transfer time
+	 * @display: Pointer to private display structure
+	 * @transfer_time: new transfer time to be updated
+	 */
+	int (*update_transfer_time)(void *display, u32 transfer_time);
+
 };
 
 /**
@@ -472,6 +480,18 @@ struct sde_connector_dyn_hdr_metadata {
 	u8 dynamic_hdr_payload[SDE_CONNECTOR_DHDR_MEMPOOL_MAX_SIZE];
 	int dynamic_hdr_payload_size;
 	bool dynamic_hdr_update;
+};
+
+/**
+ * struct sde_misr_sign - defines sde misr signature structure
+ * @num_valid_misr : count of valid misr signature
+ * @roi_list : list of roi
+ * @misr_sign_value : list of misr signature
+ */
+struct sde_misr_sign {
+	atomic64_t num_valid_misr;
+	struct msm_roi_list roi_list;
+	u64 misr_sign_value[MAX_DSI_DISPLAYS];
 };
 
 /**
@@ -522,6 +542,7 @@ struct sde_connector_dyn_hdr_metadata {
  * @hdr_min_luminance: desired min luminance obtained from HDR block
  * @hdr_supported: does the sink support HDR content
  * @color_enc_fmt: Colorimetry encoding formats of sink
+ * @lm_mask: preferred LM mask for connector
  * @allow_bl_update: Flag to indicate if BL update is allowed currently or not
  * @dimming_bl_notify_enabled: Flag to indicate if dimming bl notify is enabled or not
  * @qsync_mode: Cached Qsync mode, 0=disabled, 1=continuous mode
@@ -533,6 +554,9 @@ struct sde_connector_dyn_hdr_metadata {
  * @cmd_rx_buf: the return buffer of response of command transfer
  * @rx_len: the length of dcs command received buffer
  * @cached_edid: cached edid data for the connector
+ * @misr_event_notify_enabled: Flag to indicate if misr event notify is enabled or not
+ * @previous_misr_sign: store previous misr signature
+ * @hwfence_wb_retire_fences_enable: enable hw-fences for wb retire-fence
  */
 struct sde_connector {
 	struct drm_connector base;
@@ -593,6 +617,7 @@ struct sde_connector {
 	bool hdr_supported;
 
 	u32 color_enc_fmt;
+	u32 lm_mask;
 
 	u8 hdr_plus_app_ver;
 	u32 qsync_mode;
@@ -608,6 +633,10 @@ struct sde_connector {
 	int rx_len;
 
 	struct edid *cached_edid;
+	bool misr_event_notify_enabled;
+	struct sde_misr_sign previous_misr_sign;
+
+	bool hwfence_wb_retire_fences_enable;
 };
 
 /**
@@ -682,6 +711,7 @@ struct sde_connector {
  * @dnsc_blur_count: Number of downscale blur blocks used
  * @dnsc_blur_cfg: Configs for the downscale blur block
  * @dnsc_blur_lut: LUT idx used for the Gaussian filter LUTs in downscale blur block
+ * @usage_type: WB connector usage type
  */
 struct sde_connector_state {
 	struct drm_connector_state base;
@@ -702,6 +732,7 @@ struct sde_connector_state {
 	u32 dnsc_blur_count;
 	struct sde_drm_dnsc_blur_cfg dnsc_blur_cfg[DNSC_BLUR_MAX_COUNT];
 	u32 dnsc_blur_lut;
+	enum sde_wb_usage_type usage_type;
 };
 
 /**
@@ -1186,6 +1217,24 @@ static inline int sde_connector_state_get_compression_info(
 	return 0;
 }
 
+static inline bool sde_connector_is_3d_merge_enabled(struct drm_connector *conn)
+{
+	enum sde_rm_topology_name topology;
+
+	if (!conn)
+		return false;
+
+	topology = sde_connector_get_topology_name(conn);
+	if ((topology == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE)
+			|| (topology == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_DSC)
+			|| (topology == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE_VDC)
+			|| (topology == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE)
+			|| (topology == SDE_RM_TOPOLOGY_QUADPIPE_3DMERGE_DSC))
+		return true;
+
+	return false;
+}
+
 /**
 * sde_connector_set_msm_mode - set msm_mode for connector state
 * @conn_state: Pointer to drm connector state structure
@@ -1264,5 +1313,13 @@ int sde_connector_esd_status(struct drm_connector *connector);
 
 const char *sde_conn_get_topology_name(struct drm_connector *conn,
 		struct msm_display_topology topology);
+
+/*
+ * sde_connector_is_line_insertion_supported - get line insertion
+ * feature bit value from panel
+ * @sde_conn:    Pointer to sde connector structure
+ * @Return: line insertion support status
+ */
+bool sde_connector_is_line_insertion_supported(struct sde_connector *sde_conn);
 
 #endif /* _SDE_CONNECTOR_H_ */

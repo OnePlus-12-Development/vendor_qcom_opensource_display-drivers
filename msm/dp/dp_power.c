@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -80,6 +81,23 @@ static void dp_power_regulator_deinit(struct dp_power_private *power)
 	}
 }
 
+static void dp_power_phy_gdsc(struct dp_power *dp_power, bool on)
+{
+	int rc = 0;
+
+	if (IS_ERR_OR_NULL(dp_power->dp_phy_gdsc))
+		return;
+
+	if (on)
+		rc = regulator_enable(dp_power->dp_phy_gdsc);
+	else
+		rc = regulator_disable(dp_power->dp_phy_gdsc);
+
+	if (rc)
+		DP_ERR("Fail to %s dp_phy_gdsc regulator ret =%d\n",
+				on ? "enable" : "disable", rc);
+}
+
 static int dp_power_regulator_ctrl(struct dp_power_private *power, bool enable)
 {
 	int rc = 0, i = 0, j = 0;
@@ -93,6 +111,8 @@ static int dp_power_regulator_ctrl(struct dp_power_private *power, bool enable)
 		 * on the link configuration.
 		 */
 		if (i == DP_PLL_PM) {
+			/* DP GDSC vote is needed for new chipsets, define gdsc phandle if needed */
+			dp_power_phy_gdsc(&power->dp_power, enable);
 			DP_DEBUG("skipping: '%s' vregs for %s\n",
 					enable ? "enable" : "disable",
 					dp_parser_pm_name(i));
@@ -129,23 +149,6 @@ static int dp_power_pinctrl_set(struct dp_power_private *power, bool active)
 	parser = power->parser;
 
 	if (IS_ERR_OR_NULL(parser->pinctrl.pin))
-		return 0;
-
-	if (parser->no_aux_switch && parser->lphw_hpd) {
-		pin_state = active ? parser->pinctrl.state_hpd_ctrl
-				: parser->pinctrl.state_hpd_tlmm;
-		if (!IS_ERR_OR_NULL(pin_state)) {
-			rc = pinctrl_select_state(parser->pinctrl.pin,
-				pin_state);
-			if (rc) {
-				DP_ERR("cannot direct hpd line to %s\n",
-					active ? "ctrl" : "tlmm");
-				return rc;
-			}
-		}
-	}
-
-	if (parser->no_aux_switch)
 		return 0;
 
 	pin_state = active ? parser->pinctrl.state_active
@@ -556,9 +559,6 @@ static int dp_power_config_gpios(struct dp_power_private *power, bool flip,
 	struct dss_module_power *mp;
 	struct dss_gpio *config;
 
-	if (power->parser->no_aux_switch)
-		return 0;
-
 	mp = &power->parser->mp[DP_CORE_PM];
 	config = mp->gpio_config;
 
@@ -784,9 +784,9 @@ static int dp_power_init(struct dp_power *dp_power, bool flip)
 		goto err_gpio;
 	}
 
-	rc = pm_runtime_get_sync(dp_power->drm_dev->dev);
+	rc = pm_runtime_resume_and_get(dp_power->drm_dev->dev);
 	if (rc < 0) {
-		DP_ERR("Power resource enable failed\n");
+		DP_ERR("failed to enable power resource %d\n", rc);
 		goto err_sde_power;
 	}
 
@@ -841,6 +841,7 @@ struct dp_power *dp_power_get(struct dp_parser *parser, struct dp_pll *pll)
 	int rc = 0;
 	struct dp_power_private *power;
 	struct dp_power *dp_power;
+	struct device *dev;
 
 	if (!parser || !pll) {
 		DP_ERR("invalid input\n");
@@ -859,6 +860,7 @@ struct dp_power *dp_power_get(struct dp_parser *parser, struct dp_pll *pll)
 	power->pdev = parser->pdev;
 
 	dp_power = &power->dp_power;
+	dev = &power->pdev->dev;
 
 	dp_power->init = dp_power_init;
 	dp_power->deinit = dp_power_deinit;
@@ -870,6 +872,12 @@ struct dp_power *dp_power_get(struct dp_parser *parser, struct dp_pll *pll)
 	dp_power->power_client_init = dp_power_client_init;
 	dp_power->power_client_deinit = dp_power_client_deinit;
 	dp_power->power_mmrm_init = dp_power_mmrm_init;
+
+	dp_power->dp_phy_gdsc = devm_regulator_get(dev, "dp_phy_gdsc");
+	if (IS_ERR(dp_power->dp_phy_gdsc)) {
+		dp_power->dp_phy_gdsc = NULL;
+		DP_DEBUG("Optional GDSC regulator is missing\n");
+	}
 
 	return dp_power;
 error:

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -395,6 +396,61 @@ static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 	DSI_DEBUG("clk_rate: %llu\n", c_bridge->dsi_mode.timing.clk_rate_hz);
 }
 
+static bool _dsi_bridge_mode_validate_and_fixup(struct drm_bridge *bridge,
+		struct drm_crtc_state *crtc_state, struct dsi_display *display,
+		struct dsi_display_mode *adj_mode)
+{
+	int rc = 0;
+	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+	struct dsi_display_mode cur_dsi_mode;
+	struct sde_connector_state *old_conn_state;
+	struct drm_display_mode *cur_mode;
+
+	if (!bridge->encoder || !bridge->encoder->crtc || !crtc_state->crtc)
+		return 0;
+
+	cur_mode = &crtc_state->crtc->state->mode;
+	old_conn_state = to_sde_connector_state(display->drm_conn->state);
+
+	convert_to_dsi_mode(cur_mode, &cur_dsi_mode);
+	msm_parse_mode_priv_info(&old_conn_state->msm_mode, &cur_dsi_mode);
+
+	rc = dsi_display_validate_mode_change(c_bridge->display, &cur_dsi_mode, adj_mode);
+	if (rc) {
+		DSI_ERR("[%s] seamless mode mismatch failure rc=%d\n", c_bridge->display->name, rc);
+		return rc;
+	}
+
+	/*
+	 * DMS Flag if set during active changed condition cannot be
+	 * treated as seamless. Hence, removing DMS flag in such cases.
+	 */
+	if ((adj_mode->dsi_mode_flags & DSI_MODE_FLAG_DMS) &&
+			crtc_state->active_changed)
+		adj_mode->dsi_mode_flags &= ~DSI_MODE_FLAG_DMS;
+
+	/* No DMS/VRR when drm pipeline is changing */
+	if (!dsi_display_mode_match(&cur_dsi_mode, adj_mode,
+		DSI_MODE_MATCH_FULL_TIMINGS) &&
+		(!(adj_mode->dsi_mode_flags & DSI_MODE_FLAG_VRR)) &&
+		(!(adj_mode->dsi_mode_flags & DSI_MODE_FLAG_DYN_CLK)) &&
+		(!(adj_mode->dsi_mode_flags & DSI_MODE_FLAG_POMS_TO_VID)) &&
+		(!(adj_mode->dsi_mode_flags & DSI_MODE_FLAG_POMS_TO_CMD)) &&
+		(!crtc_state->active_changed ||
+		 display->is_cont_splash_enabled)) {
+		adj_mode->dsi_mode_flags |= DSI_MODE_FLAG_DMS;
+
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE2,
+			adj_mode->timing.h_active,
+			adj_mode->timing.v_active,
+			adj_mode->timing.refresh_rate,
+			adj_mode->pixel_clk_khz,
+			adj_mode->panel_mode_caps);
+	}
+
+	return rc;
+}
+
 static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 				  const struct drm_display_mode *mode,
 				  struct drm_display_mode *adjusted_mode)
@@ -402,10 +458,10 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 	int rc = 0;
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
 	struct dsi_display *display;
-	struct dsi_display_mode dsi_mode, cur_dsi_mode, *panel_dsi_mode;
+	struct dsi_display_mode dsi_mode, *panel_dsi_mode;
 	struct drm_crtc_state *crtc_state;
 	struct drm_connector_state *drm_conn_state;
-	struct sde_connector_state *conn_state, *old_conn_state;
+	struct sde_connector_state *conn_state;
 	struct msm_sub_mode new_sub_mode;
 
 	crtc_state = container_of(mode, struct drm_crtc_state, mode);
@@ -481,49 +537,10 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 		return false;
 	}
 
-	if (bridge->encoder && bridge->encoder->crtc &&
-			crtc_state->crtc) {
-		const struct drm_display_mode *cur_mode =
-				&crtc_state->crtc->state->mode;
-		old_conn_state = to_sde_connector_state(display->drm_conn->state);
-
-		convert_to_dsi_mode(cur_mode, &cur_dsi_mode);
-		msm_parse_mode_priv_info(&old_conn_state->msm_mode, &cur_dsi_mode);
-
-		rc = dsi_display_validate_mode_change(c_bridge->display,
-					&cur_dsi_mode, &dsi_mode);
-		if (rc) {
-			DSI_ERR("[%s] seamless mode mismatch failure rc=%d\n",
-				c_bridge->display->name, rc);
-			return false;
-		}
-
-		/*
-		 * DMS Flag if set during active changed condition cannot be
-		 * treated as seamless. Hence, removing DMS flag in such cases.
-		 */
-		if ((dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_DMS) &&
-				crtc_state->active_changed)
-			dsi_mode.dsi_mode_flags &= ~DSI_MODE_FLAG_DMS;
-
-		/* No DMS/VRR when drm pipeline is changing */
-		if (!dsi_display_mode_match(&cur_dsi_mode, &dsi_mode,
-			DSI_MODE_MATCH_FULL_TIMINGS) &&
-			(!(dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR)) &&
-			(!(dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_DYN_CLK)) &&
-			(!(dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_POMS_TO_VID)) &&
-			(!(dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_POMS_TO_CMD)) &&
-			(!crtc_state->active_changed ||
-			 display->is_cont_splash_enabled)) {
-			dsi_mode.dsi_mode_flags |= DSI_MODE_FLAG_DMS;
-
-			SDE_EVT32(SDE_EVTLOG_FUNC_CASE2,
-				dsi_mode.timing.h_active,
-				dsi_mode.timing.v_active,
-				dsi_mode.timing.refresh_rate,
-				dsi_mode.pixel_clk_khz,
-				dsi_mode.panel_mode_caps);
-		}
+	rc = _dsi_bridge_mode_validate_and_fixup(bridge, crtc_state, display, &dsi_mode);
+	if (rc) {
+		DSI_ERR("[%s] failed to validate dsi bridge mode.\n", display->name);
+		return false;
 	}
 
 	/* Reject seamless transition when active changed */
@@ -604,7 +621,7 @@ int dsi_conn_get_mode_info(struct drm_connector *connector,
 
 	convert_to_dsi_mode(drm_mode, &partial_dsi_mode);
 	rc = dsi_display_find_mode(dsi_display, &partial_dsi_mode, sub_mode, &dsi_mode);
-	if (rc || !dsi_mode->priv_info)
+	if (rc || !dsi_mode->priv_info || !dsi_display || !dsi_display->panel)
 		return -EINVAL;
 
 	memset(mode_info, 0, sizeof(*mode_info));
@@ -617,10 +634,18 @@ int dsi_conn_get_mode_info(struct drm_connector *connector,
 	mode_info->jitter_denom = dsi_mode->priv_info->panel_jitter_denom;
 	mode_info->dfps_maxfps = dsi_drm_get_dfps_maxfps(display);
 	mode_info->panel_mode_caps = dsi_mode->panel_mode_caps;
-	mode_info->mdp_transfer_time_us =
-		dsi_mode->priv_info->mdp_transfer_time_us;
+	mode_info->mdp_transfer_time_us = dsi_mode->priv_info->mdp_transfer_time_us;
+	mode_info->mdp_transfer_time_us_min = dsi_mode->priv_info->mdp_transfer_time_us_min;
+	mode_info->mdp_transfer_time_us_max = dsi_mode->priv_info->mdp_transfer_time_us_max;
 	mode_info->disable_rsc_solver = dsi_mode->priv_info->disable_rsc_solver;
 	mode_info->qsync_min_fps = dsi_mode->timing.qsync_min_fps;
+	mode_info->wd_jitter = dsi_mode->priv_info->wd_jitter;
+
+	mode_info->vpadding = dsi_display->panel->host_config.vpadding;
+	if (mode_info->vpadding < drm_mode->vdisplay) {
+		mode_info->vpadding = 0;
+		dsi_display->panel->host_config.line_insertion_enable = 0;
+	}
 
 	memcpy(&mode_info->topology, &dsi_mode->priv_info->topology,
 			sizeof(struct msm_display_topology));
@@ -1367,7 +1392,8 @@ struct dsi_bridge *dsi_drm_bridge_init(struct dsi_display *display,
 	bridge->base.funcs = &dsi_bridge_ops;
 	bridge->base.encoder = encoder;
 
-	rc = drm_bridge_attach(encoder, &bridge->base, NULL, 0);
+	rc = drm_bridge_attach(encoder, &bridge->base, NULL,
+				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 	if (rc) {
 		DSI_ERR("failed to attach bridge, rc=%d\n", rc);
 		goto error_free_bridge;

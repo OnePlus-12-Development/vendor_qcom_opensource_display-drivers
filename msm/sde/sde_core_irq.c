@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -352,7 +353,7 @@ static void sde_disable_all_irqs(struct sde_kms *sde_kms)
 	sde_kms->hw_intr->ops.disable_all_irqs(sde_kms->hw_intr);
 }
 
-#ifdef CONFIG_DEBUG_FS
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 #define DEFINE_SDE_DEBUGFS_SEQ_FOPS(__prefix)				\
 static int __prefix ## _open(struct inode *inode, struct file *file)	\
 {									\
@@ -423,7 +424,7 @@ int sde_debugfs_core_irq_init(struct sde_kms *sde_kms,
 void sde_debugfs_core_irq_destroy(struct sde_kms *sde_kms)
 {
 }
-#endif
+#endif /* CONFIG_DEBUG_FS */
 
 void sde_core_irq_preinstall(struct sde_kms *sde_kms)
 {
@@ -436,7 +437,7 @@ void sde_core_irq_preinstall(struct sde_kms *sde_kms)
 	}
 
 	if (!sde_in_trusted_vm(sde_kms)) {
-		rc = pm_runtime_get_sync(sde_kms->dev->dev);
+		rc = pm_runtime_resume_and_get(sde_kms->dev->dev);
 		if (rc < 0) {
 			SDE_ERROR("failed to enable power resource %d\n", rc);
 			SDE_EVT32(rc, SDE_EVTLOG_ERROR);
@@ -489,7 +490,7 @@ void sde_core_irq_uninstall(struct sde_kms *sde_kms)
 		return;
 	}
 
-	rc = pm_runtime_get_sync(sde_kms->dev->dev);
+	rc = pm_runtime_resume_and_get(sde_kms->dev->dev);
 	if (rc < 0) {
 		SDE_ERROR("failed to enable power resource %d\n", rc);
 		SDE_EVT32(rc, SDE_EVTLOG_ERROR);

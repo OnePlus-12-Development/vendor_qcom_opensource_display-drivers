@@ -22,10 +22,20 @@ ifeq ($(CONFIG_ARCH_PARROT), y)
 	LINUX_INC +=	-include $(DISPLAY_ROOT)/config/gki_parrotdispconf.h
 endif
 
-#ifeq ($(CONFIG_ARCH_KALAMA), y)
+ifeq ($(CONFIG_ARCH_KALAMA), y)
+ifeq ($(CONFIG_ARCH_QTI_VM), y)
+        include $(DISPLAY_ROOT)/config/gki_kalamadisptui.conf
+        LINUX_INC += -include $(DISPLAY_ROOT)/config/gki_kalamadisptuiconf.h
+else
 	include $(DISPLAY_ROOT)/config/gki_kalamadisp.conf
 	LINUX_INC += -include $(DISPLAY_ROOT)/config/gki_kalamadispconf.h
-#endif
+endif
+endif
+
+ifeq (y, $(findstring y, $(CONFIG_ARCH_SA8155) $(CONFIG_ARCH_SA6155) $(CONFIG_ARCH_SA8195)))
+	include $(DISPLAY_ROOT)/config/augen3disp.conf
+	LINUX_INC += -include $(DISPLAY_ROOT)/config/augen3dispconf.h
+endif
 
 LINUX_INC +=	-Iinclude/linux \
 		-Iinclude/linux/drm
@@ -91,16 +101,18 @@ msm_drm-$(CONFIG_MSM_SDE_ROTATOR) += ../rotator/sde_rotator_dev.o \
 				     ../rotator/sde_rotator_r1.o \
 				     ../rotator/sde_rotator_r3.o
 
+ifeq ($(CONFIG_MSM_SDE_ROTATOR), y)
 msm_drm-$(CONFIG_SYNC_FILE) += ../rotator/sde_rotator_sync.o
+
+msm_drm-$(CONFIG_DEBUG_FS) += ../rotator/sde_rotator_debug.o \
+			      ../rotator/sde_rotator_r1_debug.o \
+			      ../rotator/sde_rotator_r3_debug.o
+endif
 
 msm_drm-$(CONFIG_DRM_SDE_VM) += sde/sde_vm_common.o \
 				sde/sde_vm_primary.o \
 				sde/sde_vm_trusted.o \
 				sde/sde_vm_msgq.o
-
-msm_drm-$(CONFIG_DEBUG_FS) += ../rotator/sde_rotator_debug.o \
-			      ../rotator/sde_rotator_r1_debug.o \
-			      ../rotator/sde_rotator_r3_debug.o
 
 msm_drm-$(CONFIG_DRM_MSM_DP) += dp/dp_altmode.o \
 				dp/dp_parser.o \
@@ -198,11 +210,13 @@ msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/dsi_phy.o \
 				 dsi/dsi_phy.o \
 				 dsi/dsi_phy_hw_v3_0.o \
 				 dsi/dsi_phy_hw_v4_0.o \
+				 dsi/dsi_phy_hw_v5_0.o \
 				 dsi/dsi_phy_timing_calc.o \
 				 dsi/dsi_phy_timing_v3_0.o \
 				 dsi/dsi_phy_timing_v4_0.o \
 				 dsi/dsi_pll.o \
 				 dsi/dsi_pll_5nm.o \
+				 dsi/dsi_pll_4nm.o \
 				 dsi/dsi_ctrl_hw_cmn.o \
 				 dsi/dsi_ctrl_hw_2_2.o \
 				 dsi/dsi_ctrl.o \

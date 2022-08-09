@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -543,13 +544,13 @@ static ssize_t dp_debug_write_mst_con_id(struct file *file,
 
 	debug->mst_con_id = con_id;
 
-	if (status == connector_status_connected)
-		DP_INFO("plug mst connector %d\n", con_id);
-	else
-		DP_INFO("unplug mst connector %d\n", con_id);
-
 	if (status == connector_status_unknown)
 		goto out;
+
+	if (status == connector_status_connected)
+		DP_INFO("plug mst connector %d\n", con_id);
+	else if (status == connector_status_disconnected)
+		DP_INFO("unplug mst connector %d\n", con_id);
 
 	mst_port = sde_conn->mst_port;
 	dp_panel = sde_conn->drv_panel;
@@ -892,7 +893,7 @@ static ssize_t dp_debug_tpg_write(struct file *file,
 	struct dp_debug_private *debug = file->private_data;
 	char buf[SZ_8];
 	size_t len = 0;
-	u32 tpg_state = 0;
+	u32 tpg_pattern = 0;
 
 	if (!debug)
 		return -ENODEV;
@@ -907,19 +908,18 @@ static ssize_t dp_debug_tpg_write(struct file *file,
 
 	buf[len] = '\0';
 
-	if (kstrtoint(buf, 10, &tpg_state) != 0)
+	if (kstrtoint(buf, 10, &tpg_pattern) != 0)
 		goto bail;
 
-	tpg_state &= 0x1;
-	DP_DEBUG("tpg_state: %d\n", tpg_state);
+	DP_DEBUG("tpg_pattern: %d\n", tpg_pattern);
 
-	if (tpg_state == debug->dp_debug.tpg_state)
+	if (tpg_pattern == debug->dp_debug.tpg_pattern)
 		goto bail;
 
 	if (debug->panel)
-		debug->panel->tpg_config(debug->panel, tpg_state);
+		debug->panel->tpg_config(debug->panel, tpg_pattern);
 
-	debug->dp_debug.tpg_state = tpg_state;
+	debug->dp_debug.tpg_pattern = tpg_pattern;
 bail:
 	return len;
 }
@@ -1385,7 +1385,7 @@ static ssize_t dp_debug_tpg_read(struct file *file,
 	if (*ppos)
 		return 0;
 
-	len += snprintf(buf, SZ_8, "%d\n", debug->dp_debug.tpg_state);
+	len += scnprintf(buf, SZ_8, "%d\n", debug->dp_debug.tpg_pattern);
 
 	len = min_t(size_t, count, len);
 	if (copy_to_user(user_buff, buf, len))
@@ -2054,25 +2054,10 @@ static int dp_debug_init_hdcp(struct dp_debug_private *debug,
 		struct dentry *dir)
 {
 	int rc = 0;
-	struct dentry *file;
 
-	file = debugfs_create_bool("hdcp_wait_sink_sync", 0644, dir,
-			&debug->dp_debug.hdcp_wait_sink_sync);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		DP_ERR("[%s] debugfs hdcp_wait_sink_sync failed, rc=%d\n",
-		       DEBUG_NAME, rc);
-		return rc;
-	}
+	debugfs_create_bool("hdcp_wait_sink_sync", 0644, dir, &debug->dp_debug.hdcp_wait_sink_sync);
 
-	file = debugfs_create_bool("force_encryption", 0644, dir,
-			&debug->dp_debug.force_encryption);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		DP_ERR("[%s] debugfs force_encryption failed, rc=%d\n",
-		       DEBUG_NAME, rc);
-		return rc;
-	}
+	debugfs_create_bool("force_encryption", 0644, dir, &debug->dp_debug.force_encryption);
 
 	return rc;
 }
@@ -2203,23 +2188,9 @@ static int dp_debug_init_sim(struct dp_debug_private *debug, struct dentry *dir)
 		return rc;
 	}
 
-	file = debugfs_create_bool("skip_uevent", 0644, dir,
-			&debug->dp_debug.skip_uevent);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		DP_ERR("[%s] debugfs skip_uevent failed, rc=%d\n",
-		       DEBUG_NAME, rc);
-		return rc;
-	}
+	debugfs_create_bool("skip_uevent", 0644, dir, &debug->dp_debug.skip_uevent);
 
-	file = debugfs_create_bool("force_multi_func", 0644, dir,
-			&debug->hpd->force_multi_func);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		DP_ERR("[%s] debugfs force_multi_func failed, rc=%d\n",
-		       DEBUG_NAME, rc);
-		return rc;
-	}
+	debugfs_create_bool("force_multi_func", 0644, dir, &debug->hpd->force_multi_func);
 
 	return rc;
 }
@@ -2228,25 +2199,10 @@ static int dp_debug_init_dsc_fec(struct dp_debug_private *debug,
 		struct dentry *dir)
 {
 	int rc = 0;
-	struct dentry *file;
 
-	file = debugfs_create_bool("dsc_feature_enable", 0644, dir,
-			&debug->parser->dsc_feature_enable);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		DP_ERR("[%s] debugfs dsc_feature failed, rc=%d\n",
-		       DEBUG_NAME, rc);
-		return rc;
-	}
+	debugfs_create_bool("dsc_feature_enable", 0644, dir, &debug->parser->dsc_feature_enable);
 
-	file = debugfs_create_bool("fec_feature_enable", 0644, dir,
-			&debug->parser->fec_feature_enable);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		DP_ERR("[%s] debugfs fec_feature_enable failed, rc=%d\n",
-		       DEBUG_NAME, rc);
-		return rc;
-	}
+	debugfs_create_bool("fec_feature_enable", 0644, dir, &debug->parser->fec_feature_enable);
 
 	return rc;
 }
@@ -2299,25 +2255,10 @@ static int dp_debug_init_feature_toggle(struct dp_debug_private *debug,
 		struct dentry *dir)
 {
 	int rc = 0;
-	struct dentry *file;
 
-	file = debugfs_create_bool("ssc_enable", 0644, dir,
-			&debug->pll->ssc_en);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		DP_ERR("[%s] debugfs ssc_enable failed, rc=%d\n",
-		       DEBUG_NAME, rc);
-		return rc;
-	}
+	debugfs_create_bool("ssc_enable", 0644, dir, &debug->pll->ssc_en);
 
-	file = debugfs_create_bool("widebus_mode", 0644, dir,
-			&debug->parser->has_widebus);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		DP_ERR("[%s] debugfs widebus_mode failed, rc=%d\n",
-		       DEBUG_NAME, rc);
-		return rc;
-	}
+	debugfs_create_bool("widebus_mode", 0644, dir, &debug->parser->has_widebus);
 
 	return rc;
 }
@@ -2326,16 +2267,10 @@ static int dp_debug_init_configs(struct dp_debug_private *debug,
 		struct dentry *dir)
 {
 	int rc = 0;
-	struct dentry *file;
 
-	file = debugfs_create_ulong("connect_notification_delay_ms", 0644, dir,
+	debugfs_create_ulong("connect_notification_delay_ms", 0644, dir,
 		&debug->dp_debug.connect_notification_delay_ms);
-	if (IS_ERR_OR_NULL(file)) {
-		rc = PTR_ERR(file);
-		DP_ERR("[%s] debugfs connect_notification_delay_ms failed, rc=%d\n",
-		       DEBUG_NAME, rc);
-		return rc;
-	}
+
 	debug->dp_debug.connect_notification_delay_ms =
 		DEFAULT_CONNECT_NOTIFICATION_DELAY_MS;
 

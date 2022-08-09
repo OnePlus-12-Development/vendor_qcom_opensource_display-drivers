@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -29,6 +30,9 @@
 
 #define SINGLE_TCS_EXECUTION_TIME_V1	1064000
 #define SINGLE_TCS_EXECUTION_TIME_V2	930000
+#define SINGLE_TCS_EXECUTION_TIME_V3	930000
+#define SINGLE_TCS_EXECUTION_TIME_V4	930000
+#define SINGLE_TCS_EXECUTION_TIME_V5	650000
 
 #define RSC_MODE_INSTRUCTION_TIME	100
 #define RSC_MODE_THRESHOLD_OVERHEAD	2700
@@ -1035,7 +1039,6 @@ int sde_rsc_client_trigger_vote(struct sde_rsc_client *caller_client,
 {
 	int rc = 0, rsc_index, i;
 	struct sde_rsc_priv *rsc;
-	bool bw_increase = false;
 
 	if (caller_client && caller_client->rsc_index >= MAX_RSC_COUNT) {
 		pr_err("invalid rsc index\n");
@@ -1047,6 +1050,9 @@ int sde_rsc_client_trigger_vote(struct sde_rsc_client *caller_client,
 	if (!rsc)
 		return -EINVAL;
 
+	if (rsc->bwi_update == BW_NO_CHANGE && !delta_vote && rsc->version >= SDE_RSC_REV_5)
+		return 0;
+
 	pr_debug("client:%s trigger bw delta vote:%d\n",
 		caller_client ? caller_client->name : "unknown", delta_vote);
 
@@ -1056,10 +1062,11 @@ int sde_rsc_client_trigger_vote(struct sde_rsc_client *caller_client,
 			(rsc->current_state == SDE_RSC_CLK_STATE))
 		goto end;
 
+	rsc->bwi_update = BW_HIGH_TO_LOW;
 	for (i = 0; i < SDE_POWER_HANDLE_DBUS_ID_MAX && delta_vote; i++) {
 		if (rsc->bw_config.new_ab_vote[i] > rsc->bw_config.ab_vote[i] ||
 		    rsc->bw_config.new_ib_vote[i] > rsc->bw_config.ib_vote[i])
-			bw_increase = true;
+			rsc->bwi_update = BW_LOW_TO_HIGH;
 
 		rsc->bw_config.ab_vote[i] = rsc->bw_config.new_ab_vote[i];
 		rsc->bw_config.ib_vote[i] = rsc->bw_config.new_ib_vote[i];
@@ -1088,10 +1095,13 @@ int sde_rsc_client_trigger_vote(struct sde_rsc_client *caller_client,
 		rpmh_write_sleep_and_wake(rsc->rpmh_dev);
 	}
 
+	if (rsc->version >= SDE_RSC_REV_5 && !delta_vote)
+		rsc->bwi_update = BW_NO_CHANGE;
+
 	if (rsc->hw_ops.bwi_status &&
 	    (rsc->current_state == SDE_RSC_CMD_STATE ||
 	     rsc->current_state == SDE_RSC_VID_STATE))
-		rsc->hw_ops.bwi_status(rsc, bw_increase);
+		rsc->hw_ops.bwi_status(rsc);
 	else if (rsc->hw_ops.tcs_use_ok)
 		rsc->hw_ops.tcs_use_ok(rsc);
 
@@ -1713,10 +1723,24 @@ static int sde_rsc_probe(struct platform_device *pdev)
 	of_property_read_u32(pdev->dev.of_node, "qcom,sde-rsc-version",
 								&rsc->version);
 
-	if (rsc->version >= SDE_RSC_REV_2)
-		rsc->single_tcs_execution_time = SINGLE_TCS_EXECUTION_TIME_V2;
-	else
+	switch (rsc->version) {
+	case SDE_RSC_REV_1:
 		rsc->single_tcs_execution_time = SINGLE_TCS_EXECUTION_TIME_V1;
+		break;
+	case SDE_RSC_REV_2:
+		rsc->single_tcs_execution_time = SINGLE_TCS_EXECUTION_TIME_V2;
+		break;
+	case SDE_RSC_REV_3:
+		rsc->single_tcs_execution_time = SINGLE_TCS_EXECUTION_TIME_V3;
+		break;
+	case SDE_RSC_REV_4:
+		rsc->single_tcs_execution_time = SINGLE_TCS_EXECUTION_TIME_V4;
+		break;
+	case SDE_RSC_REV_5:
+	default:
+		rsc->single_tcs_execution_time = SINGLE_TCS_EXECUTION_TIME_V5;
+		break;
+	}
 
 	if (rsc->version >= SDE_RSC_REV_3) {
 		rsc->time_slot_0_ns = rsc->single_tcs_execution_time

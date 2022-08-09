@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -30,8 +31,7 @@ struct sde_hw_pipe;
 /**
  * Define all scaler feature bits in catalog
  */
-#define SDE_SSPP_SCALER ((1UL << SDE_SSPP_SCALER_RGB) | \
-	(1UL << SDE_SSPP_SCALER_QSEED2) | \
+#define SDE_SSPP_SCALER ((1UL << SDE_SSPP_SCALER_QSEED2) | \
 	(1UL << SDE_SSPP_SCALER_QSEED3) | \
 	(1UL << SDE_SSPP_SCALER_QSEED3LITE))
 
@@ -265,6 +265,7 @@ struct sde_hw_pipe_sc_cfg {
  * @fal10_exit_threshold: number of lines to indicate fal_10_exit is okay
  * @fal10_threshold: number of lines where fal_10_is okay
  * @fal1_threshold: number of lines where fal_1 is okay
+ * @fill_level_scale: scale factor on the fal10 threshold
  */
 struct sde_hw_pipe_uidle_cfg {
 	u32 enable;
@@ -272,6 +273,7 @@ struct sde_hw_pipe_uidle_cfg {
 	u32 fal10_exit_threshold;
 	u32 fal10_threshold;
 	u32 fal1_threshold;
+	u32 fill_level_scale;
 };
 
 /**
@@ -288,6 +290,22 @@ struct sde_hw_pipe_ts_cfg {
  * Maximum number of stream buffer plane
  */
 #define SDE_PIPE_SBUF_PLANE_NUM	2
+
+/**
+ * struct sde_hw_pipe_line_insertion_cfg - line insertion config
+ * @enable: line insertion is enabled
+ * @dummy_lines: dummy lines before active lines
+ * @first_active_lines: number of active lines before first dummy lines
+ * @active_lines: active lines
+ * @dst_h: total active lines plus dummy lines
+ */
+struct sde_hw_pipe_line_insertion_cfg {
+	bool enable;
+	u32 dummy_lines;
+	u32 first_active_lines;
+	u32 active_lines;
+	u32 dst_h;
+};
 
 /**
  * struct sde_hw_sspp_ops - interface to the SSPP Hw driver functions
@@ -535,6 +553,14 @@ struct sde_hw_sspp_ops {
 			 enum sde_sspp_multirect_index index);
 
 	/**
+	 * setup_uidle_fill_scale - set uidle fill scale factor
+	 * @ctx: Pointer to pipe context
+	 * @cfg: Pointer to uidle configuration
+	 */
+	void (*setup_uidle_fill_scale)(struct sde_hw_pipe *ctx,
+			 struct sde_hw_pipe_uidle_cfg *cfg);
+
+	/**
 	 * setup_ts_prefill - setup prefill traffic shaper
 	 * @ctx: Pointer to pipe context
 	 * @cfg: Pointer to traffic shaper configuration
@@ -678,6 +704,15 @@ struct sde_hw_sspp_ops {
 	 */
 	void (*setup_fp16_unmult)(struct sde_hw_pipe *ctx,
 		enum sde_sspp_multirect_index index, void *data);
+
+	/**
+	 * setup_line_insertion - setup line insertion
+	 * @ctx: Pointer to pipe context
+	 * @cfg: Pointer to line insertion configuration
+	 */
+	void (*setup_line_insertion)(struct sde_hw_pipe *ctx,
+				     enum sde_sspp_multirect_index index,
+				     struct sde_hw_pipe_line_insertion_cfg *cfg);
 };
 
 /**

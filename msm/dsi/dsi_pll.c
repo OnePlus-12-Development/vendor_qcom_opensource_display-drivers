@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -22,6 +23,9 @@ static int dsi_pll_clock_register(struct platform_device *pdev,
 	switch (pll_res->pll_revision) {
 	case DSI_PLL_5NM:
 		rc = dsi_pll_clock_register_5nm(pdev, pll_res);
+		break;
+	case DSI_PLL_4NM:
+		rc = dsi_pll_clock_register_4nm(pdev, pll_res);
 		break;
 	default:
 		rc = -EINVAL;
@@ -243,7 +247,6 @@ int dsi_pll_init(struct platform_device *pdev, struct dsi_pll_resource **pll)
 	int rc = 0;
 	const char *label;
 	struct dsi_pll_resource *pll_res = NULL;
-	bool in_trusted_vm = false;
 
 	if (!pdev->dev.of_node) {
 		pr_err("Invalid DSI PHY node\n");
@@ -265,12 +268,10 @@ int dsi_pll_init(struct platform_device *pdev, struct dsi_pll_resource **pll)
 
 	DSI_PLL_INFO(pll_res, "DSI pll label = %s\n", label);
 
-	/**
-	  * Currently, Only supports 5nm. Will add
-	  * support for other versions as needed.
-	  */
 
-	if (!strcmp(label, "dsi_pll_5nm"))
+	if (!strcmp(label, "dsi_pll_4nm"))
+		pll_res->pll_revision = DSI_PLL_4NM;
+	else if (!strcmp(label, "dsi_pll_5nm"))
 		pll_res->pll_revision = DSI_PLL_5NM;
 	else
 		return -ENOTSUPP;
@@ -325,9 +326,10 @@ int dsi_pll_init(struct platform_device *pdev, struct dsi_pll_resource **pll)
 	if (dsi_pll_get_ioresources(pdev, &pll_res->gdsc_base, "gdsc_base"))
 		DSI_PLL_DBG(pll_res, "Unable to remap gdsc base resources\n");
 
-	in_trusted_vm = of_property_read_bool(pdev->dev.of_node,
+	pll_res->in_trusted_vm = of_property_read_bool(pdev->dev.of_node,
 						"qcom,dsi-pll-in-trusted-vm");
-	if (in_trusted_vm) {
+
+	if (pll_res->in_trusted_vm) {
 		DSI_PLL_INFO(pll_res,
 			"Bypassing PLL clock register for Trusted VM\n");
 		return rc;
@@ -344,7 +346,7 @@ int dsi_pll_init(struct platform_device *pdev, struct dsi_pll_resource **pll)
 
 void dsi_pll_parse_dfps_data(struct platform_device *pdev, struct dsi_pll_resource *pll_res)
 {
-	if (!(pll_res->index)) {
+	if (!(pll_res->index) && !(pll_res->in_trusted_vm)) {
 		if (dsi_pll_parse_dfps_from_dt(pdev, pll_res))
 			dsi_pll_parse_dfps(pdev, pll_res);
 	}

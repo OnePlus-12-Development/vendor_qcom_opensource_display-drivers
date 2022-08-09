@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
+#define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
 #include "sde_hwio.h"
 #include "sde_hw_catalog.h"
 #include "sde_hw_lm.h"
@@ -42,9 +44,12 @@
 #define SSPP_SRC_CONSTANT_COLOR_REC1       0x180
 #define SSPP_EXCL_REC_SIZE_REC1            0x184
 #define SSPP_EXCL_REC_XY_REC1              0x188
+#define SSPP_LINE_INSERTION_CTRL_REC1      0x1E4
+#define SSPP_LINE_INSERTION_OUT_SIZE_REC1  0x1EC
 
 #define SSPP_UIDLE_CTRL_VALUE              0x1f0
 #define SSPP_UIDLE_CTRL_VALUE_REC1         0x1f4
+#define SSPP_FILL_LEVEL_SCALE              0x1f8
 
 /* SSPP_DGM */
 #define SSPP_DGM_0                         0x9F0
@@ -113,6 +118,8 @@
 #define SSPP_TRAFFIC_SHAPER_BPC_MAX        0xFF
 #define SSPP_CLK_CTRL                      0x330
 #define SSPP_CLK_STATUS                    0x334
+#define SSPP_LINE_INSERTION_CTRL           0x1E0
+#define SSPP_LINE_INSERTION_OUT_SIZE       0x1E8
 
 /* SSPP_QOS_CTRL */
 #define SSPP_QOS_CTRL_VBLANK_EN            BIT(16)
@@ -185,7 +192,6 @@ static inline int _sspp_subblk_offset(struct sde_hw_pipe *ctx,
 		break;
 	case SDE_SSPP_SCALER_QSEED2:
 	case SDE_SSPP_SCALER_QSEED3:
-	case SDE_SSPP_SCALER_RGB:
 		*idx = sblk->scaler_blk.base;
 		break;
 	case SDE_SSPP_CSC:
@@ -760,6 +766,7 @@ static void _sde_hw_sspp_setup_scaler3(struct sde_hw_pipe *ctx,
 		void *scaler_cfg)
 {
 	u32 idx;
+	bool de_lpf_en = false;
 	struct sde_hw_scaler3_cfg *scaler3_cfg = scaler_cfg;
 
 	(void)pe;
@@ -767,8 +774,11 @@ static void _sde_hw_sspp_setup_scaler3(struct sde_hw_pipe *ctx,
 		|| !scaler3_cfg || !ctx || !ctx->cap || !ctx->cap->sblk)
 		return;
 
+	if (test_bit(SDE_SSPP_SCALER_DE_LPF_BLEND, &ctx->cap->features))
+		de_lpf_en = true;
+
 	sde_hw_setup_scaler3(&ctx->hw, scaler3_cfg,
-		ctx->cap->sblk->scaler_blk.version, idx, sspp->layout.format);
+		ctx->cap->sblk->scaler_blk.version, idx, sspp->layout.format, de_lpf_en);
 }
 
 static void sde_hw_sspp_setup_pre_downscale(struct sde_hw_pipe *ctx,
@@ -1163,6 +1173,22 @@ static void sde_hw_sspp_setup_sys_cache(struct sde_hw_pipe *ctx,
 	SDE_REG_WRITE(&ctx->hw, SSPP_SYS_CACHE_MODE + idx, val);
 }
 
+static void sde_hw_sspp_setup_uidle_fill_scale(struct sde_hw_pipe *ctx,
+		struct sde_hw_pipe_uidle_cfg *cfg)
+{
+	u32 idx, fill_lvl;
+
+	if (_sspp_subblk_offset(ctx, SDE_SSPP_SRC, &idx))
+		return;
+
+	/* duplicate the v1 scale values for V2 and fal10 exit */
+	fill_lvl = cfg->fill_level_scale & 0xF;
+	fill_lvl |= (cfg->fill_level_scale & 0xF) << 8;
+	fill_lvl |= (cfg->fill_level_scale & 0xF) << 16;
+
+	SDE_REG_WRITE(&ctx->hw, SSPP_FILL_LEVEL_SCALE + idx, fill_lvl);
+}
+
 static void sde_hw_sspp_setup_uidle(struct sde_hw_pipe *ctx,
 		struct sde_hw_pipe_uidle_cfg *cfg,
 		enum sde_sspp_multirect_index index)
@@ -1420,6 +1446,37 @@ static int sde_hw_sspp_get_clk_ctrl_status(struct sde_hw_blk_reg_map *hw,
 	return 0;
 }
 
+static void sde_hw_sspp_setup_line_insertion(struct sde_hw_pipe *ctx,
+					     enum sde_sspp_multirect_index rect_index,
+					     struct sde_hw_pipe_line_insertion_cfg *cfg)
+{
+	struct sde_hw_blk_reg_map *c;
+	u32 ctl_off = 0, size_off = 0, ctl_val = 0;
+	u32 idx;
+
+	if (_sspp_subblk_offset(ctx, SDE_SSPP_SRC, &idx) || !cfg)
+		return;
+
+	c = &ctx->hw;
+
+	if (rect_index == SDE_SSPP_RECT_SOLO || rect_index == SDE_SSPP_RECT_0) {
+		ctl_off = SSPP_LINE_INSERTION_CTRL;
+		size_off = SSPP_LINE_INSERTION_OUT_SIZE;
+	} else {
+		ctl_off = SSPP_LINE_INSERTION_CTRL_REC1;
+		size_off = SSPP_LINE_INSERTION_OUT_SIZE_REC1;
+	}
+
+	if (cfg->enable)
+		ctl_val = BIT(31) |
+			(cfg->dummy_lines << 16) |
+			(cfg->first_active_lines << 8) |
+			(cfg->active_lines);
+
+	SDE_REG_WRITE(c, ctl_off, ctl_val);
+	SDE_REG_WRITE(c, size_off, cfg->dst_h << 16);
+}
+
 static void _setup_layer_ops(struct sde_hw_pipe *c,
 		unsigned long features, unsigned long perf_features,
 		bool is_virtual_pipe)
@@ -1497,8 +1554,11 @@ static void _setup_layer_ops(struct sde_hw_pipe *c,
 	if (test_bit(SDE_PERF_SSPP_CDP, &perf_features))
 		c->ops.setup_cdp = sde_hw_sspp_setup_cdp;
 
-	if (test_bit(SDE_PERF_SSPP_UIDLE, &perf_features))
+	if (test_bit(SDE_PERF_SSPP_UIDLE, &perf_features)) {
 		c->ops.setup_uidle = sde_hw_sspp_setup_uidle;
+		if (test_bit(SDE_PERF_SSPP_UIDLE_FILL_LVL_SCALE, &perf_features))
+			c->ops.setup_uidle_fill_scale = sde_hw_sspp_setup_uidle_fill_scale;
+	}
 
 	_setup_layer_ops_colorproc(c, features, is_virtual_pipe);
 
@@ -1511,6 +1571,8 @@ static void _setup_layer_ops(struct sde_hw_pipe *c,
 		c->ops.set_ubwc_stats_roi = sde_hw_sspp_ubwc_stats_set_roi;
 		c->ops.get_ubwc_stats_data = sde_hw_sspp_ubwc_stats_get_data;
 	}
+	if (test_bit(SDE_SSPP_LINE_INSERTION, &features))
+		c->ops.setup_line_insertion = sde_hw_sspp_setup_line_insertion;
 }
 
 static struct sde_sspp_cfg *_sspp_offset(enum sde_sspp sspp,

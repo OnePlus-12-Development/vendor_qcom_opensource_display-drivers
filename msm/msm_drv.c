@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -168,19 +169,19 @@ static const struct drm_mode_config_helper_funcs mode_config_helper_funcs = {
 	.atomic_commit_tail = msm_atomic_commit_tail,
 };
 
-#ifdef CONFIG_DRM_MSM_REGISTER_LOGGING
+#if IS_ENABLED(CONFIG_DRM_MSM_REGISTER_LOGGING)
 static bool reglog = false;
 MODULE_PARM_DESC(reglog, "Enable register read/write logging");
 module_param(reglog, bool, 0600);
 #else
 #define reglog 0
-#endif
+#endif /* CONFIG_DRM_MSM_REGISTER_LOGGING */
 
-#ifdef CONFIG_DRM_FBDEV_EMULATION
+#if IS_ENABLED(CONFIG_DRM_FBDEV_EMULATION)
 static bool fbdev = true;
 MODULE_PARM_DESC(fbdev, "Enable fbdev compat layer");
 module_param(fbdev, bool, 0600);
-#endif
+#endif /* CONFIG_DRM_FBDEV_EMULATION */
 
 static char *vram = "16m";
 MODULE_PARM_DESC(vram, "Configure VRAM size (for devices without IOMMU/GPUMMU)");
@@ -296,7 +297,7 @@ void __iomem *msm_ioremap(struct platform_device *pdev, const char *name,
 
 	ptr = devm_ioremap(&pdev->dev, res->start, size);
 	if (!ptr) {
-		dev_err(&pdev->dev, "failed to ioremap: %s\n", name);
+		DISP_DEV_ERR(&pdev->dev, "failed to ioremap: %s\n", name);
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -330,13 +331,13 @@ unsigned long msm_get_phys_addr(struct platform_device *pdev, const char *name)
 	struct resource *res;
 
 	if (!name) {
-		dev_err(&pdev->dev, "invalid block name\n");
+		DISP_DEV_ERR(&pdev->dev, "invalid block name\n");
 		return 0;
 	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
 	if (!res) {
-		dev_err(&pdev->dev, "failed to get memory resource: %s\n", name);
+		DISP_DEV_ERR(&pdev->dev, "failed to get memory resource: %s\n", name);
 		return 0;
 	}
 
@@ -507,10 +508,10 @@ static int msm_drm_uninit(struct device *dev)
 		priv->registered = false;
 	}
 
-#ifdef CONFIG_DRM_FBDEV_EMULATION
+#if IS_ENABLED(CONFIG_DRM_FBDEV_EMULATION)
 	if (fbdev && priv->fbdev)
 		msm_fbdev_free(ddev);
-#endif
+#endif /* CONFIG_DRM_FBDEV_EMULATION */
 	drm_atomic_helper_shutdown(ddev);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	msm_irq_uninstall(ddev);
@@ -518,8 +519,10 @@ static int msm_drm_uninit(struct device *dev)
 	drm_irq_uninstall(ddev);
 #endif
 
-	if (kms && kms->funcs)
+	if (kms && kms->funcs) {
 		kms->funcs->destroy(kms);
+		priv->kms = NULL;
+	}
 
 	if (priv->vram.paddr) {
 		unsigned long attrs = DMA_ATTR_NO_KERNEL_MAPPING;
@@ -561,7 +564,7 @@ static int msm_drm_uninit(struct device *dev)
 
 static int get_mdp_ver(struct platform_device *pdev)
 {
-#ifdef CONFIG_OF
+#if IS_ENABLED(CONFIG_OF)
 	static const struct of_device_id match_types[] = { {
 		.compatible = "qcom,mdss_mdp",
 		.data	= (void	*)KMS_MDP5,
@@ -578,7 +581,7 @@ static int get_mdp_ver(struct platform_device *pdev)
 	match = of_match_node(match_types, dev->of_node);
 	if (match)
 		return (int)(unsigned long)match->data;
-#endif
+#endif /* CONFIG_OF */
 	return KMS_MDP4;
 }
 
@@ -648,7 +651,7 @@ static int msm_init_vram(struct drm_device *dev)
 		p = dma_alloc_attrs(dev->dev, size,
 				&priv->vram.paddr, GFP_KERNEL, attrs);
 		if (!p) {
-			dev_err(dev->dev, "failed to allocate VRAM\n");
+			DISP_DEV_ERR(dev->dev, "failed to allocate VRAM\n");
 			priv->vram.paddr = 0;
 			return -ENOMEM;
 		}
@@ -661,7 +664,7 @@ static int msm_init_vram(struct drm_device *dev)
 	return ret;
 }
 
-#ifdef CONFIG_OF
+#if IS_ENABLED(CONFIG_OF)
 static int msm_component_bind_all(struct device *dev,
 				struct drm_device *drm_dev)
 {
@@ -679,14 +682,13 @@ static int msm_component_bind_all(struct device *dev,
 {
 	return 0;
 }
-#endif
+#endif /* CONFIG_OF */
 
 static int msm_drm_display_thread_create(struct msm_drm_private *priv, struct drm_device *ddev,
 	struct device *dev)
 {
 	int i, ret = 0;
 
-	kthread_init_work(&priv->thread_priority_work, msm_drm_display_thread_priority_worker);
 	for (i = 0; i < priv->num_crtcs; i++) {
 		/* initialize display thread */
 		priv->disp_thread[i].crtc_id = priv->crtcs[i]->base.id;
@@ -696,10 +698,13 @@ static int msm_drm_display_thread_create(struct msm_drm_private *priv, struct dr
 			kthread_run(kthread_worker_fn,
 				&priv->disp_thread[i].worker,
 				"crtc_commit:%d", priv->disp_thread[i].crtc_id);
+		kthread_init_work(&priv->thread_priority_work,
+				  msm_drm_display_thread_priority_worker);
 		kthread_queue_work(&priv->disp_thread[i].worker, &priv->thread_priority_work);
+		kthread_flush_work(&priv->thread_priority_work);
 
 		if (IS_ERR(priv->disp_thread[i].thread)) {
-			dev_err(dev, "failed to create crtc_commit kthread\n");
+			DISP_DEV_ERR(dev, "failed to create crtc_commit kthread\n");
 			priv->disp_thread[i].thread = NULL;
 		}
 
@@ -718,10 +723,13 @@ static int msm_drm_display_thread_create(struct msm_drm_private *priv, struct dr
 		 * frame_pending counters beyond 2. This can lead to commit
 		 * failure at crtc commit level.
 		 */
+		kthread_init_work(&priv->thread_priority_work,
+				  msm_drm_display_thread_priority_worker);
 		kthread_queue_work(&priv->event_thread[i].worker, &priv->thread_priority_work);
+		kthread_flush_work(&priv->thread_priority_work);
 
 		if (IS_ERR(priv->event_thread[i].thread)) {
-			dev_err(dev, "failed to create crtc_event kthread\n");
+			DISP_DEV_ERR(dev, "failed to create crtc_event kthread\n");
 			priv->event_thread[i].thread = NULL;
 		}
 
@@ -753,10 +761,12 @@ static int msm_drm_display_thread_create(struct msm_drm_private *priv, struct dr
 	kthread_init_worker(&priv->pp_event_worker);
 	priv->pp_event_thread = kthread_run(kthread_worker_fn,
 			&priv->pp_event_worker, "pp_event");
+	kthread_init_work(&priv->thread_priority_work, msm_drm_display_thread_priority_worker);
 	kthread_queue_work(&priv->pp_event_worker, &priv->thread_priority_work);
+	kthread_flush_work(&priv->thread_priority_work);
 
 	if (IS_ERR(priv->pp_event_thread)) {
-		dev_err(dev, "failed to create pp_event kthread\n");
+		DISP_DEV_ERR(dev, "failed to create pp_event kthread\n");
 		ret = PTR_ERR(priv->pp_event_thread);
 		priv->pp_event_thread = NULL;
 		return ret;
@@ -795,7 +805,7 @@ static struct msm_kms *_msm_drm_component_init_helper(
 		 * and (for example) use dmabuf/prime to share buffers with
 		 * imx drm driver on iMX5
 		 */
-		dev_err(dev, "failed to load kms\n");
+		DISP_DEV_ERR(dev, "failed to load kms\n");
 		return kms;
 	}
 	priv->kms = kms;
@@ -811,7 +821,7 @@ static struct msm_kms *_msm_drm_component_init_helper(
 
 	ret = (kms)->funcs->hw_init(kms);
 	if (ret) {
-		dev_err(dev, "kms hw init failed: %d\n", ret);
+		DISP_DEV_ERR(dev, "kms hw init failed: %d\n", ret);
 		return ERR_PTR(ret);
 	}
 
@@ -828,7 +838,7 @@ static int msm_drm_device_init(struct platform_device *pdev,
 
 	ddev = drm_dev_alloc(drv, dev);
 	if (IS_ERR(ddev)) {
-		dev_err(dev, "failed to allocate drm_device\n");
+		DISP_DEV_ERR(dev, "failed to allocate drm_device\n");
 		return PTR_ERR(ddev);
 	}
 
@@ -852,15 +862,15 @@ static int msm_drm_device_init(struct platform_device *pdev,
 
 	ret = sde_dbg_init(&pdev->dev);
 	if (ret) {
-		dev_err(dev, "failed to init sde dbg: %d\n", ret);
+		DISP_DEV_ERR(dev, "failed to init sde dbg: %d\n", ret);
 		goto dbg_init_fail;
 	}
 
 	pm_runtime_enable(dev);
 
-	ret = pm_runtime_get_sync(dev);
+	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0) {
-		dev_err(dev, "resource enable failed: %d\n", ret);
+		DISP_DEV_ERR(dev, "failed to enable power resource %d\n", ret);
 		goto pm_runtime_error;
 	}
 
@@ -907,8 +917,12 @@ static int msm_drm_component_init(struct device *dev)
 
 	/* Bind all our sub-components: */
 	ret = msm_component_bind_all(dev, ddev);
-	if (ret)
+	if (ret == -EPROBE_DEFER) {
+		destroy_workqueue(priv->wq);
+		return ret;
+	} else if (ret) {
 		goto bind_fail;
+	}
 
 	ret = msm_init_vram(ddev);
 	if (ret)
@@ -919,7 +933,7 @@ static int msm_drm_component_init(struct device *dev)
 
 	kms = _msm_drm_component_init_helper(priv, ddev, dev, pdev);
 	if (IS_ERR_OR_NULL(kms)) {
-		dev_err(dev, "msm_drm_component_init_helper failed\n");
+		DISP_DEV_ERR(dev, "msm_drm_component_init_helper failed\n");
 		goto fail;
 	}
 
@@ -929,13 +943,13 @@ static int msm_drm_component_init(struct device *dev)
 
 	ret = msm_drm_display_thread_create(priv, ddev, dev);
 	if (ret) {
-		dev_err(dev, "msm_drm_display_thread_create failed\n");
+		DISP_DEV_ERR(dev, "msm_drm_display_thread_create failed\n");
 		goto fail;
 	}
 
 	ret = drm_vblank_init(ddev, priv->num_crtcs);
 	if (ret < 0) {
-		dev_err(dev, "failed to initialize vblank\n");
+		DISP_DEV_ERR(dev, "failed to initialize vblank\n");
 		goto fail;
 	}
 
@@ -943,7 +957,12 @@ static int msm_drm_component_init(struct device *dev)
 		drm_crtc_vblank_reset(crtc);
 
 	if (kms) {
-		pm_runtime_get_sync(dev);
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret < 0) {
+			DISP_DEV_ERR(dev, "failed to enable power resource %d\n", ret);
+			goto fail;
+		}
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 		ret = msm_irq_install(ddev, platform_get_irq(pdev, 0));
 #else
@@ -951,7 +970,7 @@ static int msm_drm_component_init(struct device *dev)
 #endif
 		pm_runtime_put_sync(dev);
 		if (ret < 0) {
-			dev_err(dev, "failed to install IRQ handler\n");
+			DISP_DEV_ERR(dev, "failed to install IRQ handler\n");
 			goto fail;
 		}
 	}
@@ -966,15 +985,15 @@ static int msm_drm_component_init(struct device *dev)
 	if (kms && kms->funcs && kms->funcs->cont_splash_config) {
 		ret = kms->funcs->cont_splash_config(kms, NULL);
 		if (ret) {
-			dev_err(dev, "kms cont_splash config failed.\n");
+			DISP_DEV_ERR(dev, "kms cont_splash config failed.\n");
 			goto fail;
 		}
 	}
 
-#ifdef CONFIG_DRM_FBDEV_EMULATION
+#if IS_ENABLED(CONFIG_DRM_FBDEV_EMULATION)
 	if (fbdev)
 		priv->fbdev = msm_fbdev_init(ddev);
-#endif
+#endif /* CONFIG_DRM_FBDEV_EMULATION */
 
 	/* create drm client only when fbdev is not supported */
 	if (!priv->fbdev) {
@@ -990,7 +1009,7 @@ static int msm_drm_component_init(struct device *dev)
 
 	ret = sde_dbg_debugfs_register(dev);
 	if (ret) {
-		dev_err(dev, "failed to reg sde dbg debugfs: %d\n", ret);
+		DISP_DEV_ERR(dev, "failed to reg sde dbg debugfs: %d\n", ret);
 		goto fail;
 	}
 
@@ -1098,19 +1117,32 @@ static void msm_postclose(struct drm_device *dev, struct drm_file *file)
 static void msm_lastclose(struct drm_device *dev)
 {
 	struct msm_drm_private *priv = dev->dev_private;
-	struct msm_kms *kms = priv->kms;
+	struct msm_kms *kms;
 	int i, rc;
 
-	if (!kms)
+	if (!priv || !priv->kms)
 		return;
+
+	kms = priv->kms;
 
 	/* check for splash status before triggering cleanup
 	 * if we end up here with splash status ON i.e before first
 	 * commit then ignore the last close call
 	 */
 	if (kms->funcs && kms->funcs->check_for_splash
-		&& kms->funcs->check_for_splash(kms))
-		return;
+		&& kms->funcs->check_for_splash(kms)) {
+		msm_wait_event_timeout(priv->pending_crtcs_event, !priv->pending_crtcs,
+			LASTCLOSE_TIMEOUT_MS, rc);
+		if (!rc)
+			DRM_INFO("wait for crtc mask 0x%x failed, commit anyway...\n",
+				priv->pending_crtcs);
+
+		rc = kms->funcs->trigger_null_flush(kms);
+		if (rc) {
+			DRM_ERROR("null flush commit failure during lastclose\n");
+			return;
+		}
+	}
 
 	/*
 	 * clean up vblank disable immediately as this is the last close.
@@ -1553,8 +1585,15 @@ static int msm_release(struct inode *inode, struct file *filp)
 	 * refcount > 1. This operation is not triggered from upstream
 	 * drm as msm_driver does not support DRIVER_LEGACY feature.
 	 */
-	if (drm_is_current_master(file_priv))
+	if (drm_is_current_master(file_priv)) {
+		msm_wait_event_timeout(priv->pending_crtcs_event, !priv->pending_crtcs,
+			LASTCLOSE_TIMEOUT_MS, ret);
+		if (!ret)
+			DRM_INFO("wait for crtc mask 0x%x failed, commit anyway...\n",
+				priv->pending_crtcs);
+
 		msm_preclose(dev, file_priv);
+	}
 
 	ret = drm_release(inode, filp);
 	filp->private_data = NULL;
@@ -1653,7 +1692,7 @@ int msm_ioctl_power_ctrl(struct drm_device *dev, void *data,
 
 	if (vote_req) {
 		if (power_ctrl->enable)
-			rc = pm_runtime_get_sync(dev->dev);
+			rc = pm_runtime_resume_and_get(dev->dev);
 		else
 			pm_runtime_put_sync(dev->dev);
 
@@ -1793,7 +1832,7 @@ static struct drm_driver msm_driver = {
 	.patchlevel         = MSM_VERSION_PATCHLEVEL,
 };
 
-#ifdef CONFIG_PM_SLEEP
+#if IS_ENABLED(CONFIG_PM_SLEEP)
 static int msm_pm_suspend(struct device *dev)
 {
 	struct drm_device *ddev;
@@ -1843,9 +1882,9 @@ static int msm_pm_resume(struct device *dev)
 
 	return 0;
 }
-#endif
+#endif /* CONFIG_PM_SLEEP */
 
-#ifdef CONFIG_PM
+#if IS_ENABLED(CONFIG_PM)
 static int msm_runtime_suspend(struct device *dev)
 {
 	struct drm_device *ddev = dev_get_drvdata(dev);
@@ -1876,7 +1915,7 @@ static int msm_runtime_resume(struct device *dev)
 
 	return ret;
 }
-#endif
+#endif /* CONFIG_PM */
 
 static const struct dev_pm_ops msm_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(msm_pm_suspend, msm_pm_resume)
@@ -1929,7 +1968,7 @@ static int add_components_mdp(struct device *mdp_dev,
 
 		ret = of_graph_parse_endpoint(ep_node, &ep);
 		if (ret) {
-			dev_err(mdp_dev, "unable to parse port endpoint\n");
+			DISP_DEV_ERR(mdp_dev, "unable to parse port endpoint\n");
 			of_node_put(ep_node);
 			return ret;
 		}
@@ -1996,13 +2035,13 @@ static int add_display_components(struct device *dev,
 	if (of_device_is_compatible(dev->of_node, "qcom,mdss")) {
 		ret = of_platform_populate(dev->of_node, NULL, NULL, dev);
 		if (ret) {
-			dev_err(dev, "failed to populate children devices\n");
+			DISP_DEV_ERR(dev, "failed to populate children devices\n");
 			return ret;
 		}
 
 		mdp_dev = device_find_child(dev, NULL, compare_name_mdp);
 		if (!mdp_dev) {
-			dev_err(dev, "failed to find MDSS MDP node\n");
+			DISP_DEV_ERR(dev, "failed to find MDSS MDP node\n");
 			of_platform_depopulate(dev);
 			return -ENODEV;
 		}
@@ -2141,7 +2180,7 @@ static int msm_drm_component_dependency_check(struct device *dev)
 			struct platform_device *pdev =
 					of_find_device_by_node(node);
 			if (!platform_get_drvdata(pdev)) {
-				dev_err(dev,
+				DISP_DEV_ERR(dev,
 					"qcom,sde_rscc not probed yet\n");
 				return -EPROBE_DEFER;
 			} else {
@@ -2269,9 +2308,6 @@ static void __exit msm_drm_unregister(void)
 module_init(msm_drm_register);
 module_exit(msm_drm_unregister);
 
-#if IS_ENABLED(CONFIG_MSM_MMRM)
-MODULE_SOFTDEP("pre: msm-mmrm");
-#endif
 MODULE_AUTHOR("Rob Clark <robdclark@gmail.com");
 MODULE_DESCRIPTION("MSM DRM Driver");
 MODULE_LICENSE("GPL");

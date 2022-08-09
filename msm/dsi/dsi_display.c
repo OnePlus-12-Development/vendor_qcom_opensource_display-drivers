@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -65,7 +66,8 @@ static bool is_sim_panel(struct dsi_display *display)
 	if (!display || !display->panel)
 		return false;
 
-	return display->panel->te_using_watchdog_timer;
+	return (display->panel->te_using_watchdog_timer ||
+			display->panel->panel_ack_disabled);
 }
 
 static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
@@ -705,13 +707,17 @@ static void dsi_display_set_cmd_tx_ctrl_flags(struct dsi_display *display,
 		/*
 		 * Set flags for command scheduling.
 		 * 1) In video mode command DMA scheduling is default.
-		 * 2) In command mode command DMA scheduling depends on message
+		 * 2) In command mode unicast command DMA scheduling depends on message
 		 * flag and TE needs to be running.
+		 * 3) In command mode broadcast command DMA scheduling is default and
+		 * TE needs to be running.
 		 */
 		if (display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
 			flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
 		} else {
 			if (msg->flags & MIPI_DSI_MSG_CMD_DMA_SCHED)
+				flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
+			if (flags & DSI_CTRL_CMD_BROADCAST)
 				flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
 			if (!display->enabled)
 				flags &= ~DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
@@ -1362,7 +1368,7 @@ int dsi_display_set_power(struct drm_connector *connector,
 	return rc;
 }
 
-#ifdef CONFIG_DEBUG_FS
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 static bool dsi_display_is_te_based_esd(struct dsi_display *display)
 {
 	u32 status_mode = 0;
@@ -2743,11 +2749,61 @@ static int dsi_display_set_clk_src(struct dsi_display *display, bool set_xo)
 	return 0;
 }
 
-int dsi_display_phy_pll_toggle(void *priv, bool prepare)
+static int dsi_display_phy_pll_enable(struct dsi_display *display)
 {
 	int rc = 0;
-	struct dsi_display *display = priv;
 	struct dsi_display_ctrl *m_ctrl;
+
+	m_ctrl = &display->ctrl[display->clk_master_idx];
+	if (!m_ctrl->phy) {
+		DSI_ERR("[%s] PHY not found\n", display->name);
+		return -EINVAL;
+	}
+
+	/*
+	 * It is recommended to turn on the PLL before switching parent
+	 * of RCG to PLL because when RCG is on, both the old and new
+	 * sources should be on while switching the RCG parent.
+	 *
+	 * Note: Branch clocks and in turn RCG might not get turned off
+	 * during clock disable sequence if there is a vote from dispcc
+	 * or any of its other consumers.
+	 */
+
+	rc = dsi_phy_pll_toggle(m_ctrl->phy, true);
+	if (rc)
+		return rc;
+
+	return dsi_display_set_clk_src(display, false);
+}
+
+static int dsi_display_phy_pll_disable(struct dsi_display *display)
+{
+	int rc = 0;
+	struct dsi_display_ctrl *m_ctrl;
+
+	/*
+	 * It is recommended to turn off the PLL after switching parent
+	 * of RCG to PLL because when RCG is on, both the old and new
+	 * sources should be on while switching the RCG parent.
+	 */
+
+	rc = dsi_display_set_clk_src(display, true);
+	if (rc)
+		return rc;
+
+	m_ctrl = &display->ctrl[display->clk_master_idx];
+	if (!m_ctrl->phy) {
+		DSI_ERR("[%s] PHY not found\n", display->name);
+		return -EINVAL;
+	}
+
+	return dsi_phy_pll_toggle(m_ctrl->phy, false);
+}
+
+int dsi_display_phy_pll_toggle(void *priv, bool prepare)
+{
+	struct dsi_display *display = priv;
 
 	if (!display) {
 		DSI_ERR("invalid arguments\n");
@@ -2757,17 +2813,10 @@ int dsi_display_phy_pll_toggle(void *priv, bool prepare)
 	if (is_skip_op_required(display))
 		return 0;
 
-	rc = dsi_display_set_clk_src(display, !prepare);
-
-	m_ctrl = &display->ctrl[display->clk_master_idx];
-	if (!m_ctrl->phy) {
-		DSI_ERR("[%s] PHY not found\n", display->name);
-		return -EINVAL;
-	}
-
-	rc = dsi_phy_pll_toggle(m_ctrl->phy, prepare);
-
-	return rc;
+	if (prepare)
+		return dsi_display_phy_pll_enable(display);
+	else
+		return dsi_display_phy_pll_disable(display);
 }
 
 int dsi_display_phy_configure(void *priv, bool commit)
@@ -5283,10 +5332,10 @@ int dsi_display_cont_splash_config(void *dsi_display)
 		return -EINVAL;
 	}
 
-	rc = pm_runtime_get_sync(display->drm_dev->dev);
+	rc = pm_runtime_resume_and_get(display->drm_dev->dev);
 	if (rc < 0) {
-		DSI_ERR("failed to vote gdsc for continuous splash, rc=%d\n",
-							rc);
+		DSI_ERR("failed to enable power resource %d\n", rc);
+		SDE_EVT32(rc, SDE_EVTLOG_ERROR);
 		return rc;
 	}
 
@@ -5362,7 +5411,22 @@ int dsi_display_splash_res_cleanup(struct  dsi_display *display)
 
 static int dsi_display_force_update_dsi_clk(struct dsi_display *display)
 {
-	int rc = 0;
+	int rc = 0, i = 0;
+	struct dsi_display_ctrl *ctrl;
+
+	/*
+	 * The force update dsi clock, is the only clock update function that toggles the state of
+	 * DSI clocks without any ref count protection. With the addition of ASYNC command wait,
+	 * there is a need for adding a check for any queued waits before updating these clocks.
+	 */
+	display_for_each_ctrl(i, display) {
+		ctrl = &display->ctrl[i];
+		if (!ctrl->ctrl || !(ctrl->ctrl->post_tx_queued))
+			continue;
+		flush_workqueue(display->post_cmd_tx_workq);
+		cancel_work_sync(&ctrl->ctrl->post_cmd_tx_work);
+		ctrl->ctrl->post_tx_queued = false;
+	}
 
 	rc = dsi_display_link_clk_force_update_ctrl(display->dsi_clk_handle);
 
@@ -5938,7 +6002,7 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 		panel_node = of_parse_phandle(node,
 				"qcom,dsi-default-panel", 0);
 		if (!panel_node)
-			DSI_WARN("%s default panel not found\n", display->display_type);
+			DSI_INFO("%s default panel not found\n", display->display_type);
 	}
 
 	boot_disp->node = pdev->dev.of_node;
@@ -6536,7 +6600,8 @@ int dsi_display_drm_ext_bridge_init(struct dsi_display *display,
 			ext_bridge->funcs = &ext_bridge_info->bridge_funcs;
 		}
 
-		rc = drm_bridge_attach(encoder, ext_bridge, prev_bridge, 0);
+		rc = drm_bridge_attach(encoder, ext_bridge, prev_bridge,
+					DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 		if (rc) {
 			DSI_ERR("[%s] ext brige attach failed, %d\n",
 				display->name, rc);
@@ -6950,58 +7015,15 @@ void dsi_display_put_mode(struct dsi_display *display,
 	dsi_panel_put_mode(mode);
 }
 
-int dsi_display_get_modes(struct dsi_display *display,
-			  struct dsi_display_mode **out_modes)
+int dsi_display_get_modes_helper(struct dsi_display *display,
+	struct dsi_display_ctrl *ctrl, u32 timing_mode_count,
+	struct dsi_dfps_capabilities dfps_caps, struct dsi_qsync_capabilities *qsync_caps,
+	struct dsi_dyn_clk_caps *dyn_clk_caps)
 {
-	struct dsi_dfps_capabilities dfps_caps;
-	struct dsi_display_ctrl *ctrl;
-	struct dsi_host_common_cfg *host = &display->panel->host_config;
+	int dsc_modes = 0, nondsc_modes = 0, rc = 0, i, start, end;
+	u32 num_dfps_rates, mode_idx, sublinks_count, array_idx = 0;
 	bool is_split_link, support_cmd_mode, support_video_mode;
-	u32 num_dfps_rates, timing_mode_count, display_mode_count;
-	u32 sublinks_count, mode_idx, array_idx = 0;
-	struct dsi_dyn_clk_caps *dyn_clk_caps;
-	int i, start, end, rc = -EINVAL;
-	int dsc_modes = 0, nondsc_modes = 0;
-	struct dsi_qsync_capabilities *qsync_caps;
-
-	if (!display || !out_modes) {
-		DSI_ERR("Invalid params\n");
-		return -EINVAL;
-	}
-
-	*out_modes = NULL;
-	ctrl = &display->ctrl[0];
-
-	mutex_lock(&display->display_lock);
-
-	if (display->modes)
-		goto exit;
-
-	display_mode_count = display->panel->num_display_modes;
-
-	display->modes = kcalloc(display_mode_count, sizeof(*display->modes),
-			GFP_KERNEL);
-	if (!display->modes) {
-		rc = -ENOMEM;
-		goto error;
-	}
-
-	rc = dsi_panel_get_dfps_caps(display->panel, &dfps_caps);
-	if (rc) {
-		DSI_ERR("[%s] failed to get dfps caps from panel\n",
-				display->name);
-		goto error;
-	}
-
-	qsync_caps = &(display->panel->qsync_caps);
-	dyn_clk_caps = &(display->panel->dyn_clk_caps);
-
-	timing_mode_count = display->panel->num_timing_nodes;
-
-	/* Validate command line timing */
-	if ((display->cmdline_timing != NO_OVERRIDE) &&
-		(display->cmdline_timing >= timing_mode_count))
-		display->cmdline_timing = NO_OVERRIDE;
+	struct dsi_host_common_cfg *host = &display->panel->host_config;
 
 	for (mode_idx = 0; mode_idx < timing_mode_count; mode_idx++) {
 		struct dsi_display_mode display_mode;
@@ -7018,7 +7040,8 @@ int dsi_display_get_modes(struct dsi_display *display,
 		if (rc) {
 			DSI_ERR("[%s] failed to get mode idx %d from panel\n",
 				   display->name, mode_idx);
-			goto error;
+			rc = -EINVAL;
+			return rc;
 		}
 
 		if (display->cmdline_timing == display_mode.mode_idx) {
@@ -7084,7 +7107,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 			if (!sub_mode) {
 				DSI_ERR("invalid mode data\n");
 				rc = -EFAULT;
-				goto error;
+				return rc;
 			}
 
 			memcpy(sub_mode, &display_mode, sizeof(display_mode));
@@ -7110,14 +7133,14 @@ int dsi_display_get_modes(struct dsi_display *display,
 					sizeof(*sub_mode->priv_info), GFP_KERNEL);
 			if (!sub_mode->priv_info) {
 				rc = -ENOMEM;
-				goto error;
+				return rc;
 			}
 
 			rc = dsi_display_mode_dyn_clk_cpy(display,
 					&display_mode, sub_mode);
 			if (rc) {
 				DSI_ERR("unable to copy dyn clock list\n");
-				goto error;
+				return rc;
 			}
 
 			sub_mode->mode_idx += (array_idx - 1);
@@ -7157,6 +7180,63 @@ int dsi_display_get_modes(struct dsi_display *display,
 
 	if (dsc_modes && nondsc_modes)
 		display->panel->dsc_switch_supported = true;
+
+	return rc;
+}
+
+int dsi_display_get_modes(struct dsi_display *display,
+			  struct dsi_display_mode **out_modes)
+{
+	struct dsi_dfps_capabilities dfps_caps;
+	struct dsi_display_ctrl *ctrl;
+	u32 timing_mode_count, display_mode_count;
+	struct dsi_dyn_clk_caps *dyn_clk_caps;
+	int rc = -EINVAL;
+	struct dsi_qsync_capabilities *qsync_caps;
+
+	if (!display || !out_modes) {
+		DSI_ERR("Invalid params\n");
+		return -EINVAL;
+	}
+
+	*out_modes = NULL;
+	ctrl = &display->ctrl[0];
+
+	mutex_lock(&display->display_lock);
+
+	if (display->modes)
+		goto exit;
+
+	display_mode_count = display->panel->num_display_modes;
+
+	display->modes = kcalloc(display_mode_count, sizeof(*display->modes),
+			GFP_KERNEL);
+	if (!display->modes) {
+		rc = -ENOMEM;
+		goto error;
+	}
+
+	rc = dsi_panel_get_dfps_caps(display->panel, &dfps_caps);
+	if (rc) {
+		DSI_ERR("[%s] failed to get dfps caps from panel\n",
+				display->name);
+		goto error;
+	}
+
+	qsync_caps = &(display->panel->qsync_caps);
+	dyn_clk_caps = &(display->panel->dyn_clk_caps);
+
+	timing_mode_count = display->panel->num_timing_nodes;
+
+	/* Validate command line timing */
+	if ((display->cmdline_timing != NO_OVERRIDE) &&
+		(display->cmdline_timing >= timing_mode_count))
+		display->cmdline_timing = NO_OVERRIDE;
+
+	rc = dsi_display_get_modes_helper(display, ctrl, timing_mode_count,
+			dfps_caps, qsync_caps, dyn_clk_caps);
+	if (rc)
+		goto error;
 
 exit:
 	*out_modes = display->modes;
@@ -7274,6 +7354,46 @@ int dsi_display_get_avr_step_req_fps(void *display_dsi, u32 mode_fps)
 
 	DSI_DEBUG("mode_fps %u, avr_step fps %u\n", mode_fps, step);
 	return step;
+}
+
+int dsi_display_update_transfer_time(void *display, u32 transfer_time)
+{
+	struct dsi_display *disp = (struct dsi_display *)display;
+	int rc = 0, i = 0;
+	u32 transfer_time_min, transfer_time_max;
+	struct dsi_display_ctrl *ctrl;
+
+	if (!disp->panel || !disp->panel->cur_mode || !disp->panel->cur_mode->priv_info)
+		return -EINVAL;
+
+	transfer_time_min = disp->panel->cur_mode->priv_info->mdp_transfer_time_us_min;
+	transfer_time_max = disp->panel->cur_mode->priv_info->mdp_transfer_time_us_max;
+
+	if (!transfer_time_min || !transfer_time_max)
+		return 0;
+
+	if (transfer_time < transfer_time_min || transfer_time > transfer_time_max) {
+		DSI_ERR("invalid transfer time %u, min: %u, max: %u\n",
+			transfer_time, transfer_time_min, transfer_time_max);
+		return -EINVAL;
+	}
+
+	disp->panel->cur_mode->priv_info->mdp_transfer_time_us = transfer_time;
+	disp->panel->cur_mode->priv_info->dsi_transfer_time_us = transfer_time;
+
+	display_for_each_ctrl(i, disp) {
+		ctrl = &disp->ctrl[i];
+		rc = dsi_ctrl_update_host_config(ctrl->ctrl, &disp->config,
+				disp->panel->cur_mode, 0x0,
+				disp->dsi_clk_handle);
+		if (rc) {
+			DSI_ERR("[%s] failed to update ctrl config, rc=%d\n", disp->name, rc);
+			return rc;
+		}
+	}
+	atomic_set(&disp->clkrate_change_pending, 1);
+
+	return 0;
 }
 
 static bool dsi_display_match_timings(const struct dsi_display_mode *mode1,
@@ -7643,7 +7763,10 @@ error:
 	return rc;
 }
 
-int dsi_display_set_tpg_state(struct dsi_display *display, bool enable)
+int dsi_display_set_tpg_state(struct dsi_display *display, bool enable,
+			enum dsi_test_pattern type,
+			u32 init_val,
+			enum dsi_ctrl_tpg_pattern pattern)
 {
 	int rc = 0;
 	int i;
@@ -7656,11 +7779,17 @@ int dsi_display_set_tpg_state(struct dsi_display *display, bool enable)
 
 	display_for_each_ctrl(i, display) {
 		ctrl = &display->ctrl[i];
-		rc = dsi_ctrl_set_tpg_state(ctrl->ctrl, enable);
+		rc = dsi_ctrl_set_tpg_state(ctrl->ctrl, enable, type, init_val, pattern);
 		if (rc) {
-			DSI_ERR("[%s] failed to set tpg state for host_%d\n",
-			       display->name, i);
+			DSI_ERR("[%s] failed to set tpg state for host_%d\n", display->name, i);
 			goto error;
+		}
+		if (enable && ctrl->ctrl->host_config.panel_mode == DSI_OP_CMD_MODE) {
+			rc = dsi_ctrl_trigger_test_pattern(ctrl->ctrl);
+			if (rc) {
+				DSI_ERR("[%s] failed to start tpg for host_%d\n", display->name, i);
+				goto error;
+			}
 		}
 	}
 

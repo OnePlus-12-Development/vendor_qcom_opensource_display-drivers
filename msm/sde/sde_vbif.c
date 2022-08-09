@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -47,6 +48,9 @@ static bool _sde_vbif_setup_clk_supported(struct sde_kms *sde_kms, enum sde_clk_
 {
 	bool supported = false;
 	bool has_split_vbif = test_bit(SDE_FEATURE_VBIF_CLK_SPLIT, sde_kms->catalog->features);
+
+	if (!SDE_CLK_CTRL_VALID(clk_ctrl))
+		return false;
 
 	if ((has_split_vbif && VBIF_CLK_CLIENT(clk_ctrl).ops.setup_clk_force_ctrl) ||
 			(!has_split_vbif && sde_kms->hw_mdp->ops.setup_clk_force_ctrl))
@@ -191,71 +195,6 @@ static int _sde_vbif_wait_for_axi_halt(struct sde_hw_vbif *vbif)
 	return rc;
 }
 
-int sde_vbif_halt_plane_xin(struct sde_kms *sde_kms, u32 xin_id, u32 clk_ctrl)
-{
-	struct sde_hw_vbif *vbif = NULL;
-	struct sde_hw_mdp *mdp;
-	bool forced_on = false;
-	bool status;
-	int rc = 0;
-
-	if (!sde_kms) {
-		SDE_ERROR("invalid argument\n");
-		return -EINVAL;
-	}
-
-	if (!sde_kms_is_vbif_operation_allowed(sde_kms)) {
-		SDE_DEBUG("vbif operations not permitted\n");
-		return 0;
-	}
-
-	vbif = sde_kms->hw_vbif[VBIF_RT];
-	mdp = sde_kms->hw_mdp;
-	if (!vbif || !mdp || !vbif->ops.get_xin_halt_status ||
-		       !vbif->ops.set_xin_halt ||
-		       !_sde_vbif_setup_clk_supported(sde_kms, clk_ctrl)) {
-		SDE_ERROR("invalid vbif or mdp arguments\n");
-		return -EINVAL;
-	}
-
-	mutex_lock(&vbif->mutex);
-
-	SDE_EVT32_VERBOSE(vbif->idx, xin_id);
-
-	/*
-	 * If status is 0, then make sure client clock is not gated
-	 * while halting by forcing it ON only if it was not previously
-	 * forced on. If status is 1 then its already halted.
-	 */
-	status = vbif->ops.get_xin_halt_status(vbif, xin_id);
-	if (status) {
-		mutex_unlock(&vbif->mutex);
-		return 0;
-	}
-
-	forced_on = _sde_vbif_setup_clk_force_ctrl(sde_kms, clk_ctrl, true);
-
-	/* send halt request for unused plane's xin client */
-	vbif->ops.set_xin_halt(vbif, xin_id, true);
-
-	rc = _sde_vbif_wait_for_xin_halt(vbif, xin_id);
-	if (rc) {
-		SDE_ERROR(
-		"wait failed for pipe halt:xin_id %u, clk_ctrl %u, rc %u\n",
-			xin_id, clk_ctrl, rc);
-		SDE_EVT32(xin_id, clk_ctrl, rc, SDE_EVTLOG_ERROR);
-	}
-
-	/* open xin client to enable transactions */
-	vbif->ops.set_xin_halt(vbif, xin_id, false);
-	if (forced_on)
-		_sde_vbif_setup_clk_force_ctrl(sde_kms, clk_ctrl, false);
-
-	mutex_unlock(&vbif->mutex);
-
-	return rc;
-}
-
 /**
  * _sde_vbif_apply_dynamic_ot_limit - determine OT based on usecase parameters
  * @vbif:	Pointer to hardware vbif driver
@@ -386,6 +325,9 @@ void sde_vbif_set_ot_limit(struct sde_kms *sde_kms,
 	if (!_sde_vbif_setup_clk_supported(sde_kms, params->clk_ctrl) ||
 			!vbif->ops.set_limit_conf ||
 			!vbif->ops.set_xin_halt)
+		return;
+
+	if (test_bit(SDE_FEATURE_EMULATED_ENV, sde_kms->catalog->features))
 		return;
 
 	mutex_lock(&vbif->mutex);
@@ -560,11 +502,12 @@ bool sde_vbif_get_xin_status(struct sde_kms *sde_kms,
 
 	mutex_lock(&vbif->mutex);
 	SDE_EVT32_VERBOSE(vbif->idx, params->xin_id);
+	/* check xin client halt status - true if vbif is idle */
 	status = vbif->ops.get_xin_halt_status(vbif, params->xin_id);
 	if (status) {
+		/* check if client's clk is active - true if clk is active */
 		rc = _sde_vbif_get_clk_ctrl_status(sde_kms, params->clk_ctrl, &status);
-		if (rc)
-			status = false;
+		status = (rc < 0) ? false : !status;
 	}
 	mutex_unlock(&vbif->mutex);
 
@@ -579,6 +522,7 @@ void sde_vbif_set_qos_remap(struct sde_kms *sde_kms,
 	bool forced_on = false;
 	const struct sde_vbif_qos_tbl *qos_tbl;
 	int i;
+	u32 nlvl;
 
 	if (!sde_kms || !params || !sde_kms->hw_mdp) {
 		SDE_ERROR("invalid arguments\n");
@@ -616,7 +560,7 @@ void sde_vbif_set_qos_remap(struct sde_kms *sde_kms,
 	}
 
 	qos_tbl = &vbif->cap->qos_tbl[params->client_type];
-	if (!qos_tbl->npriority_lvl || !qos_tbl->priority_lvl) {
+	if (!qos_tbl->count || !qos_tbl->priority_lvl) {
 		SDE_DEBUG("qos tbl not defined\n");
 		return;
 	}
@@ -625,12 +569,13 @@ void sde_vbif_set_qos_remap(struct sde_kms *sde_kms,
 
 	forced_on = _sde_vbif_setup_clk_force_ctrl(sde_kms, params->clk_ctrl, true);
 
-	for (i = 0; i < qos_tbl->npriority_lvl; i++) {
-		SDE_DEBUG("vbif:%d xin:%d lvl:%d/%d\n",
-				params->vbif_idx, params->xin_id, i,
-				qos_tbl->priority_lvl[i]);
+	nlvl = qos_tbl->count / 2;
+	for (i = 0; i < nlvl; i++) {
+		SDE_DEBUG("vbif:%d xin:%d rp_remap:%d/%d, lv_remap:%d/%d\n",
+				params->vbif_idx, params->xin_id, i, qos_tbl->priority_lvl[i],
+				i + nlvl, qos_tbl->priority_lvl[i + nlvl]);
 		vbif->ops.set_qos_remap(vbif, params->xin_id, i,
-				qos_tbl->priority_lvl[i]);
+				qos_tbl->priority_lvl[i], qos_tbl->priority_lvl[i + nlvl]);
 	}
 
 	if (forced_on)
@@ -711,6 +656,9 @@ void sde_vbif_axi_halt_request(struct sde_kms *sde_kms)
 		return;
 	}
 
+	if (test_bit(SDE_FEATURE_EMULATED_ENV, sde_kms->catalog->features))
+		return;
+
 	for (i = 0; i < ARRAY_SIZE(sde_kms->hw_vbif); i++) {
 		vbif = sde_kms->hw_vbif[i];
 		if (vbif && vbif->cap && vbif->ops.set_axi_halt) {
@@ -768,7 +716,7 @@ int sde_vbif_halt_xin_mask(struct sde_kms *sde_kms, u32 xin_id_mask,
 	return 0;
 }
 
-#ifdef CONFIG_DEBUG_FS
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 void sde_debugfs_vbif_destroy(struct sde_kms *sde_kms)
 {
 	debugfs_remove_recursive(sde_kms->debugfs_vbif);
@@ -838,4 +786,4 @@ int sde_debugfs_vbif_init(struct sde_kms *sde_kms, struct dentry *debugfs_root)
 
 	return 0;
 }
-#endif
+#endif /* CONFIG_DEBUG_FS */

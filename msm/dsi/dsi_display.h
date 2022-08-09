@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -633,7 +634,10 @@ int dsi_pre_clkon_cb(void *priv, enum dsi_clk_type clk_type,
  */
 int dsi_display_unprepare(struct dsi_display *display);
 
-int dsi_display_set_tpg_state(struct dsi_display *display, bool enable);
+int dsi_display_set_tpg_state(struct dsi_display *display, bool enable,
+		enum dsi_test_pattern type,
+		u32 init_val,
+		enum dsi_ctrl_tpg_pattern pattern);
 
 int dsi_display_clock_gate(struct dsi_display *display, bool enable);
 int dsi_dispaly_static_frame(struct dsi_display *display, bool enable);
@@ -830,5 +834,14 @@ int dsi_display_restore_bit_clk(struct dsi_display *display, struct dsi_display_
  */
 bool dsi_display_mode_match(const struct dsi_display_mode *mode1,
 		struct dsi_display_mode *mode2, unsigned int match_flags);
+
+/**
+ * dsi_display_update_transfer_time() - update DSI transfer time and clocks
+ * @display:     handle to display
+ * @transfer_time: transfer time value to be updated
+ *
+ * Return: error code
+ */
+int dsi_display_update_transfer_time(void *display, u32 transfer_time);
 
 #endif /* _DSI_DISPLAY_H_ */

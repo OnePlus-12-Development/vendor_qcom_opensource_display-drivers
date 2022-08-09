@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2019, 2021 The Linux Foundation. All rights reserved.
  */
 
@@ -72,8 +73,6 @@ static const struct sde_format_extended plane_formats_vig[] = {
 	{DRM_FORMAT_NV12, 0},
 	{DRM_FORMAT_NV12, DRM_FORMAT_MOD_QCOM_COMPRESSED},
 	{DRM_FORMAT_NV21, 0},
-	{DRM_FORMAT_NV16, 0},
-	{DRM_FORMAT_NV61, 0},
 	{DRM_FORMAT_VYUY, 0},
 	{DRM_FORMAT_UYVY, 0},
 	{DRM_FORMAT_YUYV, 0},
@@ -85,23 +84,6 @@ static const struct sde_format_extended plane_formats_vig[] = {
 	TP10_UBWC_FMTS,
 	P010_FMTS,
 
-	{0, 0},
-};
-
-static const struct sde_format_extended cursor_formats[] = {
-	{DRM_FORMAT_ARGB8888, 0},
-	{DRM_FORMAT_ABGR8888, 0},
-	{DRM_FORMAT_RGBA8888, 0},
-	{DRM_FORMAT_BGRA8888, 0},
-	{DRM_FORMAT_XRGB8888, 0},
-	{DRM_FORMAT_ARGB1555, 0},
-	{DRM_FORMAT_ABGR1555, 0},
-	{DRM_FORMAT_RGBA5551, 0},
-	{DRM_FORMAT_BGRA5551, 0},
-	{DRM_FORMAT_ARGB4444, 0},
-	{DRM_FORMAT_ABGR4444, 0},
-	{DRM_FORMAT_RGBA4444, 0},
-	{DRM_FORMAT_BGRA4444, 0},
 	{0, 0},
 };
 

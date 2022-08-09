@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -170,6 +170,7 @@ enum sde_enc_rc_states {
  * @cur_conn_roi:		current connector roi
  * @prv_conn_roi:		previous connector roi to optimize if unchanged
  * @crtc			pointer to drm_crtc
+ * @fal10_veto_override:	software override for micro idle fal10 veto
  * @recovery_events_enabled:	status of hw recovery feature enable by client
  * @elevated_ahb_vote:		increase AHB bus speed for the first frame
  *				after power collapse
@@ -221,7 +222,7 @@ struct sde_encoder_virt {
 	struct sde_rsc_client *rsc_client;
 	bool rsc_state_init;
 	struct msm_display_info disp_info;
-	bool misr_enable;
+	atomic_t misr_enable;
 	bool misr_reconfigure;
 	u32 misr_frame_count;
 
@@ -244,6 +245,7 @@ struct sde_encoder_virt {
 	struct sde_rect prv_conn_roi;
 	struct drm_crtc *crtc;
 
+	bool fal10_veto_override;
 	bool recovery_events_enabled;
 	bool elevated_ahb_vote;
 	struct dev_pm_qos_request pm_qos_cpu_req[NR_CPUS];
@@ -605,6 +607,13 @@ bool sde_encoder_needs_dsc_disable(struct drm_encoder *drm_enc);
 void sde_encoder_get_transfer_time(struct drm_encoder *drm_enc,
 		u32 *transfer_time_us);
 
+/**
+ * sde_encoder_helper_update_out_fence_txq - updates hw-fence tx queue
+ * @sde_enc: Pointer to sde encoder structure
+ * @is_vid: Boolean to indicate if is video-mode
+ */
+void sde_encoder_helper_update_out_fence_txq(struct sde_encoder_virt *sde_enc, bool is_vid);
+
 /*
  * sde_encoder_get_dfps_maxfps - get dynamic FPS max frame rate of
 				the given encoder
@@ -681,5 +690,54 @@ static inline bool sde_encoder_is_widebus_enabled(struct drm_encoder *drm_enc)
 	return sde_enc->mode_info.wide_bus_en;
 }
 
+/*
+ * sde_encoder_is_line_insertion_supported - get line insertion
+ * feature bit value from panel
+ * @drm_enc:    Pointer to drm encoder structure
+ * @Return: line insertion support status
+ */
+bool sde_encoder_is_line_insertion_supported(struct drm_encoder *drm_enc);
+
+/**
+ * sde_encoder_get_hw_ctl - gets hw ctl from the connector
+ * @c_conn: sde connector
+ * @Return: pointer to the hw ctl from the encoder upon success, otherwise null
+ */
+struct sde_hw_ctl *sde_encoder_get_hw_ctl(struct sde_connector *c_conn);
+
 void sde_encoder_add_data_to_minidump_va(struct drm_encoder *drm_enc);
+
+/**
+ * sde_encoder_misr_sign_event_notify - collect MISR, check with previous value
+ * if change then notify to client with custom event
+ * @drm_enc: pointer to drm encoder
+ */
+void sde_encoder_misr_sign_event_notify(struct drm_encoder *drm_enc);
+
+/**
+ * sde_encoder_register_misr_event - register or deregister MISR event
+ * @drm_enc: pointer to drm encoder
+ * @val: indicates register or deregister
+ */
+static inline int sde_encoder_register_misr_event(struct drm_encoder *drm_enc, bool val)
+{
+	struct sde_encoder_virt *sde_enc = NULL;
+
+	if (!drm_enc)
+		return -EINVAL;
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	atomic_set(&sde_enc->misr_enable, val);
+
+	/*
+	 * To setup MISR ctl reg, set misr_reconfigure as true.
+	 * MISR is calculated for the specific number of frames.
+	 */
+	if (atomic_read(&sde_enc->misr_enable)) {
+		sde_enc->misr_reconfigure = true;
+		sde_enc->misr_frame_count = 1;
+	}
+
+	return 0;
+}
 #endif /* __SDE_ENCODER_H__ */

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -41,9 +42,9 @@ static bool dsi_compression_enabled(struct dsi_mode_info *mode)
 
 /* Unsupported formats default to RGB888 */
 static const u8 cmd_mode_format_map[DSI_PIXEL_FORMAT_MAX] = {
-	0x6, 0x7, 0x8, 0x8, 0x0, 0x3, 0x4 };
+	0x6, 0x7, 0x8, 0x8, 0x0, 0x3, 0x4, 0x9 };
 static const u8 video_mode_format_map[DSI_PIXEL_FORMAT_MAX] = {
-	0x0, 0x1, 0x2, 0x3, 0x3, 0x3, 0x3 };
+	0x0, 0x1, 0x2, 0x3, 0x3, 0x3, 0x3, 0x4 };
 
 /**
  * dsi_split_link_setup() - setup dsi split link configurations
@@ -543,9 +544,12 @@ void dsi_ctrl_hw_cmn_setup_cmd_stream(struct dsi_ctrl_hw *ctrl,
 	u32 reg = 0, offset = 0;
 	int pic_width = 0, this_frame_slices = 0, intf_ip_w = 0;
 	u32 pkt_per_line = 0, eol_byte_num = 0, bytes_in_slice = 0;
+	u32 bpp;
 
 	if (roi && (!roi->w || !roi->h))
 		return;
+
+	bpp = dsi_pixel_format_to_bpp(cfg->dst_format);
 
 	if (dsi_dsc_compression_enabled(mode)) {
 		struct msm_display_dsc_info dsc;
@@ -580,11 +584,11 @@ void dsi_ctrl_hw_cmn_setup_cmd_stream(struct dsi_ctrl_hw *ctrl,
 		bytes_in_slice = vdc.bytes_in_slice;
 	} else if (roi) {
 		width_final = roi->w;
-		stride_final = roi->w * 3;
+		stride_final = DIV_ROUND_UP(roi->w * bpp, 8);
 		height_final = roi->h;
 	} else {
 		width_final = mode->h_active;
-		stride_final = mode->h_active * 3;
+		stride_final = DIV_ROUND_UP(mode->h_active * bpp, 8);
 		height_final = mode->v_active;
 	}
 
@@ -629,7 +633,7 @@ void dsi_ctrl_hw_cmn_setup_cmd_stream(struct dsi_ctrl_hw *ctrl,
 	}
 
 	/* HS Timer value */
-	DSI_W32(ctrl, DSI_HS_TIMER_CTRL, 0x3FD08);
+	DSI_W32(ctrl, DSI_HS_TIMER_CTRL, 0x49C3C);
 
 	stream_ctrl = (stride_final + 1) << 16;
 	stream_ctrl |= (vc_id & 0x3) << 8;
@@ -701,7 +705,7 @@ void dsi_ctrl_hw_cmn_video_engine_setup(struct dsi_ctrl_hw *ctrl,
 	reg |= (cfg->bllp_lp11_en ? BIT(12) : 0);
 	reg |= (cfg->traffic_mode & 0x3) << 8;
 	reg |= (cfg->vc_id & 0x3);
-	reg |= (video_mode_format_map[common_cfg->dst_format] & 0x3) << 4;
+	reg |= (video_mode_format_map[common_cfg->dst_format] & 0x7) << 4;
 	DSI_W32(ctrl, DSI_VIDEO_MODE_CTRL, reg);
 
 	reg = (common_cfg->swap_mode & 0x7) << 12;
@@ -1436,6 +1440,9 @@ void dsi_ctrl_hw_cmn_enable_error_interrupts(struct dsi_ctrl_hw *ctrl,
 	else
 		int_ctrl &= ~BIT(25);
 
+	/* Do not clear interrupt status */
+	int_ctrl &= 0xAAEEAAFE;
+
 	if (errors & DSI_RDBK_SINGLE_ECC_ERR)
 		int_mask0 &= ~BIT(0);
 	if (errors & DSI_RDBK_MULTI_ECC_ERR)
@@ -1509,19 +1516,22 @@ void dsi_ctrl_hw_cmn_video_test_pattern_setup(struct dsi_ctrl_hw *ctrl,
 					     enum dsi_test_pattern type,
 					     u32 init_val)
 {
-	u32 reg = 0;
+	u32 reg = 0, pattern_sel_shift = 4;
 
 	DSI_W32(ctrl, DSI_TEST_PATTERN_GEN_VIDEO_INIT_VAL, init_val);
 
 	switch (type) {
 	case DSI_TEST_PATTERN_FIXED:
-		reg |= (0x2 << 4);
+		reg |= (0x2 << pattern_sel_shift);
 		break;
 	case DSI_TEST_PATTERN_INC:
-		reg |= (0x1 << 4);
+		reg |= (0x1 << pattern_sel_shift);
 		break;
 	case DSI_TEST_PATTERN_POLY:
 		DSI_W32(ctrl, DSI_TEST_PATTERN_GEN_VIDEO_POLY, 0xF0F0F);
+		break;
+	case DSI_TEST_PATTERN_GENERAL:
+		reg |= (0x3 << pattern_sel_shift);
 		break;
 	default:
 		break;
@@ -1583,6 +1593,9 @@ void dsi_ctrl_hw_cmn_cmd_test_pattern_setup(struct dsi_ctrl_hw *ctrl,
 	case DSI_TEST_PATTERN_POLY:
 		DSI_W32(ctrl, poly_offset, 0xF0F0F);
 		break;
+	case DSI_TEST_PATTERN_GENERAL:
+		reg |= (0x3 << pattern_sel_shift);
+		break;
 	default:
 		break;
 	}
@@ -1595,11 +1608,28 @@ void dsi_ctrl_hw_cmn_cmd_test_pattern_setup(struct dsi_ctrl_hw *ctrl,
  * test_pattern_enable() - enable test pattern engine
  * @ctrl:          Pointer to the controller host hardware.
  * @enable:        Enable/Disable test pattern engine.
+ * @pattern:       Type of TPG pattern
+ * @panel_mode:    DSI operation mode
  */
 void dsi_ctrl_hw_cmn_test_pattern_enable(struct dsi_ctrl_hw *ctrl,
-					bool enable)
+					bool enable, enum dsi_ctrl_tpg_pattern pattern,
+					enum dsi_op_mode panel_mode)
 {
 	u32 reg = DSI_R32(ctrl, DSI_TEST_PATTERN_GEN_CTRL);
+	u32 reg_tpg_main_control = 0;
+	u32 reg_tpg_video_config = BIT(0);
+
+	reg_tpg_video_config |= BIT(2);
+
+	if (panel_mode == DSI_OP_CMD_MODE) {
+		reg_tpg_main_control = BIT(pattern);
+		DSI_W32(ctrl, DSI_TPG_MAIN_CONTROL2, reg_tpg_main_control);
+	} else {
+		reg_tpg_main_control = BIT(pattern + 1);
+		DSI_W32(ctrl, DSI_TPG_MAIN_CONTROL, reg_tpg_main_control);
+	}
+
+	DSI_W32(ctrl, DSI_TPG_VIDEO_CONFIG, reg_tpg_video_config);
 
 	if (enable)
 		reg |= BIT(0);

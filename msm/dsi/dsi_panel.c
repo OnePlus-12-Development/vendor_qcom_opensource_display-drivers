@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -781,6 +782,7 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 	u64 tmp64 = 0;
 	struct dsi_display_mode *display_mode;
 	struct dsi_display_mode_priv_info *priv_info;
+	u32 usecs_fps = 0;
 
 	display_mode = container_of(mode, struct dsi_display_mode, timing);
 
@@ -803,11 +805,22 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-mdp-transfer-time-us",
 				&mode->mdp_transfer_time_us);
-	if (!rc)
-		display_mode->priv_info->mdp_transfer_time_us =
-			mode->mdp_transfer_time_us;
-	else
-		display_mode->priv_info->mdp_transfer_time_us = 0;
+	if (rc)
+		mode->mdp_transfer_time_us = 0;
+
+	rc = utils->read_u32(utils->data, "qcom,mdss-mdp-transfer-time-us-min",
+				&priv_info->mdp_transfer_time_us_min);
+	if (rc)
+		priv_info->mdp_transfer_time_us_min = 0;
+	else if (!rc && mode->mdp_transfer_time_us < priv_info->mdp_transfer_time_us_min)
+		mode->mdp_transfer_time_us = priv_info->mdp_transfer_time_us_min;
+
+	rc = utils->read_u32(utils->data, "qcom,mdss-mdp-transfer-time-us-max",
+				&priv_info->mdp_transfer_time_us_max);
+	if (rc)
+		priv_info->mdp_transfer_time_us_max = 0;
+	else if (!rc && mode->mdp_transfer_time_us > priv_info->mdp_transfer_time_us_max)
+		mode->mdp_transfer_time_us = priv_info->mdp_transfer_time_us_max;
 
 	priv_info->disable_rsc_solver = utils->read_bool(utils->data, "qcom,disable-rsc-solver");
 
@@ -819,6 +832,11 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 		       rc);
 		goto error;
 	}
+
+	usecs_fps = DIV_ROUND_UP((1 * 1000 * 1000), mode->refresh_rate);
+	if (mode->mdp_transfer_time_us > usecs_fps)
+		mode->mdp_transfer_time_us = 0;
+	priv_info->mdp_transfer_time_us = mode->mdp_transfer_time_us;
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-panel-width",
 				  &mode->h_active);
@@ -944,6 +962,9 @@ static int dsi_panel_parse_pixel_format(struct dsi_host_common_cfg *host,
 		break;
 	case 18:
 		fmt = DSI_PIXEL_FORMAT_RGB666;
+		break;
+	case 30:
+		fmt = DSI_PIXEL_FORMAT_RGB101010;
 		break;
 	case 24:
 	default:
@@ -1158,7 +1179,8 @@ static int dsi_panel_parse_misc_host_config(struct dsi_host_common_cfg *host,
 		host->dma_sched_window = 0;
 	else
 		host->dma_sched_window = window;
-
+	rc = utils->read_u32(utils->data, "qcom,vert-padding-value", &host->vpadding);
+	host->line_insertion_enable = (rc || host->vpadding <= 0) ? false : true;
 	DSI_DEBUG("[%s] DMA scheduling parameters Line: %d Window: %d\n", name,
 			host->dma_sched_line, host->dma_sched_window);
 	return 0;
@@ -1326,8 +1348,10 @@ static int dsi_panel_parse_qsync_caps(struct dsi_panel *panel,
 	 */
 	qsync_caps->qsync_min_fps_list_len = utils->count_u32_elems(utils->data,
 				  "qcom,dsi-supported-qsync-min-fps-list");
-	if (qsync_caps->qsync_min_fps_list_len < 1)
+	if (qsync_caps->qsync_min_fps_list_len < 1) {
+		qsync_caps->qsync_min_fps_list_len = 0;
 		goto qsync_support;
+	}
 
 	/**
 	 * qcom,dsi-supported-qsync-min-fps-list cannot be defined
@@ -1763,6 +1787,9 @@ static int dsi_panel_parse_panel_mode(struct dsi_panel *panel)
 					"qcom,poms-align-panel-vsync");
 	panel->panel_mode = panel_mode;
 	panel->panel_mode_switch_enabled = panel_mode_switch_enabled;
+
+	panel->panel_ack_disabled = utils->read_bool(utils->data,
+					"qcom,panel-ack-disabled");
 error:
 	return rc;
 }
@@ -2197,16 +2224,71 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 	return 0;
 }
 
+static int dsi_panel_parse_wd_jitter_config(struct dsi_display_mode_priv_info *priv_info,
+		struct dsi_parser_utils *utils, u32 *jitter)
+{
+	int rc = 0;
+	struct msm_display_wd_jitter_config *wd_jitter = &priv_info->wd_jitter;
+	u32 ltj[DEFAULT_PANEL_JITTER_ARRAY_SIZE] = {0, 1};
+	u32 ltj_time = 0;
+	const u32 max_ltj = 10;
+
+	if (!(utils->read_bool(utils->data, "qcom,dsi-wd-jitter-enable"))) {
+		priv_info->panel_jitter_numer = DEFAULT_PANEL_JITTER_NUMERATOR;
+		priv_info->panel_jitter_denom = DEFAULT_PANEL_JITTER_DENOMINATOR;
+		return 0;
+	}
+
+	rc = utils->read_u32_array(utils->data, "qcom,dsi-wd-ltj-max-jitter", ltj,
+			DEFAULT_PANEL_JITTER_ARRAY_SIZE);
+	rc |= utils->read_u32(utils->data, "qcom,dsi-wd-ltj-time-sec", &ltj_time);
+	if (rc || !ltj[1] || !ltj_time || (ltj[0] / ltj[1] >= max_ltj)) {
+		DSI_DEBUG("No valid long term jitter defined\n");
+		priv_info->panel_jitter_numer = DEFAULT_PANEL_JITTER_NUMERATOR;
+		priv_info->panel_jitter_denom = DEFAULT_PANEL_JITTER_DENOMINATOR;
+		rc = -EINVAL;
+	} else {
+		wd_jitter->ltj_max_numer = ltj[0];
+		wd_jitter->ltj_max_denom = ltj[1];
+		wd_jitter->ltj_time_sec = ltj_time;
+		wd_jitter->jitter_type = MSM_DISPLAY_WD_LTJ_JITTER;
+	}
+
+	if (jitter[0] && jitter[1]) {
+		if (jitter[0] / jitter[1] > MAX_PANEL_JITTER) {
+			wd_jitter->inst_jitter_numer = DEFAULT_PANEL_JITTER_NUMERATOR;
+			wd_jitter->inst_jitter_denom = DEFAULT_PANEL_JITTER_DENOMINATOR;
+		} else {
+			wd_jitter->inst_jitter_numer = jitter[0];
+			wd_jitter->inst_jitter_denom = jitter[1];
+		}
+		wd_jitter->jitter_type |= MSM_DISPLAY_WD_INSTANTANEOUS_JITTER;
+	} else if (rc) {
+		wd_jitter->inst_jitter_numer = DEFAULT_PANEL_JITTER_NUMERATOR;
+		wd_jitter->inst_jitter_denom = DEFAULT_PANEL_JITTER_DENOMINATOR;
+		wd_jitter->jitter_type |= MSM_DISPLAY_WD_INSTANTANEOUS_JITTER;
+	}
+
+	priv_info->panel_jitter_numer = rc ?
+			wd_jitter->inst_jitter_numer : wd_jitter->ltj_max_numer;
+	priv_info->panel_jitter_denom = rc ?
+			wd_jitter->inst_jitter_denom : wd_jitter->ltj_max_denom;
+
+	return 0;
+}
+
 static int dsi_panel_parse_jitter_config(
 				struct dsi_display_mode *mode,
 				struct dsi_parser_utils *utils)
 {
 	int rc;
 	struct dsi_display_mode_priv_info *priv_info;
+	struct dsi_panel *panel;
 	u32 jitter[DEFAULT_PANEL_JITTER_ARRAY_SIZE] = {0, 0};
 	u64 jitter_val = 0;
 
 	priv_info = mode->priv_info;
+	panel = container_of(utils, struct dsi_panel, utils);
 
 	rc = utils->read_u32_array(utils->data, "qcom,mdss-dsi-panel-jitter",
 				jitter, DEFAULT_PANEL_JITTER_ARRAY_SIZE);
@@ -2217,10 +2299,11 @@ static int dsi_panel_parse_jitter_config(
 		jitter_val = div_u64(jitter_val, jitter[1]);
 	}
 
-	if (rc || !jitter_val || (jitter_val > MAX_PANEL_JITTER)) {
+	if (panel->te_using_watchdog_timer) {
+		dsi_panel_parse_wd_jitter_config(priv_info, utils, jitter);
+	} else if (rc || !jitter_val || (jitter_val > MAX_PANEL_JITTER)) {
 		priv_info->panel_jitter_numer = DEFAULT_PANEL_JITTER_NUMERATOR;
-		priv_info->panel_jitter_denom =
-					DEFAULT_PANEL_JITTER_DENOMINATOR;
+		priv_info->panel_jitter_denom = DEFAULT_PANEL_JITTER_DENOMINATOR;
 	} else {
 		priv_info->panel_jitter_numer = jitter[0];
 		priv_info->panel_jitter_denom = jitter[1];
@@ -3935,6 +4018,7 @@ void dsi_panel_calc_dsi_transfer_time(struct dsi_host_common_cfg *config,
 	struct dsi_mode_info *timing = &mode->timing;
 	struct dsi_display_mode *display_mode;
 	u32 jitter_numer, jitter_denom, prefill_lines;
+	u32 default_prefill_lines, actual_prefill_lines, vtotal;
 	u32 min_threshold_us, prefill_time_us, max_transfer_us, packet_overhead;
 	u16 bpp;
 
@@ -3998,11 +4082,15 @@ void dsi_panel_calc_dsi_transfer_time(struct dsi_host_common_cfg *config,
 	 * Increase the prefill_lines proportionately as recommended
 	 * 40lines for 60fps, 60 for 90fps, 120lines for 120fps, and so on.
 	 */
-	prefill_lines = mult_frac(MIN_PREFILL_LINES,
-			timing->refresh_rate, 60);
+	default_prefill_lines = mult_frac(MIN_PREFILL_LINES, timing->refresh_rate, 60);
 
-	prefill_time_us = mult_frac(frame_time_us, prefill_lines,
-			(timing->v_active));
+	actual_prefill_lines = timing->v_back_porch + timing->v_front_porch + timing->v_sync_width;
+	vtotal = actual_prefill_lines + timing->v_active;
+
+	/* consider the max of default prefill lines and actual prefill lines */
+	prefill_lines = max(actual_prefill_lines, default_prefill_lines);
+
+	prefill_time_us = mult_frac(frame_time_us, prefill_lines, vtotal);
 
 	min_threshold_us = min_threshold_us + prefill_time_us;
 

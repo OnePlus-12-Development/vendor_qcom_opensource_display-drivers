@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -100,7 +101,7 @@ static struct page **get_pages(struct drm_gem_object *obj)
 			p = get_pages_vram(obj, npages);
 
 		if (IS_ERR(p)) {
-			dev_err(dev->dev, "could not get pages: %ld\n",
+			DISP_DEV_ERR(dev->dev, "could not get pages: %ld\n",
 					PTR_ERR(p));
 			return p;
 		}
@@ -111,7 +112,7 @@ static struct page **get_pages(struct drm_gem_object *obj)
 		if (IS_ERR(msm_obj->sgt)) {
 			void *ptr = ERR_CAST(msm_obj->sgt);
 
-			dev_err(dev->dev, "failed to allocate sgt\n");
+			DISP_DEV_ERR(dev->dev, "failed to allocate sgt\n");
 			msm_obj->sgt = NULL;
 			return ptr;
 		}
@@ -324,7 +325,7 @@ static uint64_t mmap_offset(struct drm_gem_object *obj)
 	ret = drm_gem_create_mmap_offset(obj);
 
 	if (ret) {
-		dev_err(dev->dev, "could not allocate mmap offset\n");
+		DISP_DEV_ERR(dev->dev, "could not allocate mmap offset\n");
 		return 0;
 	}
 
@@ -451,6 +452,17 @@ static int msm_gem_get_iova_locked(struct drm_gem_object *obj,
 		if ((dev && obj->import_attach) &&
 				((dev != obj->import_attach->dev) ||
 				msm_obj->obj_dirty)) {
+
+			if (of_device_is_compatible(dev->of_node, "qcom,smmu_sde_unsec") &&
+				of_device_is_compatible(obj->import_attach->dev->of_node,
+				"qcom,smmu_sde_sec")) {
+				SDE_EVT32(obj->import_attach->dev, dev, msm_obj->sgt,
+						 msm_obj->obj_dirty);
+				DRM_ERROR("gem obj found mapped to %s, now requesting map on %s",
+					dev_name(obj->import_attach->dev), dev_name(dev));
+				return -EINVAL;
+			}
+
 			dmabuf = obj->import_attach->dmabuf;
 			dma_map_attrs = obj->import_attach->dma_map_attrs;
 
@@ -653,7 +665,7 @@ int msm_gem_dumb_create(struct drm_file *file, struct drm_device *dev,
 	args->pitch = align_pitch(args->width, args->bpp);
 	args->size  = PAGE_ALIGN(args->pitch * args->height);
 	return msm_gem_new_handle(dev, file, args->size,
-			MSM_BO_SCANOUT | MSM_BO_WC, &args->handle, "dumb");
+			MSM_BO_SCANOUT | MSM_BO_CACHED, &args->handle, "dumb");
 }
 
 int msm_gem_dumb_map_offset(struct drm_file *file, struct drm_device *dev,
@@ -688,7 +700,7 @@ static void *get_vaddr(struct drm_gem_object *obj, unsigned madv)
 	mutex_lock(&msm_obj->lock);
 
 	if (WARN_ON(msm_obj->madv > madv)) {
-		dev_err(obj->dev->dev, "Invalid madv state: %u vs %u\n",
+		DISP_DEV_ERR(obj->dev->dev, "Invalid madv state: %u vs %u\n",
 			msm_obj->madv, madv);
 		mutex_unlock(&msm_obj->lock);
 		return ERR_PTR(-EBUSY);
@@ -968,7 +980,7 @@ static int msm_gem_new_impl(struct drm_device *dev,
 	case MSM_BO_WC:
 		break;
 	default:
-		dev_err(dev->dev, "invalid cache flag: %x\n",
+		DISP_DEV_ERR(dev->dev, "invalid cache flag: %x\n",
 				(flags & MSM_BO_CACHE_MASK));
 		return -EINVAL;
 	}
@@ -1080,12 +1092,20 @@ static struct drm_gem_object *_msm_gem_new(struct drm_device *dev,
 		ret = drm_gem_object_init(dev, obj, size);
 		if (ret)
 			goto fail;
+
+		/*
+		 * Our buffers are kept pinned, so allocating them from the
+		 * MOVABLE zone is a really bad idea, and conflicts with CMA.
+		 * See comments above new_inode() why this is required _and_
+		 * expected if you're going to pin these pages.
+		 */
+		mapping_set_gfp_mask(obj->filp->f_mapping, GFP_HIGHUSER);
 	}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
-	mutex_lock(&dev->struct_mutex);
+	mutex_lock(&priv->mm_lock);
 	list_add_tail(&msm_obj->mm_list, &priv->inactive_list);
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&priv->mm_lock);
 #endif
 
 	return obj;
@@ -1159,7 +1179,6 @@ struct drm_gem_object *msm_gem_import(struct drm_device *dev,
 	struct drm_gem_object *obj = NULL;
 	uint32_t size;
 	int ret;
-	unsigned long flags = 0;
 
 	size = PAGE_ALIGN(dmabuf->size);
 
@@ -1189,16 +1208,12 @@ struct drm_gem_object *msm_gem_import(struct drm_device *dev,
 	 */
 	msm_obj->flags |= MSM_BO_EXTBUF;
 
-	ret = dma_buf_get_flags(dmabuf, &flags);
-	if (ret)
-		DRM_ERROR("dma_buf_get_flags failure, err=%d\n", ret);
-
 	mutex_unlock(&msm_obj->lock);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
-	mutex_lock(&dev->struct_mutex);
+	mutex_lock(&priv->mm_lock);
 	list_add_tail(&msm_obj->mm_list, &priv->inactive_list);
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&priv->mm_lock);
 #endif
 
 	return obj;

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -84,7 +85,7 @@ static const struct of_device_id msm_dsi_of_match[] = {
 	{}
 };
 
-#ifdef CONFIG_DEBUG_FS
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 static ssize_t debugfs_state_info_read(struct file *file,
 				       char __user *buff,
 				       size_t count,
@@ -417,6 +418,7 @@ static void dsi_ctrl_clear_dma_status(struct dsi_ctrl *dsi_ctrl)
 static void dsi_ctrl_post_cmd_transfer(struct dsi_ctrl *dsi_ctrl)
 {
 	int rc = 0;
+	struct dsi_ctrl_hw_ops dsi_hw_ops = dsi_ctrl->hw.ops;
 	struct dsi_clk_ctrl_info clk_info;
 	u32 mask = BIT(DSI_FIFO_OVERFLOW);
 
@@ -432,6 +434,10 @@ static void dsi_ctrl_post_cmd_transfer(struct dsi_ctrl *dsi_ctrl)
 		/* Wait for read command transfer to complete is done in dsi_message_rx. */
 		dsi_ctrl_dma_cmd_wait_for_done(dsi_ctrl);
 	}
+
+	if (dsi_ctrl->hw.reset_trig_ctrl)
+		dsi_hw_ops.reset_trig_ctrl(&dsi_ctrl->hw,
+				&dsi_ctrl->host_config.common_config);
 
 	/* Command engine disable, unmask overflow, remove vote on clocks and gdsc */
 	rc = dsi_ctrl_set_cmd_engine_state(dsi_ctrl, DSI_CTRL_ENGINE_OFF, false);
@@ -1004,6 +1010,9 @@ int dsi_ctrl_pixel_format_to_bpp(enum dsi_pixel_format dst_format)
 	case DSI_PIXEL_FORMAT_RGB888:
 		bpp = 24;
 		break;
+	case DSI_PIXEL_FORMAT_RGB101010:
+		bpp = 30;
+		break;
 	default:
 		bpp = 24;
 		break;
@@ -1117,10 +1126,10 @@ static int dsi_ctrl_enable_supplies(struct dsi_ctrl *dsi_ctrl, bool enable)
 	int rc = 0;
 
 	if (enable) {
-		rc = pm_runtime_get_sync(dsi_ctrl->drm_dev->dev);
+		rc = pm_runtime_resume_and_get(dsi_ctrl->drm_dev->dev);
 		if (rc < 0) {
-			DSI_CTRL_ERR(dsi_ctrl,
-				"Power resource enable failed, rc=%d\n", rc);
+			DSI_CTRL_ERR(dsi_ctrl, "failed to enable power resource %d\n", rc);
+			SDE_EVT32(rc, SDE_EVTLOG_ERROR);
 			goto error;
 		}
 
@@ -1369,10 +1378,6 @@ static void dsi_kickoff_msg_tx(struct dsi_ctrl *dsi_ctrl,
 
 	SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_FUNC_ENTRY, flags,
 		msg->flags);
-
-	if (dsi_ctrl->hw.reset_trig_ctrl)
-		dsi_hw_ops.reset_trig_ctrl(&dsi_ctrl->hw,
-				&dsi_ctrl->host_config.common_config);
 
 	if (dsi_hw_ops.splitlink_cmd_setup && split_link->enabled)
 		dsi_hw_ops.splitlink_cmd_setup(&dsi_ctrl->hw,
@@ -3012,6 +3017,8 @@ int dsi_ctrl_host_timing_update(struct dsi_ctrl *dsi_ctrl)
 		return -EINVAL;
 	}
 
+	mutex_lock(&dsi_ctrl->ctrl_lock);
+
 	if (dsi_ctrl->hw.ops.host_setup)
 		dsi_ctrl->hw.ops.host_setup(&dsi_ctrl->hw,
 				&dsi_ctrl->host_config.common_config);
@@ -3029,9 +3036,11 @@ int dsi_ctrl_host_timing_update(struct dsi_ctrl *dsi_ctrl)
 				0x0, NULL);
 	} else {
 		DSI_CTRL_ERR(dsi_ctrl, "invalid panel mode for resolution switch\n");
+		mutex_unlock(&dsi_ctrl->ctrl_lock);
 		return -EINVAL;
 	}
 
+	mutex_unlock(&dsi_ctrl->ctrl_lock);
 	return 0;
 }
 
@@ -3392,9 +3401,10 @@ int dsi_ctrl_transfer_prepare(struct dsi_ctrl *dsi_ctrl, u32 flags)
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY, dsi_ctrl->cell_index, flags);
 
 	/* Vote for clocks, gdsc, enable command engine, mask overflow */
-	rc = pm_runtime_get_sync(dsi_ctrl->drm_dev->dev);
+	rc = pm_runtime_resume_and_get(dsi_ctrl->drm_dev->dev);
 	if (rc < 0) {
-		DSI_CTRL_ERR(dsi_ctrl, "failed gdsc voting\n");
+		DSI_CTRL_ERR(dsi_ctrl, "failed to enable power resource %d\n", rc);
+		SDE_EVT32(rc, SDE_EVTLOG_ERROR);
 		return rc;
 	}
 
@@ -3731,7 +3741,9 @@ error:
  *
  * Return: error code.
  */
-int dsi_ctrl_set_tpg_state(struct dsi_ctrl *dsi_ctrl, bool on)
+int dsi_ctrl_set_tpg_state(struct dsi_ctrl *dsi_ctrl, bool on,
+			enum dsi_test_pattern type, u32 init_val,
+			enum dsi_ctrl_tpg_pattern pattern)
 {
 	int rc = 0;
 
@@ -3750,25 +3762,43 @@ int dsi_ctrl_set_tpg_state(struct dsi_ctrl *dsi_ctrl, bool on)
 	}
 
 	if (on) {
-		if (dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) {
-			dsi_ctrl->hw.ops.video_test_pattern_setup(&dsi_ctrl->hw,
-							  DSI_TEST_PATTERN_INC,
-							  0xFFFF);
-		} else {
-			dsi_ctrl->hw.ops.cmd_test_pattern_setup(
-							&dsi_ctrl->hw,
-							DSI_TEST_PATTERN_INC,
-							0xFFFF,
-							0x0);
-		}
+		if (dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE)
+			dsi_ctrl->hw.ops.video_test_pattern_setup(&dsi_ctrl->hw, type, init_val);
+		else
+			dsi_ctrl->hw.ops.cmd_test_pattern_setup(&dsi_ctrl->hw, type, init_val, 0x0);
 	}
-	dsi_ctrl->hw.ops.test_pattern_enable(&dsi_ctrl->hw, on);
+	dsi_ctrl->hw.ops.test_pattern_enable(&dsi_ctrl->hw, on, pattern,
+			dsi_ctrl->host_config.panel_mode);
 
 	DSI_CTRL_DEBUG(dsi_ctrl, "Set test pattern state=%d\n", on);
 	dsi_ctrl_update_state(dsi_ctrl, DSI_CTRL_OP_TPG, on);
 error:
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
 	return rc;
+}
+
+/**
+ * dsi_ctrl_trigger_test_pattern() - trigger a command mode frame update with test pattern
+ * @dsi_ctrl:           DSI controller handle.
+ *
+ * Trigger a command mode frame update with chosen test pattern.
+ *
+ * Return: error code.
+ */
+int dsi_ctrl_trigger_test_pattern(struct dsi_ctrl *dsi_ctrl)
+{
+	int ret = 0;
+
+	if (!dsi_ctrl) {
+		DSI_CTRL_ERR(dsi_ctrl, "Invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&dsi_ctrl->ctrl_lock);
+	dsi_ctrl->hw.ops.trigger_cmd_test_pattern(&dsi_ctrl->hw, 0);
+	mutex_unlock(&dsi_ctrl->ctrl_lock);
+
+	return ret;
 }
 
 /**

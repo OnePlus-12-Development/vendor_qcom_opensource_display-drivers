@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -83,6 +84,8 @@ struct msm_gem_vma;
 #define MSM_CHROMA_420 0x2
 
 #define TEARDOWN_DEADLOCK_RETRY_MAX 5
+
+#define DISP_DEV_ERR(dev, fmt, ...) dev_err(dev, "[%s:%d] " fmt, __func__, __LINE__, ##__VA_ARGS__)
 
 struct msm_file_private {
 	rwlock_t queuelock;
@@ -220,6 +223,7 @@ enum msm_mdp_conn_property {
 	CONNECTOR_PROP_DIMMING_CTRL,
 	CONNECTOR_PROP_DIMMING_MIN_BL,
 	CONNECTOR_PROP_EARLY_FENCE_LINE,
+	CONNECTOR_PROP_DYN_TRANSFER_TIME,
 
 	/* enum/bitmask properties */
 	CONNECTOR_PROP_TOPOLOGY_NAME,
@@ -233,6 +237,7 @@ enum msm_mdp_conn_property {
 	CONNECTOR_PROP_AVR_STEP,
 	CONNECTOR_PROP_CACHE_STATE,
 	CONNECTOR_PROP_DSC_MODE,
+	CONNECTOR_PROP_WB_USAGE_TYPE,
 
 	/* total # of properties */
 	CONNECTOR_PROP_COUNT
@@ -251,6 +256,18 @@ enum msm_display_compression_type {
 	MSM_DISPLAY_COMPRESSION_NONE,
 	MSM_DISPLAY_COMPRESSION_DSC,
 	MSM_DISPLAY_COMPRESSION_VDC
+};
+
+/**
+ * enum msm_display_wd_jitter_type - Type of WD jitter used
+ * @MSM_DISPLAY_WD_JITTER_NONE:      No WD timer jitter enabled
+ * @MSM_DISPLAY_WD_INSTANTANEOUS_JITTER:  Instantaneous WD jitter enabled
+ * @MSM_DISPLAY_WD_LTJ_JITTER:       LTJ WD jitter enabled
+ */
+enum msm_display_wd_jitter_type {
+	MSM_DISPLAY_WD_JITTER_NONE = BIT(0),
+	MSM_DISPLAY_WD_INSTANTANEOUS_JITTER = BIT(1),
+	MSM_DISPLAY_WD_LTJ_JITTER = BIT(2),
 };
 
 #define MSM_DISPLAY_COMPRESSION_RATIO_NONE 1
@@ -741,6 +758,24 @@ struct msm_dyn_clk_list {
 };
 
 /**
+ * struct msm_display_wd_jitter_config - defines jitter properties for WD timer
+ * @jitter_type:        Type of WD jitter enabled.
+ * @inst_jitter_numer:  Instantaneous jitter numerator.
+ * @inst_jitter_denom:  Instantaneous jitter denominator.
+ * @ltj_max_numer:      LTJ max numerator.
+ * @ltj_max_denom:      LTJ max denominator.
+ * @ltj_time_sec:       LTJ time in seconds.
+ */
+struct msm_display_wd_jitter_config {
+	enum msm_display_wd_jitter_type jitter_type;
+	u32 inst_jitter_numer;
+	u32 inst_jitter_denom;
+	u32 ltj_max_numer;
+	u32 ltj_max_denom;
+	u32 ltj_time_sec;
+};
+
+/**
  * struct msm_mode_info - defines all msm custom mode info
  * @frame_rate:      frame_rate of the mode
  * @vtotal:          vtotal calculated for the mode
@@ -756,10 +791,16 @@ struct msm_dyn_clk_list {
  * @panel_mode_caps   panel mode capabilities
  * @mdp_transfer_time_us   Specifies the mdp transfer time for command mode
  *                         panels in microseconds.
+ * @mdp_transfer_time_us_min   Specifies the minimum possible mdp transfer time
+ *                             for command mode panels in microseconds.
+ * @mdp_transfer_time_us_max   Specifies the maximum possible mdp transfer time
+ *                             for command mode panels in microseconds.
  * @allowed_mode_switches: bit mask to indicate supported mode switch.
  * @disable_rsc_solver: Dynamically disable RSC solver for the timing mode due to lower bitclk rate.
  * @dyn_clk_list: List of dynamic clock rates for RFI.
  * @qsync_min_fps: qsync min fps rate
+ * @wd_jitter:         Info for WD jitter.
+ * @vpadding:        panel stacking height
  */
 struct msm_mode_info {
 	uint32_t frame_rate;
@@ -775,10 +816,14 @@ struct msm_mode_info {
 	bool wide_bus_en;
 	u32 panel_mode_caps;
 	u32 mdp_transfer_time_us;
+	u32 mdp_transfer_time_us_min;
+	u32 mdp_transfer_time_us_max;
 	u32 allowed_mode_switches;
 	bool disable_rsc_solver;
 	struct msm_dyn_clk_list dyn_clk_list;
 	u32 qsync_min_fps;
+	struct msm_display_wd_jitter_config wd_jitter;
+	u32 vpadding;
 };
 
 /**
@@ -1215,8 +1260,10 @@ struct drm_framebuffer *msm_framebuffer_init(struct drm_device *dev,
 		struct drm_gem_object **bos);
 struct drm_framebuffer *msm_framebuffer_create(struct drm_device *dev,
 		struct drm_file *file, const struct drm_mode_fb_cmd2 *mode_cmd);
-void msm_framebuffer_set_cache_hint(struct drm_framebuffer *fb, u32 flags, u32 type);
-void msm_framebuffer_get_cache_hint(struct drm_framebuffer *fb, u32 *flags, u32 *type);
+int msm_framebuffer_set_cache_hint(struct drm_framebuffer *fb,
+		u32 flags, u32 rd_type, u32 wr_type);
+int msm_framebuffer_get_cache_hint(struct drm_framebuffer *fb,
+		u32 *flags, u32 *rd_type, u32 *wr_type);
 
 struct drm_fb_helper *msm_fbdev_init(struct drm_device *dev);
 void msm_fbdev_free(struct drm_device *dev);
@@ -1300,7 +1347,7 @@ static inline void __exit msm_mdp_unregister(void)
 }
 #endif /* CONFIG_DRM_MSM_MDP5 */
 
-#ifdef CONFIG_DEBUG_FS
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 int msm_debugfs_late_init(struct drm_device *dev);
 int msm_rd_debugfs_init(struct drm_minor *minor);
 void msm_rd_debugfs_cleanup(struct msm_drm_private *priv);
@@ -1316,7 +1363,7 @@ static inline void msm_rd_dump_submit(struct msm_rd_state *rd, struct msm_gem_su
 		const char *fmt, ...) {}
 static inline void msm_rd_debugfs_cleanup(struct msm_drm_private *priv) {}
 static inline void msm_perf_debugfs_cleanup(struct msm_drm_private *priv) {}
-#endif
+#endif /* CONFIG_DEBUG_FS */
 
 #if IS_ENABLED(CONFIG_DRM_MSM_DSI)
 void __init dsi_display_register(void);

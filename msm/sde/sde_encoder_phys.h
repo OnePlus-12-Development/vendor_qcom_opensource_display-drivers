@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -25,6 +25,9 @@
 
 /* wait for at most 2 vsync for lowest refresh rate (24hz) */
 #define DEFAULT_KICKOFF_TIMEOUT_MS		84
+
+/* wait 1 sec for the emulated targets */
+#define MAX_KICKOFF_TIMEOUT_MS                  100000
 
 #define MAX_TE_PROFILE_COUNT		5
 /**
@@ -136,6 +139,7 @@ struct sde_encoder_virt_ops {
  * @get_underrun_line_count:	Obtain and log current internal vertical line
  *                              count and underrun line count
  * @add_to_minidump:		Add this phys_enc data to minidumps
+ * @disable_autorefresh:	Disable autorefresh
  */
 
 struct sde_encoder_phys_ops {
@@ -148,7 +152,7 @@ struct sde_encoder_phys_ops {
 			struct drm_display_mode *adjusted_mode);
 	void (*mode_set)(struct sde_encoder_phys *encoder,
 			struct drm_display_mode *mode,
-			struct drm_display_mode *adjusted_mode);
+			struct drm_display_mode *adjusted_mode, bool *reinit_mixers);
 	void (*cont_splash_mode_set)(struct sde_encoder_phys *encoder,
 			struct drm_display_mode *adjusted_mode);
 	void (*enable)(struct sde_encoder_phys *encoder);
@@ -189,6 +193,7 @@ struct sde_encoder_phys_ops {
 			struct msm_display_info *disp_info);
 	u32 (*get_underrun_line_count)(struct sde_encoder_phys *phys);
 	void (*add_to_minidump)(struct sde_encoder_phys *phys);
+	void (*disable_autorefresh)(struct sde_encoder_phys *phys);
 };
 
 /**
@@ -309,6 +314,7 @@ struct sde_encoder_irq {
  * @frame_trigger_mode:		frame trigger mode indication for command
  *				mode display
  * @recovered:			flag set to true when recovered from pp timeout
+ * @autorefresh_disable_trans:   flag set to true during autorefresh disable transition
  */
 struct sde_encoder_phys {
 	struct drm_encoder *parent;
@@ -356,6 +362,7 @@ struct sde_encoder_phys {
 	int vfp_cached;
 	enum frame_trigger_mode_type frame_trigger_mode;
 	bool recovered;
+	bool autorefresh_disable_trans;
 };
 
 static inline int sde_encoder_phys_inc_pending(struct sde_encoder_phys *phys)
@@ -411,6 +418,7 @@ struct sde_encoder_phys_cmd_te_timestamp {
  * @wr_ptr_wait_success: log wr_ptr_wait success for release fence trigger
  * @te_timestamp_list: List head for the TE timestamp list
  * @te_timestamp: Array of size MAX_TE_PROFILE_COUNT te_timestamp_list elements
+ * @qsync_threshold_lines: tearcheck threshold lines calculated based on qsync_min_fps
  */
 struct sde_encoder_phys_cmd {
 	struct sde_encoder_phys base;
@@ -423,6 +431,7 @@ struct sde_encoder_phys_cmd {
 	struct list_head te_timestamp_list;
 	struct sde_encoder_phys_cmd_te_timestamp
 			te_timestamp[MAX_TE_PROFILE_COUNT];
+	u32 qsync_threshold_lines;
 };
 
 /**
@@ -444,7 +453,7 @@ struct sde_encoder_phys_cmd {
  * @bo_disable:		Buffer object(s) to use during the disabling state
  * @fb_disable:		Frame buffer to use during the disabling state
  * @sc_cfg:		Stores wb system cache config
- * @crtc		Pointer to drm_crtc
+ * @crtc:		Pointer to drm_crtc
  * @prog_line:		Cached programmable line value used to trigger early wb-fence
  */
 struct sde_encoder_phys_wb {

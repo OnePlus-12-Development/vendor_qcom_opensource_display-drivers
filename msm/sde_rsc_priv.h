@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -28,6 +29,7 @@
 #define SDE_RSC_REV_2			0x2
 #define SDE_RSC_REV_3			0x3
 #define SDE_RSC_REV_4			0x4
+#define SDE_RSC_REV_5			0x5
 
 #define SDE_RSC_HW_MAJOR_MINOR_STEP(major, minor, step) \
 	(((major & 0xff) << 16) |\
@@ -75,7 +77,6 @@ enum rsc_vsync_req {
  * @hw_vsync:			Enables the vsync on RSC block.
  * @tcs_use_ok:			set TCS set to high to allow RSC to use it.
  * @bwi_status:			It updates the BW increase/decrease status.
- * @is_amc_mode:		Check current amc mode status
  * @debug_dump:			dump debug bus registers or enable debug bus
  * @state_update:		Enable/override the solver based on rsc state
  *                              status (command/video)
@@ -92,8 +93,7 @@ struct sde_rsc_hw_ops {
 	int (*hw_vsync)(struct sde_rsc_priv *rsc, enum rsc_vsync_req request,
 		char *buffer, int buffer_size, u32 mode);
 	int (*tcs_use_ok)(struct sde_rsc_priv *rsc);
-	int (*bwi_status)(struct sde_rsc_priv *rsc, bool bw_indication);
-	bool (*is_amc_mode)(struct sde_rsc_priv *rsc);
+	int (*bwi_status)(struct sde_rsc_priv *rsc);
 	void (*debug_dump)(struct sde_rsc_priv *rsc, u32 mux_sel);
 	int (*state_update)(struct sde_rsc_priv *rsc, enum sde_rsc_state state);
 	int (*debug_show)(struct seq_file *s, struct sde_rsc_priv *rsc);
@@ -147,6 +147,22 @@ struct sde_rsc_bw_config {
 	u64	new_ab_vote[SDE_POWER_HANDLE_DBUS_ID_MAX];
 	u64	new_ib_vote[SDE_POWER_HANDLE_DBUS_ID_MAX];
 };
+
+/**
+ * enum sde_rsc_bw_delta bandwidth change
+ *
+ * @BW_HIGH_TO_LOW:	Bandwidth vote from high to low
+ * @BW_LOW_TO_HIGH:	Bandwidth vote from low  to high
+ * @BW_NO_CHANGE:	No change in Bandwidth vote
+ * @BW_DELTA_MAX:	Maximum value
+ */
+enum sde_rsc_bw_delta {
+	BW_HIGH_TO_LOW,
+	BW_LOW_TO_HIGH,
+	BW_NO_CHANGE,
+	BW_DELTA_MAX,
+};
+
 /**
  * struct sde_rsc_priv: sde resource state coordinator(rsc) private handle
  * @version:		rsc sequence version
@@ -181,7 +197,7 @@ struct sde_rsc_bw_config {
  * primary_client:	A client which is allowed to make command state request
  *			and ab/ib vote on display rsc
  * single_tcs_execution_time: worst case time to execute one tcs vote
- *			(sleep/wake)
+ *			(sleep/wake), in ns
  * backoff_time_ns:	time to only wake tcs in any mode
  * mode_threshold_time_ns: time to wake TCS in mode-0, must be greater than
  *			backoff time
@@ -194,6 +210,7 @@ struct sde_rsc_bw_config {
  * profiling_supp:	Indicates if HW has support for profiling counters
  * profiling_en:	Flag for rsc lpm profiling counters, true=enabled
  * post_poms:		bool if a panel mode change occurred
+ * bwi_update:		enum to indidate a bandwitdh vote change
  */
 struct sde_rsc_priv {
 	u32 version;
@@ -239,6 +256,7 @@ struct sde_rsc_priv {
 	bool profiling_en;
 
 	bool post_poms;
+	enum sde_rsc_bw_delta bwi_update;
 };
 
 /**

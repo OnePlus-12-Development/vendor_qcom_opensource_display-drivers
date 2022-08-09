@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -12,7 +13,6 @@
 #include <linux/clk.h>
 #include <linux/bitmap.h>
 #include <linux/sde_rsc.h>
-#include <linux/platform_device.h>
 #include <linux/soc/qcom/llcc-qcom.h>
 
 #include "msm_prop.h"
@@ -327,7 +327,7 @@ static int _sde_core_perf_activate_llcc(struct sde_kms *kms,
 	struct drm_device *drm_dev;
 	struct device *dev;
 	struct platform_device *pdev;
-	u32 llcc_id[SDE_SYS_CACHE_MAX] = {LLCC_DISP};
+	u32 scid;
 	int rc = 0;
 
 	if (!kms || !kms->dev || !kms->dev->dev) {
@@ -341,7 +341,6 @@ static int _sde_core_perf_activate_llcc(struct sde_kms *kms,
 	pdev = to_platform_device(dev);
 
 	/* If LLCC is already in the requested state, skip */
-	SDE_EVT32(activate, type, kms->perf.llcc_active[type]);
 	if ((activate && kms->perf.llcc_active[type]) ||
 		(!activate && !kms->perf.llcc_active[type])) {
 		SDE_DEBUG("skip llcc type:%d request:%d state:%d\n",
@@ -349,17 +348,18 @@ static int _sde_core_perf_activate_llcc(struct sde_kms *kms,
 		goto exit;
 	}
 
-	SDE_DEBUG("%sactivate the llcc type:%d state:%d\n",
-		activate ? "" : "de",
-		type, kms->perf.llcc_active[type]);
-
-	slice = llcc_slice_getd(llcc_id[type]);
+	slice = llcc_slice_getd(kms->catalog->sc_cfg[type].llcc_uid);
 	if (IS_ERR_OR_NULL(slice))  {
 		SDE_ERROR("failed to get llcc slice for uid:%d\n",
-				llcc_id[type]);
+				kms->catalog->sc_cfg[type].llcc_uid);
 		rc = -EINVAL;
 		goto exit;
 	}
+
+	scid = llcc_get_slice_id(slice);
+	SDE_EVT32(activate, type, kms->perf.llcc_active[type], scid);
+	SDE_DEBUG("%sactivate the llcc type:%d state:%d scid:%d\n", activate ? "" : "de", type,
+			kms->perf.llcc_active[type], scid);
 
 	if (activate) {
 		llcc_slice_activate(slice);
@@ -383,15 +383,13 @@ static void _sde_core_perf_crtc_set_llcc_cache_type(struct sde_kms *kms,
 {
 	struct drm_crtc *tmp_crtc;
 	struct sde_crtc *sde_crtc;
-	struct sde_sc_cfg *sc_cfg = kms->perf.catalog->sc_cfg;
 	struct sde_core_perf_params *cur_perf;
 	enum sde_crtc_client_type curr_client_type
 					= sde_crtc_get_client_type(crtc);
 	u32 llcc_active = 0;
 
-	if (!sc_cfg[type].has_sys_cache) {
-		SDE_DEBUG("System Cache %d is not enabled!. Won't use\n",
-				type);
+	if (!test_bit(type, kms->perf.catalog->sde_sys_cache_type_map)) {
+		SDE_DEBUG("system cache %d is not enabled!. Won't use\n", type);
 		return;
 	}
 
@@ -1083,7 +1081,7 @@ void sde_core_perf_crtc_update(struct drm_crtc *crtc,
 
 }
 
-#ifdef CONFIG_DEBUG_FS
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 
 static ssize_t _sde_core_perf_threshold_high_write(struct file *file,
 		    const char __user *user_buf, size_t count, loff_t *ppos)
@@ -1385,6 +1383,14 @@ int sde_core_perf_debugfs_init(struct sde_core_perf *perf,
 
 	debugfs_create_u32("uidle_perf_cnt", 0600, perf->debugfs_root,
 			&sde_kms->catalog->uidle_cfg.debugfs_perf);
+	debugfs_create_u32("uidle_fal10_target_idle_time_us", 0600, perf->debugfs_root,
+			&sde_kms->catalog->uidle_cfg.fal10_target_idle_time);
+	debugfs_create_u32("uidle_fal1_target_idle_time_us", 0600, perf->debugfs_root,
+			&sde_kms->catalog->uidle_cfg.fal1_target_idle_time);
+	debugfs_create_u32("uidle_fal10_threshold_us", 0600, perf->debugfs_root,
+			&sde_kms->catalog->uidle_cfg.fal10_threshold);
+	debugfs_create_u32("uidle_fal1_max_threshold", 0600, perf->debugfs_root,
+			&sde_kms->catalog->uidle_cfg.fal1_max_threshold);
 	debugfs_create_bool("uidle_enable", 0600, perf->debugfs_root,
 			&sde_kms->catalog->uidle_cfg.debugfs_ctrl);
 
@@ -1400,7 +1406,7 @@ int sde_core_perf_debugfs_init(struct sde_core_perf *perf,
 {
 	return 0;
 }
-#endif
+#endif /* CONFIG_DEBUG_FS */
 
 void sde_core_perf_destroy(struct sde_core_perf *perf)
 {

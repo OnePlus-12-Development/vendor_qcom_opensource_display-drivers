@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -30,7 +31,8 @@ struct msm_framebuffer {
 	struct drm_framebuffer base;
 	const struct msm_format *format;
 	u32 cache_flags;
-	u32 cache_type;
+	u32 cache_rd_type;
+	u32 cache_wr_type;
 };
 #define to_msm_framebuffer(x) container_of(x, struct msm_framebuffer, base)
 
@@ -194,7 +196,7 @@ struct drm_framebuffer *msm_framebuffer_init(struct drm_device *dev,
 	format = kms->funcs->get_format(kms, mode_cmd->pixel_format,
 			mode_cmd->modifier[0]);
 	if (!format) {
-		dev_err(dev->dev, "unsupported pixel format: %4.4s\n",
+		DISP_DEV_ERR(dev->dev, "unsupported pixel format: %4.4s\n",
 				(char *)&mode_cmd->pixel_format);
 		ret = -EINVAL;
 		goto fail;
@@ -226,7 +228,7 @@ struct drm_framebuffer *msm_framebuffer_init(struct drm_device *dev,
 
 	if (is_modified) {
 		if (!kms->funcs->check_modified_format) {
-			dev_err(dev->dev, "can't check modified fb format\n");
+			DISP_DEV_ERR(dev->dev, "can't check modified fb format\n");
 			ret = -EINVAL;
 			goto fail;
 		} else {
@@ -269,7 +271,7 @@ struct drm_framebuffer *msm_framebuffer_init(struct drm_device *dev,
 
 	ret = drm_framebuffer_init(dev, fb, &msm_framebuffer_funcs);
 	if (ret) {
-		dev_err(dev->dev, "framebuffer init failed: %d\n", ret);
+		DISP_DEV_ERR(dev->dev, "framebuffer init failed: %d\n", ret);
 		goto fail;
 	}
 
@@ -283,29 +285,34 @@ fail:
 	return ERR_PTR(ret);
 }
 
-void msm_framebuffer_set_cache_hint(struct drm_framebuffer *fb, u32 flags, u32 type)
+int msm_framebuffer_set_cache_hint(struct drm_framebuffer *fb,
+		u32 flags, u32 rd_type, u32 wr_type)
 {
 	struct msm_framebuffer *msm_fb;
 
 	if (!fb)
-		return;
+		return -EINVAL;
 
 	msm_fb = to_msm_framebuffer(fb);
 	msm_fb->cache_flags = flags;
-	msm_fb->cache_type = type;
+	msm_fb->cache_rd_type = rd_type;
+	msm_fb->cache_wr_type = wr_type;
+
+	return 0;
 }
 
-void msm_framebuffer_get_cache_hint(struct drm_framebuffer *fb, u32 *flags, u32 *type)
+int  msm_framebuffer_get_cache_hint(struct drm_framebuffer *fb,
+		u32 *flags, u32 *rd_type, u32 *wr_type)
 {
 	struct msm_framebuffer *msm_fb;
 
-	if (!fb) {
-		*flags = 0;
-		*type = 0;
-		return;
-	}
+	if (!fb)
+		return -EINVAL;
 
 	msm_fb = to_msm_framebuffer(fb);
 	*flags = msm_fb->cache_flags;
-	*type = msm_fb->cache_type;
+	*rd_type = msm_fb->cache_rd_type;
+	*wr_type = msm_fb->cache_wr_type;
+
+	return 0;
 }
