@@ -769,6 +769,7 @@ enum {
  * @SDE_FEATURE_VBIF_CLK_SPLIT VBIF clock split supported
  * @SDE_FEATURE_CTL_DONE       Support for CTL DONE irq
  * @SDE_FEATURE_SYS_CACHE_NSE  Support for no-self-evict feature
+ * @SDE_FEATURE_SYS_CACHE_STALING  Support for sys cache staling feature
  * @SDE_FEATURE_HW_FENCE_IPCC  HW fence supports ipcc signaling in dpu
  * @SDE_FEATURE_EMULATED_ENV   Emulated environment supported
  * @SDE_FEATURE_UCSC_SUPPORTED  UCSC pipe format supported
@@ -814,6 +815,7 @@ enum sde_mdss_features {
 	SDE_FEATURE_VBIF_CLK_SPLIT,
 	SDE_FEATURE_CTL_DONE,
 	SDE_FEATURE_SYS_CACHE_NSE,
+	SDE_FEATURE_SYS_CACHE_STALING,
 	SDE_FEATURE_HW_FENCE_IPCC,
 	SDE_FEATURE_EMULATED_ENV,
 	SDE_FEATURE_UCSC_SUPPORTED,

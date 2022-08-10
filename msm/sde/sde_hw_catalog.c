@@ -3688,6 +3688,8 @@ static int sde_cache_parse_dt(struct device_node *np,
 		sc_cfg->llcc_uid = usecase_id;
 		sc_cfg->llcc_scid = llcc_get_slice_id(slice);
 		sc_cfg->llcc_slice_size = llcc_get_slice_size(slice);
+		sde_core_perf_llcc_stale_configure(sde_cfg, slice);
+
 		SDE_DEBUG("img cache:%d usecase_id:%d, scid:%d slice_size:%zu kb\n",
 				i, usecase_id, sc_cfg->llcc_scid, sc_cfg->llcc_slice_size);
 		llcc_slice_putd(slice);
@@ -5388,6 +5390,8 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		set_bit(SDE_FEATURE_TRUSTED_VM, sde_cfg->features);
 		set_bit(SDE_SYS_CACHE_DISP, sde_cfg->sde_sys_cache_type_map);
 		set_bit(SDE_SYS_CACHE_DISP_WB, sde_cfg->sde_sys_cache_type_map);
+		set_bit(SDE_FEATURE_SYS_CACHE_NSE, sde_cfg->features);
+		set_bit(SDE_FEATURE_SYS_CACHE_STALING, sde_cfg->features);
 		set_bit(SDE_FEATURE_WB_ROTATION, sde_cfg->features);
 		sde_cfg->allowed_dsc_reservation_switch = SDE_DP_DSC_RESERVATION_SWITCH;
 		sde_cfg->autorefresh_disable_seq = AUTOREFRESH_DISABLE_SEQ2;

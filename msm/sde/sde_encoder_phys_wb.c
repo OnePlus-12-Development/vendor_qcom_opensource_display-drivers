@@ -1319,12 +1319,15 @@ static void _sde_encoder_phys_wb_setup_sys_cache(struct sde_encoder_phys *phys_e
 	if (phys_enc->in_clone_mode) {
 		/* toggle system cache SCID between consecutive CWB writes */
 		if (test_bit(SDE_SYS_CACHE_DISP_1, hw_wb->catalog->sde_sys_cache_type_map)
-				&& cfg->type == SDE_SYS_CACHE_DISP) {
+				&& cfg->type == SDE_SYS_CACHE_DISP &&
+				!test_bit(SDE_FEATURE_SYS_CACHE_STALING,
+						hw_wb->catalog->features)) {
 			cache_wr_type = SDE_SYS_CACHE_DISP_1;
 			cache_rd_type = SDE_SYS_CACHE_DISP_1;
 		} else {
 			cache_wr_type = SDE_SYS_CACHE_DISP;
 			cache_rd_type = SDE_SYS_CACHE_DISP;
+			sde_core_perf_llcc_stale_frame(&sde_crtc->base, cache_wr_type);
 		}
 	} else {
 		cache_rd_type = SDE_SYS_CACHE_DISP_WB;

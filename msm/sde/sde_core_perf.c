@@ -13,7 +13,6 @@
 #include <linux/clk.h>
 #include <linux/bitmap.h>
 #include <linux/sde_rsc.h>
-#include <linux/soc/qcom/llcc-qcom.h>
 
 #include "msm_prop.h"
 
@@ -310,6 +309,56 @@ static inline enum sde_crtc_client_type _get_sde_client_type(
 	else
 		return RT_CLIENT;
 }
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0))
+void sde_core_perf_llcc_stale_configure(struct sde_mdss_cfg *sde_cfg, struct llcc_slice_desc *slice)
+{
+	struct llcc_staling_mode_params params = {0};
+
+	if (!sde_cfg || !slice || !test_bit(SDE_FEATURE_SYS_CACHE_STALING, sde_cfg->features))
+		return;
+
+	llcc_configure_staling_mode(slice, &params);
+}
+
+void sde_core_perf_llcc_stale_frame(struct drm_crtc *crtc, enum sde_sys_cache_type type)
+{
+	struct llcc_slice_desc *slice;
+	struct sde_kms *kms;
+
+	if (!crtc) {
+		SDE_ERROR("invalid crtc\n");
+		return;
+	}
+
+	kms = _sde_crtc_get_kms(crtc);
+	if (!kms || !kms->catalog) {
+		SDE_ERROR("invalid kms\n");
+		return;
+	}
+
+	if (!test_bit(SDE_FEATURE_SYS_CACHE_STALING, kms->catalog->features) ||
+			!kms->perf.llcc_active[type])
+		return;
+
+	slice =  llcc_slice_getd(kms->catalog->sc_cfg[type].llcc_uid);
+	if (IS_ERR_OR_NULL(slice)) {
+		SDE_DEBUG("failed to get system cache for scid:%u", type);
+		return;
+	}
+
+	llcc_notif_staling_inc_counter(slice);
+
+	llcc_slice_putd(slice);
+}
+#else
+void sde_core_perf_llcc_stale_configure(struct sde_mdss_cfg *sde_cfg, struct llcc_slice_desc *slice)
+{
+}
+void sde_core_perf_llcc_stale_frame(struct drm_crtc *crtc, enum sde_sys_cache_type type)
+{
+}
+#endif
 
 /**
  * @_sde_core_perf_activate_llcc() - Activates/deactivates the system llcc
