@@ -22,6 +22,11 @@ ifeq ($(CONFIG_ARCH_PARROT), y)
 	LINUX_INC +=	-include $(DISPLAY_ROOT)/config/gki_parrotdispconf.h
 endif
 
+ifeq ($(CONFIG_ARCH_PINEAPPLE), y)
+	include $(DISPLAY_ROOT)/config/gki_pineappledisp.conf
+	LINUX_INC += -include $(DISPLAY_ROOT)/config/gki_pineappledispconf.h
+endif
+
 ifeq ($(CONFIG_ARCH_KALAMA), y)
 ifeq ($(CONFIG_ARCH_QTI_VM), y)
         include $(DISPLAY_ROOT)/config/gki_kalamadisptui.conf
@@ -37,8 +42,8 @@ ifeq (y, $(findstring y, $(CONFIG_ARCH_SA8155) $(CONFIG_ARCH_SA6155) $(CONFIG_AR
 	LINUX_INC += -include $(DISPLAY_ROOT)/config/augen3dispconf.h
 endif
 
-LINUX_INC +=	-Iinclude/linux \
-		-Iinclude/linux/drm
+LINUX_INC +=	-I$(KERNEL_SRC)/include/linux \
+		-I$(KERNEL_SRC)/include/linux/drm
 
 LINUX_INC +=	-I$(DISPLAY_ROOT) \
 	-I$(DISPLAY_ROOT)/include \
