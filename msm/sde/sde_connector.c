@@ -854,7 +854,7 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn;
 	struct sde_connector_state *c_state;
-	u32 qsync_propval = 0;
+	u32 qsync_propval = 0, ept_fps = 0;
 	bool prop_dirty;
 
 	if (!connector)
@@ -882,6 +882,16 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 				CONNECTOR_PROP_AVR_STEP_STATE);
 	if (prop_dirty)
 		c_conn->qsync_updated = true;
+
+	prop_dirty = msm_property_is_dirty(&c_conn->property_info, &c_state->property_state,
+				CONNECTOR_PROP_EPT_FPS);
+	if (prop_dirty) {
+		ept_fps = sde_connector_get_property(c_conn->base.state, CONNECTOR_PROP_EPT_FPS);
+		if (ept_fps != c_conn->ept_fps) {
+			c_conn->qsync_updated = true;
+			c_conn->ept_fps = ept_fps;
+		}
+	}
 }
 
 void sde_connector_complete_qsync_commit(struct drm_connector *conn,
@@ -1794,6 +1804,8 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 			SDE_ERROR_CONN(c_conn, "cannot set hdr info %d\n", rc);
 		break;
 	case CONNECTOR_PROP_QSYNC_MODE:
+	case CONNECTOR_PROP_AVR_STEP_STATE:
+	case CONNECTOR_PROP_EPT_FPS:
 		msm_property_set_dirty(&c_conn->property_info,
 				&c_state->property_state, idx);
 		break;
@@ -3077,6 +3089,11 @@ static void _sde_connector_install_qsync_properties(struct sde_kms *sde_kms,
 			msm_property_install_enum(&c_conn->property_info, "avr_step_state",
 					0, 0, e_avr_step_state, ARRAY_SIZE(e_avr_step_state), 0,
 					CONNECTOR_PROP_AVR_STEP_STATE);
+
+		if (test_bit(SDE_FEATURE_EPT_FPS, sde_kms->catalog->features) &&
+				(display_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE))
+			msm_property_install_range(&c_conn->property_info,
+					"EPT_FPS", 0x0, 0, U32_MAX, 0, CONNECTOR_PROP_EPT_FPS);
 	}
 }
 

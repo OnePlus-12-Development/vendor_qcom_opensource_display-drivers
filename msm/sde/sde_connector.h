@@ -567,6 +567,7 @@ struct sde_misr_sign {
  * @dimming_bl_notify_enabled: Flag to indicate if dimming bl notify is enabled or not
  * @qsync_mode: Cached Qsync mode, 0=disabled, 1=continuous mode
  * @qsync_updated: Qsync settings were updated
+ * @ept_fps: ept fps is updated, 0 means ept_fps is disabled
  * @colorspace_updated: Colorspace property was updated
  * @last_cmd_tx_sts: status of the last command transfer
  * @hdr_capable: external hdr support present
@@ -641,6 +642,7 @@ struct sde_connector {
 	u8 hdr_plus_app_ver;
 	u32 qsync_mode;
 	bool qsync_updated;
+	u32 ept_fps;
 
 	bool colorspace_updated;
 

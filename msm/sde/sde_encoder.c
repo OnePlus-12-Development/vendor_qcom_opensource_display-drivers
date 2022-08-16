@@ -4659,10 +4659,12 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	ktime_t current_ts, ept_ts;
 	u32 avr_step_fps, min_fps = 0, qsync_mode;
 	u64 timeout_us = 0, ept;
+	bool is_cmd_mode;
 	struct drm_connector *drm_conn;
 	struct msm_mode_info *info = &sde_enc->mode_info;
+	struct sde_kms *sde_kms = sde_encoder_get_kms(&sde_enc->base);
 
-	if (!sde_enc->cur_master || !sde_enc->cur_master->connector)
+	if (!sde_enc->cur_master || !sde_enc->cur_master->connector || !sde_kms)
 		return;
 
 	drm_conn = sde_enc->cur_master->connector;
@@ -4675,6 +4677,15 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 		_sde_encoder_get_qsync_fps_callback(&sde_enc->base, &min_fps, drm_conn->state);
 	/* use min qsync fps, if feature is enabled; otherwise min default fps */
 	min_fps = min_fps ? min_fps : DEFAULT_MIN_FPS;
+	is_cmd_mode = sde_encoder_check_curr_mode(&sde_enc->base, MSM_DISPLAY_CMD_MODE);
+
+	/* for cmd mode with qsync - EPT_FPS will be used to delay the processing */
+	if (test_bit(SDE_FEATURE_EPT_FPS, sde_kms->catalog->features)
+			&& is_cmd_mode && qsync_mode) {
+		SDE_DEBUG("enc:%d, ept:%llu not applicable for cmd mode with qsync enabled",
+				DRMID(&sde_enc->base), ept);
+		return;
+	}
 
 	avr_step_fps = info->avr_step_fps;
 	current_ts = ktime_get_ns();
