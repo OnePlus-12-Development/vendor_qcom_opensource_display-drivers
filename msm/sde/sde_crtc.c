@@ -1360,15 +1360,19 @@ static int _sde_crtc_check_rois(struct drm_crtc *crtc,
 {
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_state *sde_crtc_state;
-	struct msm_mode_info mode_info;
+	struct msm_mode_info *mode_info;
 	u32 crtc_width, crtc_height, mixer_width, mixer_height;
 	struct drm_display_mode *adj_mode;
-	int rc, lm_idx, i;
+	int rc = 0, lm_idx, i;
+	struct drm_connector *conn;
+	struct drm_connector_state *conn_state;
 
 	if (!crtc || !state)
 		return -EINVAL;
 
-	memset(&mode_info, 0, sizeof(mode_info));
+	mode_info = kzalloc(sizeof(struct msm_mode_info), GFP_KERNEL);
+	if (!mode_info)
+		return -ENOMEM;
 
 	sde_crtc = to_sde_crtc(crtc);
 	sde_crtc_state = to_sde_crtc_state(state);
@@ -1377,13 +1381,27 @@ static int _sde_crtc_check_rois(struct drm_crtc *crtc,
 	sde_crtc_get_resolution(crtc, state, adj_mode, &crtc_width, &crtc_height);
 	sde_crtc_get_mixer_resolution(crtc, state, adj_mode, &mixer_width, &mixer_height);
 	/* check cumulative mixer w/h is equal full crtc w/h */
-	if (sde_crtc->num_mixers
-			&& (((mixer_width * sde_crtc->num_mixers) != crtc_width)
+	if (sde_crtc->num_mixers && (((mixer_width * sde_crtc->num_mixers) != crtc_width)
 				|| (mixer_height != crtc_height))) {
 		SDE_ERROR("%s: invalid w/h crtc:%d,%d, mixer:%d,%d, num_mixers:%d\n",
 				sde_crtc->name, crtc_width, crtc_height, mixer_width, mixer_height,
 				sde_crtc->num_mixers);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto end;
+	} else if (state->state) {
+		for_each_new_connector_in_state(state->state, conn, conn_state, i) {
+			if (conn_state && (conn_state->crtc == crtc)
+				&& ((sde_connector_is_dualpipe_3d_merge_enabled(conn_state)
+						&& (crtc_width % 4))
+					|| (sde_connector_is_quadpipe_3d_merge_enabled(conn_state)
+							&& (crtc_width % 8)))) {
+				SDE_ERROR(
+				  "%s: invalid 3d-merge_w - mixer_w:%d, crtc_w:%d, num_mixers:%d\n",
+					sde_crtc->name, mixer_width,
+					crtc_width, sde_crtc->num_mixers);
+				return -EINVAL;
+			}
+		}
 	}
 
 	/*
@@ -1396,54 +1414,58 @@ static int _sde_crtc_check_rois(struct drm_crtc *crtc,
 		if (!conn || !conn->state)
 			continue;
 
-		rc = sde_connector_state_get_mode_info(conn->state, &mode_info);
+		rc = sde_connector_state_get_mode_info(conn->state, mode_info);
 		if (rc) {
 			SDE_ERROR("failed to get mode info\n");
-			return -EINVAL;
+			rc =  -EINVAL;
+			goto end;
 		}
 
-		if (sde_connector_is_3d_merge_enabled(conn) && (mixer_width % 2)) {
+		if (sde_connector_is_3d_merge_enabled(conn->state) && (mixer_width % 2)) {
 			SDE_ERROR(
 			  "%s: invalid width w/ 3d-merge - mixer_w:%d, crtc_w:%d, num_mixers:%d\n",
 				sde_crtc->name, crtc_width, mixer_width, sde_crtc->num_mixers);
-			return -EINVAL;
+			rc = -EINVAL;
+			goto end;
 		}
 
-		if (!mode_info.roi_caps.enabled)
+		if (!mode_info->roi_caps.enabled)
 			continue;
 
 		if (sde_crtc_state->user_roi_list.num_rects >
-				mode_info.roi_caps.num_roi) {
+				mode_info->roi_caps.num_roi) {
 			SDE_ERROR("roi count is exceeding limit, %d > %d\n",
 					sde_crtc_state->user_roi_list.num_rects,
-					mode_info.roi_caps.num_roi);
-			return -E2BIG;
+					mode_info->roi_caps.num_roi);
+			rc = -E2BIG;
+			goto end;
 		}
 
 		rc = _sde_crtc_set_crtc_roi(crtc, state);
 		if (rc)
-			return rc;
+			goto end;
 
 		rc = _sde_crtc_check_autorefresh(crtc, state);
 		if (rc)
-			return rc;
+			goto end;
 
 		for (lm_idx = 0; lm_idx < sde_crtc->num_mixers; lm_idx++) {
 			rc = _sde_crtc_set_lm_roi(crtc, state, lm_idx);
 			if (rc)
-				return rc;
+				goto end;
 		}
 
 		rc = _sde_crtc_check_rois_centered_and_symmetric(crtc, state);
 		if (rc)
-			return rc;
+			goto end;
 
 		rc = _sde_crtc_check_planes_within_crtc_roi(crtc, state);
 		if (rc)
-			return rc;
+			goto end;
 	}
-
-	return 0;
+end:
+	kfree(mode_info);
+	return rc;
 }
 
 static u32 _sde_crtc_calc_gcd(u32 a, u32 b)
@@ -2756,8 +2778,10 @@ void sde_crtc_get_frame_data(struct drm_crtc *crtc)
 	data->frame_count = sde_crtc->fps_info.frame_count;
 
 	/* Collect plane specific data */
-	drm_for_each_plane_mask(plane, crtc->dev, sde_crtc->plane_mask_old)
-		sde_plane_get_frame_data(plane, &data->plane_frame_data[i]);
+	drm_for_each_plane_mask(plane, crtc->dev, sde_crtc->plane_mask_old) {
+		if (i < SDE_FRAME_DATA_MAX_PLANES)
+			sde_plane_get_frame_data(plane, &data->plane_frame_data[i++]);
+	}
 
 	if (frame_data->cnt)
 		_sde_crtc_frame_data_notify(crtc, data);

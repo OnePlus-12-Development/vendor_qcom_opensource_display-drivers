@@ -137,6 +137,7 @@ struct dp_panel {
 	u32 pbn;
 
 	u32 dsc_blks_in_use;
+	u32 max_lm;
 	/* DRM connector assosiated with this panel */
 	struct drm_connector *connector;
 
@@ -192,6 +193,9 @@ struct dp_panel {
 		const struct drm_display_mode *drm_mode,
 		struct dp_display_mode *dp_mode);
 	void (*update_pps)(struct dp_panel *dp_panel, char *pps_cmd);
+	int (*sink_crc_enable)(struct dp_panel *dp_panel, bool enable);
+	int (*get_src_crc)(struct dp_panel *dp_panel, u16 *crc);
+	int (*get_sink_crc)(struct dp_panel *dp_panel, u16 *crc);
 };
 
 struct dp_tu_calc_input {
