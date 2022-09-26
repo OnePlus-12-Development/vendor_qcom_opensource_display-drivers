@@ -832,13 +832,16 @@ static int _sde_enc_phys_wb_validate_dnsc_blur_ds(struct drm_crtc_state *crtc_st
 	struct sde_crtc_state *cstate = to_sde_crtc_state(crtc_state);
 	const struct drm_display_mode *mode = &crtc_state->mode;
 	struct sde_io_res ds_res = {0, }, dnsc_blur_res = {0, };
+	enum sde_wb_rot_type rotation_type;
 	u32 ds_tap_pt = sde_crtc_get_property(cstate, CRTC_PROP_CAPTURE_OUTPUT);
 
 	sde_crtc_get_ds_io_res(crtc_state, &ds_res);
 	sde_connector_get_dnsc_blur_io_res(conn_state, &dnsc_blur_res);
+	rotation_type = sde_connector_get_property(conn_state, CONNECTOR_PROP_WB_ROT_TYPE);
 
 	/* wb_roi should match with mode w/h if none of these features are enabled */
-	if ((!ds_res.enabled && !dnsc_blur_res.enabled && !cstate->cwb_enc_mask)
+	if ((rotation_type == WB_ROT_NONE) &&
+			(!ds_res.enabled && !dnsc_blur_res.enabled && !cstate->cwb_enc_mask)
 			&& ((wb_roi->w && (wb_roi->w != mode->hdisplay))
 				|| (wb_roi->h && (wb_roi->h != mode->vdisplay)))) {
 		SDE_ERROR("invalid wb-roi {%u,%u,%u,%u} mode:%ux%u\n",
@@ -878,8 +881,16 @@ static int _sde_enc_phys_wb_validate_dnsc_blur_ds(struct drm_crtc_state *crtc_st
 	} else if (SDE_FORMAT_IS_YUV(fmt)) {
 		SDE_ERROR("YUV output not supported with dnsc_blur\n");
 		return -EINVAL;
-	} else if ((wb_roi->w && (wb_roi->w != dnsc_blur_res.dst_w)) ||
-			(wb_roi->h && (wb_roi->h != dnsc_blur_res.dst_h))) {
+	} else if ((rotation_type != WB_ROT_NONE) &&
+			((wb_roi->w && (wb_roi->w != dnsc_blur_res.dst_h)) ||
+			 (wb_roi->h && (wb_roi->h != dnsc_blur_res.dst_w)))) {
+		SDE_ERROR("invalid WB ROI for dnsc and rotate, roi:{%d,%d,%d,%d}, dnsc dst:%ux%u\n",
+				wb_roi->x, wb_roi->y, wb_roi->w, wb_roi->h,
+				dnsc_blur_res.dst_w, dnsc_blur_res.dst_h);
+		return -EINVAL;
+	} else if ((rotation_type == WB_ROT_NONE) &&
+			((wb_roi->w && (wb_roi->w != dnsc_blur_res.dst_w)) ||
+			 (wb_roi->h && (wb_roi->h != dnsc_blur_res.dst_h)))) {
 		SDE_ERROR("invalid WB ROI with dnsc_blur, roi:{%d,%d,%d,%d}, dnsc_blur dst:%ux%u\n",
 				wb_roi->x, wb_roi->y, wb_roi->w, wb_roi->h,
 				dnsc_blur_res.dst_w, dnsc_blur_res.dst_h);
