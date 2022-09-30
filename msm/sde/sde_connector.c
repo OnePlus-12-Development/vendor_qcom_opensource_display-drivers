@@ -14,6 +14,7 @@
 #include "msm_cooling_device.h"
 #include <linux/backlight.h>
 #include <linux/string.h>
+#include <linux/file.h>
 #include "dsi_drm.h"
 #include "dsi_display.h"
 #include "sde_crtc.h"

@@ -29,6 +29,7 @@
 #include <soc/qcom/of_common.h>
 #include <linux/version.h>
 #include <linux/soc/qcom/qcom_sync_file.h>
+#include <linux/file.h>
 
 #include "sde_kms.h"
 #include "sde_hw_lm.h"
