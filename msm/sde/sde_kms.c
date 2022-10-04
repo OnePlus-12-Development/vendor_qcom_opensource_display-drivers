@@ -750,7 +750,7 @@ no_ops:
 	return 0;
 }
 
-static int _sde_kms_release_shared_buffer(unsigned int mem_addr,
+static int _sde_kms_release_shared_buffer(unsigned long mem_addr,
 					unsigned int splash_buffer_size,
 					unsigned int ramdump_base,
 					unsigned int ramdump_buffer_size)
@@ -773,11 +773,16 @@ static int _sde_kms_release_shared_buffer(unsigned int mem_addr,
 	pfn_start = mem_addr >> PAGE_SHIFT;
 	pfn_end = (mem_addr + splash_buffer_size) >> PAGE_SHIFT;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+	memblock_free((unsigned int*)mem_addr, splash_buffer_size);
+#else
 	ret = memblock_free(mem_addr, splash_buffer_size);
 	if (ret) {
 		SDE_ERROR("continuous splash memory free failed:%d\n", ret);
 		return ret;
 	}
+#endif
+
 	for (pfn_idx = pfn_start; pfn_idx < pfn_end; pfn_idx++)
 		free_reserved_page(pfn_to_page(pfn_idx));
 
