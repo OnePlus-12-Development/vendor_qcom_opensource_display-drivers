@@ -369,6 +369,7 @@ sde_edid_parse_extended_blk_info(struct drm_connector *connector,
 					break;
 				case COLORIMETRY_EXTENDED_DATA_BLOCK:
 					sde_parse_clrmetry_db(connector, db);
+					break;
 				default:
 					break;
 				}
