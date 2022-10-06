@@ -140,6 +140,7 @@ struct sde_encoder_virt_ops {
  *                              count and underrun line count
  * @add_to_minidump:		Add this phys_enc data to minidumps
  * @disable_autorefresh:	Disable autorefresh
+ * @idle_pc_cache_display_status:	caches display status at idle power collapse
  */
 
 struct sde_encoder_phys_ops {
@@ -194,6 +195,7 @@ struct sde_encoder_phys_ops {
 	u32 (*get_underrun_line_count)(struct sde_encoder_phys *phys);
 	void (*add_to_minidump)(struct sde_encoder_phys *phys);
 	void (*disable_autorefresh)(struct sde_encoder_phys *phys);
+	void (*idle_pc_cache_display_status)(struct sde_encoder_phys *phys);
 };
 
 /**
@@ -275,6 +277,7 @@ struct sde_encoder_irq {
  * @hw_dnsc_blur:	Hardware interface to the downscale blur registers
  * @sde_kms:		Pointer to the sde_kms top level
  * @cached_mode:	DRM mode cached at mode_set time, acted on in enable
+ * @wd_jitter : Pointer to watchdog jitter prams
  * @enabled:		Whether the encoder has enabled and running a mode
  * @split_role:		Role to play in a split-panel configuration
  * @intf_mode:		Interface mode
@@ -333,6 +336,7 @@ struct sde_encoder_phys {
 	struct sde_hw_dnsc_blur *hw_dnsc_blur;
 	struct sde_kms *sde_kms;
 	struct drm_display_mode cached_mode;
+	struct intf_wd_jitter_params wd_jitter;
 	enum sde_enc_split_role split_role;
 	enum sde_intf_mode intf_mode;
 	enum sde_intf intf_idx;

@@ -396,11 +396,10 @@ bool sde_encoder_get_vblank_timestamp(struct drm_encoder *encoder,
 		ktime_t *tvblank);
 
 /**
- * sde_encoder_control_te - control enabling/disabling VSYNC_IN_EN
+ * sde_encoder_idle_pc_enter - control enable/disable VSYNC_IN_EN & cache display status at ipc
  * @encoder:	encoder pointer
- * @enable:	boolean to indicate enable/disable
  */
-void sde_encoder_control_te(struct drm_encoder *encoder, bool enable);
+void sde_encoder_idle_pc_enter(struct drm_encoder *encoder);
 
 /**
  * sde_encoder_virt_restore - restore the encoder configs

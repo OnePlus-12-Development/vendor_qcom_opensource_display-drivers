@@ -73,13 +73,18 @@ struct intf_avr_params {
  * jitter : max instantaneous jitter.
  * ltj_max : max long term jitter value.
  * ltj_slope : slope of long term jitter.
+ *ltj_step_dir: direction of the step in LTJ
+ *ltj_initial_val: LTJ initial value
+ *ltj_fractional_val:  LTJ fractional initial value
  */
 struct intf_wd_jitter_params {
 	u32 jitter;
 	u32 ltj_max;
 	u32 ltj_slope;
+	u8 ltj_step_dir;
+	u32 ltj_initial_val;
+	u32 ltj_fractional_val;
 };
-
 /**
  * struct sde_hw_intf_ops : Interface to the interface Hw driver functions
  *  Assumption is these functions will be called after clocks are enabled
@@ -95,6 +100,8 @@ struct intf_wd_jitter_params {
  *                            converts it into line count
  * @setup_vsync_source: Configure vsync source selection for intf
  * @configure_wd_jitter: Configure WD jitter.
+ * @ write_wd_ltj: Write WD long term jitter.
+ * @get_wd_ltj_status: Read WD long term jitter status.
  * @bind_pingpong_blk: enable/disable the connection with pingpong which will
  *                     feed pixels to this interface
  */
@@ -131,6 +138,10 @@ struct sde_hw_intf_ops {
 
 	void (*setup_vsync_source)(struct sde_hw_intf *intf, u32 frame_rate);
 	void (*configure_wd_jitter)(struct sde_hw_intf *intf,
+			struct intf_wd_jitter_params *wd_jitter);
+	void (*write_wd_ltj)(struct sde_hw_intf *intf,
+			struct intf_wd_jitter_params *wd_jitter);
+	void (*get_wd_ltj_status)(struct sde_hw_intf *intf,
 			struct intf_wd_jitter_params *wd_jitter);
 
 	void (*bind_pingpong_blk)(struct sde_hw_intf *intf,

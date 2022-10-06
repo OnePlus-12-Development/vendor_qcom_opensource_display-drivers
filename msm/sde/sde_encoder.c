@@ -1453,6 +1453,29 @@ static void _sde_encoder_update_vsync_source(struct sde_encoder_virt *sde_enc,
 	}
 }
 
+static void sde_encoder_control_te(struct drm_encoder *drm_enc, bool enable)
+{
+	struct sde_encoder_virt *sde_enc;
+	struct sde_encoder_phys *phys;
+	int i;
+
+	if (!drm_enc) {
+		SDE_ERROR("invalid parameters\n");
+		return;
+	}
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	if (!sde_enc) {
+		SDE_ERROR("invalid sde encoder\n");
+		return;
+	}
+
+	for (i = 0; i < sde_enc->num_phys_encs; i++) {
+		phys = sde_enc->phys_encs[i];
+		if (phys && phys->ops.control_te)
+			phys->ops.control_te(phys, enable);
+	}
+}
 
 
 int sde_encoder_helper_switch_vsync(struct drm_encoder *drm_enc,
@@ -2728,28 +2751,28 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	sde_encoder_virt_modeset_rc(drm_enc, adj_mode, msm_mode, false);
 }
 
-void sde_encoder_control_te(struct drm_encoder *drm_enc, bool enable)
+void sde_encoder_idle_pc_enter(struct drm_encoder *drm_enc)
 {
-	struct sde_encoder_virt *sde_enc;
-	struct sde_encoder_phys *phys;
-	int i;
+	struct sde_encoder_virt *sde_enc = NULL;
 
 	if (!drm_enc) {
-		SDE_ERROR("invalid parameters\n");
+		SDE_ERROR("invalid encoder\n");
 		return;
 	}
+	/*
+	 * disable the vsync source after updating the
+	 * rsc state. rsc state update might have vsync wait
+	 * and vsync source must be disabled after it.
+	 * It will avoid generating any vsync from this point
+	 * till mode-2 entry. It is SW workaround for HW
+	 * limitation and should not be removed without
+	 * checking the updated design.
+	 */
+	sde_encoder_control_te(drm_enc, false);
 
 	sde_enc = to_sde_encoder_virt(drm_enc);
-	if (!sde_enc) {
-		SDE_ERROR("invalid sde encoder\n");
-		return;
-	}
-
-	for (i = 0; i < sde_enc->num_phys_encs; i++) {
-		phys = sde_enc->phys_encs[i];
-		if (phys && phys->ops.control_te)
-			phys->ops.control_te(phys, enable);
-	}
+	if (sde_enc->cur_master && sde_enc->cur_master->ops.idle_pc_cache_display_status)
+		sde_enc->cur_master->ops.idle_pc_cache_display_status(sde_enc->cur_master);
 }
 
 static int _sde_encoder_input_connect(struct input_handler *handler,

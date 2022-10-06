@@ -65,6 +65,8 @@
 #define INTF_MISR_CTRL                  0x180
 #define INTF_MISR_SIGNATURE             0x184
 
+#define INTF_WD_TIMER_0_LTJ_CTL         0x200
+#define INTF_WD_TIMER_0_LTJ_CTL1        0x204
 #define INTF_VSYNC_TIMESTAMP_CTRL       0x210
 #define INTF_VSYNC_TIMESTAMP0           0x214
 #define INTF_VSYNC_TIMESTAMP1           0x218
@@ -76,6 +78,8 @@
 #define INTF_WD_TIMER_0_CTL             0x230
 #define INTF_WD_TIMER_0_CTL2            0x234
 #define INTF_WD_TIMER_0_LOAD_VALUE      0x238
+#define INTF_WD_TIMER_0_LTJ_INT_STATUS  0x240
+#define INTF_WD_TIMER_0_LTJ_FRAC_STATUS 0x244
 #define INTF_MUX                        0x25C
 #define INTF_UNDERRUN_COUNT             0x268
 #define INTF_STATUS                     0x26C
@@ -496,6 +500,40 @@ static void sde_hw_intf_configure_wd_timer_jitter(struct sde_hw_intf *intf,
 	if (wd_jitter->ltj_max)
 		reg |= BIT(30);
 	SDE_REG_WRITE(c, INTF_WD_TIMER_0_JITTER_CTL, reg);
+
+	if (intf->cap->features & BIT(SDE_INTF_WD_LTJ_CTL)) {
+		if (wd_jitter->ltj_step_dir && wd_jitter->ltj_initial_val) {
+			reg = ((wd_jitter->ltj_step_dir & 0x1) << 31) |
+					(wd_jitter->ltj_initial_val  & 0x1FFFFF);
+			SDE_REG_WRITE(c, INTF_WD_TIMER_0_LTJ_CTL, reg);
+			wd_jitter->ltj_step_dir = 0;
+			wd_jitter->ltj_initial_val = 0;
+		}
+
+		if (wd_jitter->ltj_fractional_val) {
+			SDE_REG_WRITE(c, INTF_WD_TIMER_0_LTJ_CTL1, wd_jitter->ltj_fractional_val);
+			wd_jitter->ltj_fractional_val = 0;
+		}
+	}
+
+}
+
+static void sde_hw_intf_read_wd_ltj_ctl(struct sde_hw_intf *intf,
+		struct intf_wd_jitter_params *wd_jitter)
+{
+	struct sde_hw_blk_reg_map *c;
+	u32 reg;
+
+	c = &intf->hw;
+
+	if (intf->cap->features & BIT(SDE_INTF_WD_LTJ_CTL)) {
+		reg = SDE_REG_READ(c, INTF_WD_TIMER_0_LTJ_INT_STATUS);
+		wd_jitter->ltj_step_dir =  reg & BIT(31);
+		wd_jitter->ltj_initial_val = (reg & 0x1FFFFF);
+
+		reg = SDE_REG_READ(c, INTF_WD_TIMER_0_LTJ_FRAC_STATUS);
+		wd_jitter->ltj_fractional_val = (reg & 0xFFFF);
+	}
 }
 
 static void sde_hw_intf_setup_vsync_source(struct sde_hw_intf *intf, u32 frame_rate)
@@ -1039,6 +1077,9 @@ static void _setup_intf_ops(struct sde_hw_intf_ops *ops,
 
 	if (cap & BIT(SDE_INTF_WD_JITTER))
 		ops->configure_wd_jitter = sde_hw_intf_configure_wd_timer_jitter;
+
+	if (cap & BIT(SDE_INTF_WD_LTJ_CTL))
+		ops->get_wd_ltj_status = sde_hw_intf_read_wd_ltj_ctl;
 }
 
 struct sde_hw_blk_reg_map *sde_hw_intf_init(enum sde_intf idx,

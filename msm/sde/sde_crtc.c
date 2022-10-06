@@ -5040,18 +5040,8 @@ static void sde_crtc_handle_power_event(u32 event_type, void *arg)
 		break;
 	case SDE_POWER_EVENT_PRE_DISABLE:
 		drm_for_each_encoder_mask(encoder, crtc->dev,
-				crtc->state->encoder_mask) {
-			/*
-			 * disable the vsync source after updating the
-			 * rsc state. rsc state update might have vsync wait
-			 * and vsync source must be disabled after it.
-			 * It will avoid generating any vsync from this point
-			 * till mode-2 entry. It is SW workaround for HW
-			 * limitation and should not be removed without
-			 * checking the updated design.
-			 */
-			sde_encoder_control_te(encoder, false);
-		}
+				crtc->state->encoder_mask)
+			sde_encoder_idle_pc_enter(encoder);
 
 		spin_lock_irqsave(&sde_crtc->spin_lock, flags);
 		node = NULL;
