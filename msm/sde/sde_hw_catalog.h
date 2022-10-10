@@ -53,6 +53,7 @@
 #define SDE_HW_VER_820	SDE_HW_VER(8, 2, 0) /* diwali */
 #define SDE_HW_VER_850	SDE_HW_VER(8, 5, 0) /* cape */
 #define SDE_HW_VER_900	SDE_HW_VER(9, 0, 0) /* kalama */
+#define SDE_HW_VER_A00	SDE_HW_VER(10, 0, 0) /* pineapple */
 
 /* Avoid using below IS_XXX macros outside catalog, use feature bit instead */
 #define IS_SDE_MAJOR_SAME(rev1, rev2)   \
@@ -82,6 +83,7 @@
 #define IS_DIWALI_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_820)
 #define IS_CAPE_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_850)
 #define IS_KALAMA_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_900)
+#define IS_PINEAPPLE_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_A00)
 
 #define SDE_HW_BLK_NAME_LEN	16
 
@@ -577,11 +579,14 @@ enum {
  *                              pixel data arrives to this INTF
  * @SDE_INTF_TE                 INTF block has TE configuration support
  * @SDE_INTF_TE_ALIGN_VSYNC     INTF block has POMS Align vsync support
+ * @SDE_INTF_TE_32BIT           INTF block has 32bit TE configuration support
+ * @SDE_INTF_TE_SINGLE_UPDATE   INTF block has single frame per TE support
  * @SDE_INTF_WD_TIMER          INTF block has WD Timer support
  * @SDE_INTF_STATUS             INTF block has INTF_STATUS register
  * @SDE_INTF_RESET_COUNTER      INTF block has frame/line counter reset support
  * @SDE_INTF_PANEL_VSYNC_TS     INTF block has panel vsync timestamp logged
  * @SDE_INTF_MDP_VSYNC_TS       INTF block has mdp vsync timestamp logged
+ * @SDE_INTF_MDP_VSYNC_FC       INTF block has mdp vsync frame counter
  * @SDE_INTF_AVR_STATUS         INTF block has AVR_STATUS field in AVR_CONTROL register
  * @SDE_INTF_WD_JITTER          INTF block has WD timer jitter support
  * @SDE_INTF_MAX
@@ -590,11 +595,14 @@ enum {
 	SDE_INTF_INPUT_CTRL = 0x1,
 	SDE_INTF_TE,
 	SDE_INTF_TE_ALIGN_VSYNC,
+	SDE_INTF_TE_32BIT,
+	SDE_INTF_TE_SINGLE_UPDATE,
 	SDE_INTF_WD_TIMER,
 	SDE_INTF_STATUS,
 	SDE_INTF_RESET_COUNTER,
 	SDE_INTF_PANEL_VSYNC_TS,
 	SDE_INTF_MDP_VSYNC_TS,
+	SDE_INTF_MDP_VSYNC_FC,
 	SDE_INTF_AVR_STATUS,
 	SDE_INTF_WD_JITTER,
 	SDE_INTF_MAX

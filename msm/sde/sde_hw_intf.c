@@ -40,6 +40,7 @@
 #define INTF_DISPLAY_DATA_HCTL          0x064
 #define INTF_ACTIVE_DATA_HCTL           0x068
 #define INTF_FRAME_LINE_COUNT_EN        0x0A8
+#define INTF_MDP_FRAME_COUNT            0x0A4
 #define INTF_FRAME_COUNT                0x0AC
 #define INTF_LINE_COUNT                 0x0B0
 
@@ -97,6 +98,12 @@
 #define INTF_TEAR_LINE_COUNT            0x2B0
 #define INTF_TEAR_AUTOREFRESH_CONFIG    0x2B4
 #define INTF_TEAR_TEAR_DETECT_CTRL      0x2B8
+#define INTF_TEAR_PROG_FETCH_START      0x2C4
+#define INTF_TEAR_DSI_DMA_SCHD_CTRL0    0x2C8
+#define INTF_TEAR_DSI_DMA_SCHD_CTRL1    0x2CC
+#define INTF_TEAR_INT_COUNT_VAL_EXT     0x2DC
+#define INTF_TEAR_SYNC_THRESH_EXT       0x2E0
+#define INTF_TEAR_SYNC_WRCOUNT_EXT      0x2E4
 
 static struct sde_intf_cfg *_intf_offset(enum sde_intf intf,
 		struct sde_mdss_cfg *m,
@@ -541,6 +548,24 @@ static void sde_hw_intf_bind_pingpong_blk(
 	SDE_REG_WRITE(c, INTF_MUX, mux_cfg);
 }
 
+static u32 sde_hw_intf_get_frame_count(struct sde_hw_intf *intf)
+{
+	struct sde_hw_blk_reg_map *c = &intf->hw;
+	bool en;
+
+	/*
+	 * MDP VSync Frame Count is enabled with programmable fetch
+	 * or with auto-refresh enabled.
+	 */
+	en  = (SDE_REG_READ(c, INTF_TEAR_AUTOREFRESH_CONFIG) & BIT(31)) |
+			(SDE_REG_READ(c, INTF_CONFIG) & BIT(31));
+
+	if (en && (intf->cap->features & BIT(SDE_INTF_MDP_VSYNC_FC)))
+		return SDE_REG_READ(c, INTF_MDP_FRAME_COUNT);
+	else
+		return SDE_REG_READ(c, INTF_FRAME_COUNT);
+}
+
 static void sde_hw_intf_get_status(
 		struct sde_hw_intf *intf,
 		struct intf_status *s)
@@ -566,7 +591,7 @@ static void sde_hw_intf_v1_get_status(
 	s->is_en = SDE_REG_READ(c, INTF_STATUS) & BIT(0);
 	s->is_prog_fetch_en = (SDE_REG_READ(c, INTF_CONFIG) & BIT(31));
 	if (s->is_en) {
-		s->frame_count = SDE_REG_READ(c, INTF_FRAME_COUNT);
+		s->frame_count = sde_hw_intf_get_frame_count(intf);
 		s->line_count = SDE_REG_READ(c, INTF_LINE_COUNT) & 0xffff;
 	} else {
 		s->line_count = 0;
@@ -659,7 +684,7 @@ static int sde_hw_intf_setup_te_config(struct sde_hw_intf *intf,
 		struct sde_hw_tear_check *te)
 {
 	struct sde_hw_blk_reg_map *c;
-	u32 cfg = 0;
+	u32 cfg = 0, val;
 	spinlock_t tearcheck_spinlock;
 
 	if (!intf)
@@ -679,8 +704,10 @@ static int sde_hw_intf_setup_te_config(struct sde_hw_intf *intf,
 	 * less than 2^16 vsync clk cycles.
 	 */
 	spin_lock(&tearcheck_spinlock);
-	SDE_REG_WRITE(c, INTF_TEAR_SYNC_WRCOUNT,
-			(te->start_pos + te->sync_threshold_start + 1));
+	val = te->start_pos + te->sync_threshold_start + 1;
+	if (intf->cap->features & BIT(SDE_INTF_TE_32BIT))
+		SDE_REG_WRITE(c, INTF_TEAR_SYNC_WRCOUNT_EXT, (val >> 16));
+	SDE_REG_WRITE(c, INTF_TEAR_SYNC_WRCOUNT, (val & 0xffff));
 	SDE_REG_WRITE(c, INTF_TEAR_SYNC_CONFIG_VSYNC, cfg);
 	wmb(); /* disable vsync counter before updating single buffer registers */
 	SDE_REG_WRITE(c, INTF_TEAR_SYNC_CONFIG_HEIGHT, te->sync_cfg_height);
@@ -688,9 +715,13 @@ static int sde_hw_intf_setup_te_config(struct sde_hw_intf *intf,
 	SDE_REG_WRITE(c, INTF_TEAR_RD_PTR_IRQ, te->rd_ptr_irq);
 	SDE_REG_WRITE(c, INTF_TEAR_WR_PTR_IRQ, te->wr_ptr_irq);
 	SDE_REG_WRITE(c, INTF_TEAR_START_POS, te->start_pos);
+	if (intf->cap->features & BIT(SDE_INTF_TE_32BIT))
+		SDE_REG_WRITE(c,  INTF_TEAR_SYNC_THRESH_EXT,
+				((te->sync_threshold_continue & 0xffff0000) |
+				(te->sync_threshold_start >> 16)));
 	SDE_REG_WRITE(c, INTF_TEAR_SYNC_THRESH,
 			((te->sync_threshold_continue << 16) |
-			 te->sync_threshold_start));
+			(te->sync_threshold_start & 0xffff)));
 	cfg |= BIT(19); /* VSYNC_COUNTER_EN */
 	SDE_REG_WRITE(c, INTF_TEAR_SYNC_CONFIG_VSYNC, cfg);
 	spin_unlock(&tearcheck_spinlock);
@@ -741,25 +772,38 @@ static int sde_hw_intf_poll_timeout_wr_ptr(struct sde_hw_intf *intf,
 		u32 timeout_us)
 {
 	struct sde_hw_blk_reg_map *c;
-	u32 val;
+	u32 val, mask = 0;
 
 	if (!intf)
 		return -EINVAL;
 
+	if (intf->cap->features & BIT(SDE_INTF_TE_32BIT))
+		mask = 0xffffffff;
+	else
+		mask = 0xffff;
+
 	c = &intf->hw;
-	return read_poll_timeout(sde_reg_read, val, (val & 0xffff) >= 1, 10, false, timeout_us,
+	return read_poll_timeout(sde_reg_read, val, (val & mask) >= 1, 10, false, timeout_us,
 			c, INTF_TEAR_LINE_COUNT);
 }
 
 static int sde_hw_intf_enable_te(struct sde_hw_intf *intf, bool enable)
 {
 	struct sde_hw_blk_reg_map *c;
+	uint32_t val = 0;
 
 	if (!intf)
 		return -EINVAL;
 
 	c = &intf->hw;
-	SDE_REG_WRITE(c, INTF_TEAR_TEAR_CHECK_EN, enable);
+
+	if (enable)
+		val |= BIT(0);
+
+	if (intf->cap->features & BIT(SDE_INTF_TE_SINGLE_UPDATE))
+		val |= BIT(3);
+
+	SDE_REG_WRITE(c, INTF_TEAR_TEAR_CHECK_EN, val);
 
 	if (enable && (intf->cap->features & (BIT(SDE_INTF_PANEL_VSYNC_TS) | BIT(SDE_INTF_MDP_VSYNC_TS))))
 		SDE_REG_WRITE(c, INTF_VSYNC_TIMESTAMP_CTRL, BIT(0));
@@ -817,16 +861,24 @@ static int sde_hw_intf_get_vsync_info(struct sde_hw_intf *intf,
 	c = &intf->hw;
 
 	val = SDE_REG_READ(c, INTF_TEAR_VSYNC_INIT_VAL);
-	info->rd_ptr_init_val = val & 0xffff;
+	if (intf->cap->features & BIT(SDE_INTF_TE_32BIT))
+		info->rd_ptr_init_val = val;
+	else
+		info->rd_ptr_init_val = val & 0xffff;
 
 	val = SDE_REG_READ(c, INTF_TEAR_INT_COUNT_VAL);
 	info->rd_ptr_frame_count = (val & 0xffff0000) >> 16;
 	info->rd_ptr_line_count = val & 0xffff;
 
-	val = SDE_REG_READ(c, INTF_TEAR_LINE_COUNT);
-	info->wr_ptr_line_count = val & 0xffff;
+	if (intf->cap->features & BIT(SDE_INTF_TE_32BIT)) {
+		val = SDE_REG_READ(c, INTF_TEAR_INT_COUNT_VAL_EXT);
+		info->rd_ptr_line_count |= (val << 16);
+	}
 
-	val = SDE_REG_READ(c, INTF_FRAME_COUNT);
+	val = SDE_REG_READ(c, INTF_TEAR_LINE_COUNT);
+	info->wr_ptr_line_count = val;
+
+	val = sde_hw_intf_get_frame_count(intf);
 	info->intf_frame_count = val;
 
 	return 0;
@@ -836,19 +888,28 @@ static int sde_hw_intf_v1_check_and_reset_tearcheck(struct sde_hw_intf *intf,
 		struct intf_tear_status *status)
 {
 	struct sde_hw_blk_reg_map *c = &intf->hw;
-	u32 start_pos;
+	u32 start_pos, val;
 
 	if (!intf || !status)
 		return -EINVAL;
 
 	c = &intf->hw;
 
-	status->read_count = SDE_REG_READ(c, INTF_TEAR_INT_COUNT_VAL);
+	status->read_line_count = SDE_REG_READ(c, INTF_TEAR_INT_COUNT_VAL);
+	if (intf->cap->features & BIT(SDE_INTF_TE_32BIT))
+		status->read_line_count |= (SDE_REG_READ(c, INTF_TEAR_INT_COUNT_VAL_EXT) << 16);
 	start_pos = SDE_REG_READ(c, INTF_TEAR_START_POS);
-	status->write_count = SDE_REG_READ(c, INTF_TEAR_SYNC_WRCOUNT);
-	status->write_count &= 0xffff0000;
-	status->write_count |= start_pos;
-	SDE_REG_WRITE(c, INTF_TEAR_SYNC_WRCOUNT, status->write_count);
+	val = SDE_REG_READ(c, INTF_TEAR_SYNC_WRCOUNT);
+	status->write_frame_count = val >> 16;
+	status->write_line_count = start_pos;
+
+	if (intf->cap->features & BIT(SDE_INTF_TE_32BIT)) {
+		val = (status->write_line_count & 0xffff0000) >> 16;
+		SDE_REG_WRITE(c, INTF_TEAR_SYNC_WRCOUNT_EXT, val);
+	}
+
+	val = (status->write_frame_count << 16) | (status->write_line_count & 0xffff);
+	SDE_REG_WRITE(c, INTF_TEAR_SYNC_WRCOUNT, val);
 
 	return 0;
 }
