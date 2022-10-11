@@ -2932,6 +2932,10 @@ static int sde_connector_populate_mode_info(struct drm_connector *conn,
 								       sde_kms->catalog->features));
 		sde_kms_info_add_keyint(info, "has_dedicated_cwb_support",
 				test_bit(SDE_FEATURE_DEDICATED_CWB, sde_kms->catalog->features));
+		if (test_bit(SDE_FEATURE_DUAL_DEDICATED_CWB, sde_kms->catalog->features))
+			sde_kms_info_add_keyint(info, "max_cwb", 2);
+		else
+			sde_kms_info_add_keyint(info, "max_cwb", 1);
 
 		sde_kms_info_add_keyint(info, "mdp_transfer_time_us",
 			mode_info.mdp_transfer_time_us);

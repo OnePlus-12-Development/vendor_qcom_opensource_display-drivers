@@ -84,7 +84,7 @@ static void _sde_hw_cwb_ctrl_init(struct sde_mdss_cfg *m,
 		return;
 
 	b->base_off = addr;
-	b->blk_off = m->cwb_blk_off;
+	b->blk_off = m->cwb_blk_off[0];
 	b->length = 0x20;
 	b->hw_rev = m->hw_rev;
 	b->log_mask = SDE_DBG_MASK_WB;
@@ -99,27 +99,29 @@ static void _sde_hw_cwb_ctrl_init(struct sde_mdss_cfg *m,
 }
 
 static void _sde_hw_dcwb_ctrl_init(struct sde_mdss_cfg *m,
-		void __iomem *addr, struct sde_hw_blk_reg_map *b)
+		void __iomem *addr, struct sde_hw_wb *hw_wb)
 {
-	int i;
+	int i, j;
 	u32 blk_off;
 	char name[64] = {0};
 
-	if (!b)
+	if (!hw_wb)
 		return;
 
-	b->base_off = addr;
-	b->blk_off = m->cwb_blk_off;
-	b->length = 0x20;
-	b->hw_rev = m->hw_rev;
-	b->log_mask = SDE_DBG_MASK_WB;
+	for (j = 0; j < (m->dcwb_count / MAX_CWB_BLOCKSIZE); j++) {
+		hw_wb->dcwb_hw[j].base_off = addr;
+		hw_wb->dcwb_hw[j].blk_off = m->cwb_blk_off[j];
+		hw_wb->dcwb_hw[j].length = 0x20;
+		hw_wb->dcwb_hw[j].hw_rev = m->hw_rev;
+		hw_wb->dcwb_hw[j].log_mask = SDE_DBG_MASK_WB;
 
-	for (i = 0; i < m->dcwb_count; i++) {
-		snprintf(name, sizeof(name), "dcwb%d", i);
-		blk_off = b->blk_off + (m->cwb_blk_stride * i);
+		for (i = 0; i < MAX_CWB_BLOCKSIZE; i++) {
+			snprintf(name, sizeof(name), "dcwb%d", i);
+			blk_off = hw_wb->dcwb_hw[j].blk_off + (m->cwb_blk_stride * i);
 
-		sde_dbg_reg_register_dump_range(SDE_DBG_NAME, name,
-				blk_off, blk_off + b->length, 0xff);
+			sde_dbg_reg_register_dump_range(SDE_DBG_NAME, name,
+					blk_off, blk_off + hw_wb->dcwb_hw[j].length, 0xff);
+		}
 	}
 }
 
@@ -353,7 +355,7 @@ static void sde_hw_wb_bind_dcwb_pp_blk(
 
 	c = &ctx->hw;
 	if (enable)
-		mux_cfg = 0xd;
+		mux_cfg = (pp < PINGPONG_CWB_2) ? 0xd : 0xb;
 
 	SDE_REG_WRITE(c, WB_MUX, mux_cfg);
 }
@@ -364,12 +366,14 @@ static void sde_hw_wb_program_dcwb_ctrl(struct sde_hw_wb *ctx,
 {
 	struct sde_hw_blk_reg_map *c;
 	u32 blk_base;
+	int idx;
 
 	if (!ctx)
 		return;
 
-	c = &ctx->dcwb_hw;
-	blk_base  = ctx->catalog->cwb_blk_stride * (cur_idx - DCWB_0);
+	idx = (cur_idx < DCWB_2) ? 0 : 1;
+	c = &ctx->dcwb_hw[idx];
+	blk_base  = ctx->catalog->cwb_blk_stride * ((cur_idx - DCWB_0) % MAX_CWB_BLOCKSIZE);
 
 	if (enable) {
 		SDE_REG_WRITE(c, blk_base + CWB_CTRL_SRC_SEL, data_src - CWB_0);
@@ -678,7 +682,7 @@ struct sde_hw_blk_reg_map *sde_hw_wb_init(enum sde_wb idx,
 		_sde_hw_cwb_ctrl_init(m, addr, &c->cwb_hw);
 
 	if (test_bit(SDE_WB_DCWB_CTRL, &cfg->features)) {
-		_sde_hw_dcwb_ctrl_init(m, addr, &c->dcwb_hw);
+		_sde_hw_dcwb_ctrl_init(m, addr, c);
 		_sde_hw_dcwb_pp_ctrl_init(m, addr, c);
 	}
 
