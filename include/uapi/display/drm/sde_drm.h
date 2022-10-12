@@ -268,6 +268,7 @@ struct sde_drm_de_v1 {
 #define SDE_DRM_QSEED3LITE
 #define SDE_DRM_QSEED4
 #define SDE_DRM_INLINE_PREDOWNSCALE
+#define SDE_DRM_QSEED6
 
 /**
  * struct sde_drm_scaler_v2 - version 2 of struct sde_drm_scaler
@@ -309,6 +310,8 @@ struct sde_drm_de_v1 {
  * @de_lpf_h:          Detail enhancer lpf blend high
  * @de_lpf_l:          Detail enhancer lpf blend low
  * @de_lpf_m:          Detail enhancer lpf blend medium
+ * @dir45_en:          45/-45 degree direction filtering enable
+ * @cor_en:            corner enhancer enable
  */
 struct sde_drm_scaler_v2 {
 	/*
@@ -379,6 +382,8 @@ struct sde_drm_scaler_v2 {
 	__u32 de_lpf_h;
 	__u32 de_lpf_l;
 	__u32 de_lpf_m;
+	__u32 dir45_en;
+	__u32 cor_en;
 };
 
 /* Number of dest scalers supported */

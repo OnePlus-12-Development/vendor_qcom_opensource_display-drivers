@@ -3392,6 +3392,8 @@ void reg_dmav1_setup_vig_qseed3(struct sde_hw_pipe *ctx,
 
 	op_mode |= (scaler3_cfg->blend_cfg & 1) << 31;
 	op_mode |= (scaler3_cfg->dir_en) ? BIT(4) : 0;
+	op_mode |= (scaler3_cfg->dir_en && scaler3_cfg->cor_en) ? BIT(5) : 0;
+	op_mode |= (scaler3_cfg->dir_en && scaler3_cfg->dir45_en) ? BIT(6) : 0;
 	op_mode |= (scaler3_cfg->dyn_exp_disabled) ? BIT(13) : 0;
 
 	preload =
