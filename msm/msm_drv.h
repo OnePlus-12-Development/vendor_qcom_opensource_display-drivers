@@ -55,6 +55,7 @@
 #include <drm/drm_dsc.h>
 #endif
 #include <drm/drm_bridge.h>
+#include <drm/drm_framebuffer.h>
 
 #include "sde_power_handle.h"
 

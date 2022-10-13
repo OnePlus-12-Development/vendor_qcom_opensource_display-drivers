@@ -7,6 +7,7 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_atomic.h>
+#include <drm/drm_edid.h>
 
 #include "msm_kms.h"
 #include "sde_connector.h"

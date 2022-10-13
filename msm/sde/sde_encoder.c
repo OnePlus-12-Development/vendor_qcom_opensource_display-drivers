@@ -28,6 +28,7 @@
 #include "sde_kms.h"
 #include <drm/drm_crtc.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_edid.h>
 #include "sde_hwio.h"
 #include "sde_hw_catalog.h"
 #include "sde_hw_intf.h"

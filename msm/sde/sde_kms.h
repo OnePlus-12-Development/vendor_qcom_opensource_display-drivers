@@ -22,6 +22,7 @@
 
 #include <linux/pm_domain.h>
 #include <linux/pm_qos.h>
+#include <drm/drm_framebuffer.h>
 
 #include "msm_drv.h"
 #include "msm_kms.h"

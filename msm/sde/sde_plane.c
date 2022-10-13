@@ -24,6 +24,7 @@
 #include <drm/sde_drm.h>
 #include <drm/msm_drm_pp.h>
 #include <linux/version.h>
+#include <drm/drm_blend.h>
 
 #include "msm_prop.h"
 #include "msm_drv.h"
