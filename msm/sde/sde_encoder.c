@@ -1453,18 +1453,11 @@ static void _sde_encoder_update_vsync_source(struct sde_encoder_virt *sde_enc,
 	}
 }
 
-static void sde_encoder_control_te(struct drm_encoder *drm_enc, bool enable)
+static void sde_encoder_control_te(struct sde_encoder_virt *sde_enc, bool enable)
 {
-	struct sde_encoder_virt *sde_enc;
 	struct sde_encoder_phys *phys;
 	int i;
 
-	if (!drm_enc) {
-		SDE_ERROR("invalid parameters\n");
-		return;
-	}
-
-	sde_enc = to_sde_encoder_virt(drm_enc);
 	if (!sde_enc) {
 		SDE_ERROR("invalid sde encoder\n");
 		return;
@@ -1491,13 +1484,13 @@ int sde_encoder_helper_switch_vsync(struct drm_encoder *drm_enc,
 
 	sde_enc = to_sde_encoder_virt(drm_enc);
 
-	sde_encoder_control_te(drm_enc, false);
+	sde_encoder_control_te(sde_enc, false);
 
 	memcpy(&disp_info, &sde_enc->disp_info, sizeof(disp_info));
 	disp_info.is_te_using_watchdog_timer = watchdog_te;
 	_sde_encoder_update_vsync_source(sde_enc, &disp_info);
 
-	sde_encoder_control_te(drm_enc, true);
+	sde_encoder_control_te(sde_enc, true);
 
 	return 0;
 }
@@ -2206,9 +2199,9 @@ static int _sde_encoder_rc_post_modeset(struct drm_encoder *drm_enc,
 	/* toggle te bit to update vsync source for sim cmd mode panels */
 	if (sde_encoder_check_curr_mode(&sde_enc->base, MSM_DISPLAY_CMD_MODE)
 			&& sde_enc->disp_info.is_te_using_watchdog_timer) {
-		sde_encoder_control_te(drm_enc, false);
+		sde_encoder_control_te(sde_enc, false);
 		_sde_encoder_update_vsync_source(sde_enc, &sde_enc->disp_info);
-		sde_encoder_control_te(drm_enc, true);
+		sde_encoder_control_te(sde_enc, true);
 	}
 
 	_sde_encoder_update_rsc_client(drm_enc, true);
@@ -2759,6 +2752,7 @@ void sde_encoder_idle_pc_enter(struct drm_encoder *drm_enc)
 		SDE_ERROR("invalid encoder\n");
 		return;
 	}
+	sde_enc = to_sde_encoder_virt(drm_enc);
 	/*
 	 * disable the vsync source after updating the
 	 * rsc state. rsc state update might have vsync wait
@@ -2768,9 +2762,8 @@ void sde_encoder_idle_pc_enter(struct drm_encoder *drm_enc)
 	 * limitation and should not be removed without
 	 * checking the updated design.
 	 */
-	sde_encoder_control_te(drm_enc, false);
+	sde_encoder_control_te(sde_enc, false);
 
-	sde_enc = to_sde_encoder_virt(drm_enc);
 	if (sde_enc->cur_master && sde_enc->cur_master->ops.idle_pc_cache_display_status)
 		sde_enc->cur_master->ops.idle_pc_cache_display_status(sde_enc->cur_master);
 }
@@ -3045,7 +3038,7 @@ void sde_encoder_virt_restore(struct drm_encoder *drm_enc)
 		sde_enc->cur_master->ops.restore(sde_enc->cur_master);
 
 	_sde_encoder_virt_enable_helper(drm_enc);
-	sde_encoder_control_te(drm_enc, true);
+	sde_encoder_control_te(sde_enc, true);
 
 	/*
 	 * During IPC misr ctl register is reset.
@@ -3203,11 +3196,11 @@ static void sde_encoder_virt_enable(struct drm_encoder *drm_enc)
 			sizeof(sde_enc->cur_master->intf_cfg_v1));
 
 	/* turn off vsync_in to update tear check configuration */
-	sde_encoder_control_te(drm_enc, false);
+	sde_encoder_control_te(sde_enc, false);
 	sde_encoder_populate_encoder_phys(drm_enc, sde_enc, msm_mode);
 
 	_sde_encoder_virt_enable_helper(drm_enc);
-	sde_encoder_control_te(drm_enc, true);
+	sde_encoder_control_te(sde_enc, true);
 }
 
 void sde_encoder_virt_reset(struct drm_encoder *drm_enc)
