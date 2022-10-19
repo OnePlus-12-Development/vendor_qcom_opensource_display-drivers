@@ -37,7 +37,7 @@ static const u32 cwb_irq_tbl[PINGPONG_MAX] = {SDE_NONE, INTR_IDX_PP1_OVFL,
 
 static const u32 dcwb_irq_tbl[PINGPONG_MAX] = {SDE_NONE, SDE_NONE,
 	SDE_NONE, SDE_NONE, SDE_NONE, SDE_NONE,
-	INTR_IDX_PP_CWB_OVFL, SDE_NONE};
+	INTR_IDX_PP_CWB_OVFL, SDE_NONE, INTR_IDX_PP_CWB2_OVFL, SDE_NONE};
 
 /**
  * sde_rgb2yuv_601l - rgb to yuv color space conversion matrix
@@ -2591,6 +2591,14 @@ struct sde_encoder_phys *sde_encoder_phys_wb_init(struct sde_enc_phys_init_param
 	irq->cb.func = sde_encoder_phys_wb_lineptr_irq;
 
 	if (wb_cfg && (wb_cfg->features & BIT(SDE_WB_HAS_DCWB))) {
+		if (test_bit(SDE_HW_HAS_DUAL_DCWB, &wb_cfg->features)) {
+			irq = &phys_enc->irq[INTR_IDX_PP_CWB2_OVFL];
+			irq->name = "pp_cwb2_overflow";
+			irq->hw_idx = PINGPONG_CWB_2;
+			irq->intr_type = SDE_IRQ_TYPE_CWB_OVERFLOW;
+			irq->intr_idx = INTR_IDX_PP_CWB2_OVFL;
+			irq->cb.func = sde_encoder_phys_cwb_ovflow;
+		}
 		irq = &phys_enc->irq[INTR_IDX_PP_CWB_OVFL];
 		irq->name = "pp_cwb0_overflow";
 		irq->hw_idx = PINGPONG_CWB_0;

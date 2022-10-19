@@ -5210,6 +5210,7 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->has_line_insertion = true;
 	} else if (IS_PINEAPPLE_TARGET(hw_rev)) {
 		set_bit(SDE_FEATURE_DEDICATED_CWB, sde_cfg->features);
+		set_bit(SDE_FEATURE_DUAL_DEDICATED_CWB, sde_cfg->features);
 		set_bit(SDE_FEATURE_CWB_DITHER, sde_cfg->features);
 		set_bit(SDE_FEATURE_WB_UBWC, sde_cfg->features);
 		set_bit(SDE_FEATURE_CWB_CROP, sde_cfg->features);
