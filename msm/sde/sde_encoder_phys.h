@@ -211,6 +211,7 @@ struct sde_encoder_phys_ops {
  * @INTR_IDX_PP4_OVFL: Pingpong overflow interrupt on PP4 for Concurrent WB
  * @INTR_IDX_PP5_OVFL: Pingpong overflow interrupt on PP5 for Concurrent WB
  * @INTR_IDX_PP_CWB_OVFL: Pingpong overflow interrupt on PP_CWB0/1 for Concurrent WB
+ * @INTR_IDX_PP_CWB2_OVFL: Pingpong overflow interrupt on PP_CWB2/3 for Concurrent WB
  * @INTR_IDX_AUTOREFRESH_DONE:  Autorefresh done for cmd mode panel meaning
  *                              autorefresh has triggered a double buffer flip
  * @INTR_IDX_WRPTR:    Writepointer start interrupt for cmd mode panel
@@ -231,6 +232,7 @@ enum sde_intr_idx {
 	INTR_IDX_PP4_OVFL,
 	INTR_IDX_PP5_OVFL,
 	INTR_IDX_PP_CWB_OVFL,
+	INTR_IDX_PP_CWB2_OVFL,
 	INTR_IDX_WRPTR,
 	INTR_IDX_WB_LINEPTR,
 	INTR_IDX_MAX,

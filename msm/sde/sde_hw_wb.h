@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -242,7 +243,7 @@ struct sde_hw_wb {
 
 	struct sde_hw_mdp *hw_mdp;
 	struct sde_hw_blk_reg_map cwb_hw;
-	struct sde_hw_blk_reg_map dcwb_hw;
+	struct sde_hw_blk_reg_map dcwb_hw[MAX_CWB_BLOCKS];
 	struct sde_hw_pingpong dcwb_pp_hw[DCWB_MAX - DCWB_0];
 };
 

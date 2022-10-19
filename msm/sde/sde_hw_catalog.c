@@ -2493,16 +2493,22 @@ static int sde_wb_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 
 		if (test_bit(SDE_FEATURE_DEDICATED_CWB, sde_cfg->features)) {
 			set_bit(SDE_WB_HAS_DCWB, &wb->features);
+			if (test_bit(SDE_FEATURE_DUAL_DEDICATED_CWB, sde_cfg->features))
+				set_bit(SDE_HW_HAS_DUAL_DCWB, &wb->features);
 			if (IS_SDE_CTL_REV_100(sde_cfg->ctl_rev))
 				set_bit(SDE_WB_DCWB_CTRL, &wb->features);
-			if (major_version >= SDE_HW_MAJOR(SDE_HW_VER_900)) {
-				sde_cfg->cwb_blk_off = 0x67200;
+			if (major_version >= SDE_HW_MAJOR(SDE_HW_VER_A00)) {
+				sde_cfg->cwb_blk_off[0] = 0x67200;
+				sde_cfg->cwb_blk_off[1] = 0x7F200;
+				sde_cfg->cwb_blk_stride = 0x400;
+			} else if (major_version >= SDE_HW_MAJOR(SDE_HW_VER_900)) {
+				sde_cfg->cwb_blk_off[0] = 0x67200;
 				sde_cfg->cwb_blk_stride = 0x400;
 			} else if (major_version >= SDE_HW_MAJOR(SDE_HW_VER_810)) {
-				sde_cfg->cwb_blk_off = 0x66A00;
+				sde_cfg->cwb_blk_off[0] = 0x66A00;
 				sde_cfg->cwb_blk_stride = 0x400;
 			} else {
-				sde_cfg->cwb_blk_off = 0x83000;
+				sde_cfg->cwb_blk_off[0] = 0x83000;
 				sde_cfg->cwb_blk_stride = 0x100;
 			}
 
@@ -2514,10 +2520,10 @@ static int sde_wb_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 			if (IS_SDE_CTL_REV_100(sde_cfg->ctl_rev))
 				set_bit(SDE_WB_CWB_CTRL, &wb->features);
 			if (major_version >= SDE_HW_MAJOR(SDE_HW_VER_700)) {
-				sde_cfg->cwb_blk_off = 0x6A200;
+				sde_cfg->cwb_blk_off[0] = 0x6A200;
 				sde_cfg->cwb_blk_stride = 0x1000;
 			} else {
-				sde_cfg->cwb_blk_off = 0x83000;
+				sde_cfg->cwb_blk_off[0] = 0x83000;
 				sde_cfg->cwb_blk_stride = 0x100;
 			}
 		}
@@ -5350,6 +5356,10 @@ static int _sde_hardware_post_caps(struct sde_mdss_cfg *sde_cfg,
 	sde_cfg->min_display_height = MIN_DISPLAY_HEIGHT;
 	sde_cfg->min_display_width = MIN_DISPLAY_WIDTH;
 	sde_cfg->max_cwb = min_t(u32, sde_cfg->wb_count, MAX_CWB_SESSIONS);
+	if (test_bit(SDE_FEATURE_DUAL_DEDICATED_CWB, sde_cfg->features))
+		sde_cfg->max_cwb = 2;
+	else
+		sde_cfg->max_cwb = 1;
 
 	_sde_hw_fence_caps(sde_cfg);
 
