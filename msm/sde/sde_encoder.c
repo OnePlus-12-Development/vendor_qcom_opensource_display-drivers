@@ -930,6 +930,7 @@ void sde_encoder_set_clone_mode(struct drm_encoder *drm_enc,
 		}
 	}
 
+	sde_crtc_state->cached_cwb_enc_mask = sde_crtc_state->cwb_enc_mask;
 	sde_crtc_state->cwb_enc_mask = 0;
 }
 
@@ -2605,6 +2606,8 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	struct sde_encoder_virt *sde_enc;
 	struct sde_kms *sde_kms;
 	struct drm_connector *conn;
+	struct drm_crtc_state *crtc_state;
+	struct sde_crtc_state *sde_crtc_state;
 	struct sde_connector_state *c_state;
 	struct msm_display_mode *msm_mode;
 	struct sde_crtc *sde_crtc;
@@ -2668,6 +2671,16 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	ret = sde_encoder_virt_modeset_rc(drm_enc, adj_mode, msm_mode, true);
 	if (ret)
 		return;
+
+	crtc_state = sde_crtc->base.state;
+	sde_crtc_state = to_sde_crtc_state(crtc_state);
+	if ((sde_enc->disp_info.intf_type == DRM_MODE_CONNECTOR_VIRTUAL) &&
+			((sde_crtc_state->cached_cwb_enc_mask & drm_encoder_mask(drm_enc)))) {
+		SDE_EVT32(DRMID(drm_enc), sde_crtc_state->cwb_enc_mask,
+				sde_crtc_state->cached_cwb_enc_mask);
+		sde_crtc_state->cwb_enc_mask = sde_crtc_state->cached_cwb_enc_mask;
+		sde_encoder_set_clone_mode(drm_enc, crtc_state);
+	}
 
 	/* reserve dynamic resources now, indicating non test-only */
 	ret = sde_rm_reserve(&sde_kms->rm, drm_enc, drm_enc->crtc->state, conn->state, false);
