@@ -587,11 +587,11 @@ struct drm_msm_ltm_buffer {
 #define SPR_INIT_PARAM_SIZE_3 16
 #define SPR_INIT_PARAM_SIZE_4 24
 #define SPR_INIT_PARAM_SIZE_5 32
+#define SPR_INIT_PARAM_SIZE_6 7
 #define SPR_FLAG_BYPASS (1 << 0)
 
 /**
  * struct drm_msm_spr_init_cfg - SPR initial configuration structure
- *
  */
 struct drm_msm_spr_init_cfg {
 	__u64 flags;
@@ -613,7 +613,24 @@ struct drm_msm_spr_init_cfg {
 	__u16 cfg15[SPR_INIT_PARAM_SIZE_5];
 	int cfg16[SPR_INIT_PARAM_SIZE_3];
 	int cfg17[SPR_INIT_PARAM_SIZE_4];
+	__u16 cfg18_en;
+	__u8 cfg18[SPR_INIT_PARAM_SIZE_6];
 };
+
+/**
+ * struct drm_msm_spr_udc_cfg - SPR UDC configuration structure
+ */
+
+#define SPR_UDC_PARAM_SIZE_1 27
+#define SPR_UDC_PARAM_SIZE_2 1536
+struct drm_msm_spr_udc_cfg {
+	__u64 flags;
+	__u16 init_cfg4;
+	__u16 init_cfg11[SPR_INIT_PARAM_SIZE_1];
+	__u16 cfg1[SPR_UDC_PARAM_SIZE_1];
+	__u16 cfg2[SPR_UDC_PARAM_SIZE_2];
+};
+
 
 #define FEATURE_DEM
 #define CFG0_PARAM_LEN 8

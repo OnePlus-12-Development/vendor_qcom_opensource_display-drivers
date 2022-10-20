@@ -78,6 +78,7 @@ enum sde_reg_dma_features {
 	HSIC,
 	GC,
 	SPR_INIT,
+	SPR_UDC,
 	SPR_PU_CFG,
 	LTM_INIT,
 	LTM_ROI,

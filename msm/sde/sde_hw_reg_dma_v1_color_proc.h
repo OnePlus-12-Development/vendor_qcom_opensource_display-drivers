@@ -312,6 +312,13 @@ void reg_dmav2_setup_dspp_3d_gamutv43(struct sde_hw_dspp *ctx, void *cfg);
 void reg_dmav2_setup_vig_gamutv61(struct sde_hw_pipe *ctx, void *cfg);
 
 /**
+ * reg_dmav2_init_spr_op_v1() - initialize spr sub-feature buffer for reg dma v2.
+ * @feature: SPR sub-feature
+ * @dspp_idx: dspp idx to allocate for
+ */
+int reg_dmav2_init_spr_op_v1(int feature, enum sde_dspp dspp_idx);
+
+/**
  * reg_dmav1_setup_spr_init_cfgv1 - function to configure spr through LUTDMA
  * @ctx: Pointer to dspp context
  * @cfg: Pointer to configuration
@@ -319,11 +326,32 @@ void reg_dmav2_setup_vig_gamutv61(struct sde_hw_pipe *ctx, void *cfg);
 void reg_dmav1_setup_spr_init_cfgv1(struct sde_hw_dspp *ctx, void *cfg);
 
 /**
+ * reg_dmav1_setup_spr_init_cfgv2 - function to configure spr v2 through LUTDMA
+ * @ctx: Pointer to dspp context
+ * @cfg: Pointer to configuration
+ */
+void reg_dmav1_setup_spr_init_cfgv2(struct sde_hw_dspp *ctx, void *cfg);
+
+/**
+ * reg_dmav1_setup_spr_udc_cfgv2 - function to configure spr v2 UDC through LUTDMA
+ * @ctx: Pointer to dspp context
+ * @cfg: Pointer to configuration
+ */
+void reg_dmav1_setup_spr_udc_cfgv2(struct sde_hw_dspp *ctx, void *cfg);
+
+/**
  * reg_dmav1_setup_spr_pu_cfgv1 - function to configure spr pu through LUTDMA
  * @ctx: Pointer to dspp context
  * @cfg: Pointer to configuration
  */
 void reg_dmav1_setup_spr_pu_cfgv1(struct sde_hw_dspp *ctx, void *cfg);
+
+/**
+ * reg_dmav1_setup_spr_pu_cfgv2 - function to configure spr v2 pu through LUTDMA
+ * @ctx: Pointer to dspp context
+ * @cfg: Pointer to configuration
+ */
+void reg_dmav1_setup_spr_pu_cfgv2(struct sde_hw_dspp *ctx, void *cfg);
 
 /**
  * reg_dmav1_setup_demurav1() - function to set up the demurav1 configuration.

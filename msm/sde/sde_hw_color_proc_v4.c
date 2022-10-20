@@ -746,6 +746,123 @@ void sde_demura_pu_cfg(struct sde_hw_dspp *dspp, void *cfg)
 			((hw_cfg) ? hw_cfg->panel_height : -1));
 }
 
+int sde_spr_check_init_cfg(struct sde_hw_dspp *ctx, void *cfg)
+{
+	struct drm_msm_spr_init_cfg *spr_payload;
+	struct sde_hw_cp_cfg *hw_cfg = cfg;
+	int rc = 0;
+
+	if (!ctx || !cfg)
+		return -EINVAL;
+
+	if (!hw_cfg->payload)
+		return 0;
+
+	spr_payload = hw_cfg->payload;
+
+	if (spr_payload->cfg18_en) {
+		bool invalid = spr_payload->cfg11[0] != 1 || spr_payload->cfg11[1] != 0 ||
+			       spr_payload->cfg11[2] != 1;
+
+		if (spr_payload->cfg4 || invalid) {
+			DRM_ERROR("CFG18 can't be enabled with this config. CFG4: %u CFG11: %u\n",
+				spr_payload->cfg4, invalid);
+			return -EINVAL;
+		}
+	}
+
+	return rc;
+}
+
+int sde_spr_check_udc_cfg(struct sde_hw_dspp *ctx, void *cfg)
+{
+	uint32_t j = 0, i = 0;
+	struct drm_msm_spr_udc_cfg *spr_payload;
+	struct sde_hw_cp_cfg *hw_cfg = cfg;
+	bool invalid = false;
+
+	if (!ctx || !cfg)
+		return -EINVAL;
+
+	if (!hw_cfg->payload)
+		return 0;
+
+	spr_payload = hw_cfg->payload;
+	invalid = !(spr_payload->init_cfg11[0] || spr_payload->init_cfg11[1] ||
+			spr_payload->init_cfg11[2]);
+
+	if (spr_payload->init_cfg4 || invalid) {
+		DRM_ERROR("SPR UDC can not be used with this config. CFG4: %u CFG11: %u",
+			spr_payload->init_cfg4, invalid);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < 3; i++) {
+		uint32_t max_h, max_v, limit;
+		uint32_t cfg_1_start = (SPR_UDC_PARAM_SIZE_2 / 3) * i;
+		uint32_t x1 =
+			spr_payload->cfg1[(SPR_UDC_PARAM_SIZE_1 / 3) * i] & 0xffff;
+		uint32_t y1 =
+			spr_payload->cfg1[(SPR_UDC_PARAM_SIZE_1 / 3) * i + 1] & 0xffff;
+		uint32_t w = spr_payload->cfg1[(SPR_UDC_PARAM_SIZE_1 / 3) * i + 2];
+		uint32_t lines = spr_payload->cfg1[(SPR_UDC_PARAM_SIZE_1 / 3) * i + 3];
+		uint32_t x2 = x1 + w;
+		uint32_t y2 = y1 + lines;
+
+		switch (spr_payload->init_cfg11[i]) {
+		case 0:
+			max_h = hw_cfg->panel_width;
+			max_v = hw_cfg->panel_height;
+			break;
+		case 1:
+			max_h = (hw_cfg->panel_width + 1) >> 1;
+			max_v = hw_cfg->panel_height;
+			break;
+		case 2:
+			max_h = (hw_cfg->panel_width * 2 + 2) / 3;
+			max_v = hw_cfg->panel_height;
+			break;
+		default:
+			DRM_ERROR("Can't calculate decimation");
+			return -EINVAL;
+		}
+
+		if (x2 >= max_h) {
+			DRM_ERROR("Invalid CFG1 - C%u x2 %u", i, x2);
+			return -EINVAL;
+		} else if (y2 >= max_v) {
+			DRM_ERROR("Invalid CFG1 - C%u y2 %u", i, y2);
+			return -EINVAL;
+		} else if (lines < 2 || lines > 256) {
+			DRM_ERROR("Invalid CFG1 - C%u Lines %u", i, lines);
+			return -EINVAL;
+		} else if (w < 2 || w > 512) {
+			DRM_ERROR("Invalid CFG1 - C%u W %u", i, w);
+			return -EINVAL;
+		}
+
+		j = 0;
+		limit = (w >> 1) + 1;
+		for (j = 0; j < lines; j++) {
+			uint32_t o1 = spr_payload->cfg2[cfg_1_start + (j*2)];
+			uint32_t o2 = spr_payload->cfg2[cfg_1_start + (j*2) + 1];
+
+
+			if (o1 > limit) {
+				DRM_ERROR("Invalid CFG2 - C%u L%u, o1 exceeds limits",
+						i, j);
+				return -EINVAL;
+			} else if (o2 > limit) {
+				DRM_ERROR("Invalid CFG2 - C%u L%u, o2 exceeds limits",
+						i, j);
+				return -EINVAL;
+			}
+		}
+	}
+
+	return 0;
+}
+
 int sde_spr_read_opr_value(struct sde_hw_dspp *ctx, uint32_t *opr_value)
 {
 	uint32_t reg_off;

@@ -331,11 +331,15 @@ static void dspp_spr(struct sde_hw_dspp *c)
 		return;
 	}
 
+	c->ops.validate_spr_init_config = NULL;
+	c->ops.validate_spr_udc_config = NULL;
 	c->ops.setup_spr_init_config = NULL;
+	c->ops.setup_spr_udc_config = NULL;
 	c->ops.setup_spr_pu_config = NULL;
+	c->ops.read_spr_opr_value = NULL;
 
 	if (c->cap->sblk->spr.version == SDE_COLOR_PROCESS_VER(0x1, 0x0)) {
-		ret = reg_dmav1_init_dspp_op_v4(SDE_DSPP_SPR, c->idx);
+		ret = reg_dmav2_init_spr_op_v1(SDE_SPR_INIT, c->idx);
 		if (ret) {
 			SDE_ERROR("regdma init failed for spr, ret %d\n", ret);
 			return;
@@ -343,6 +347,25 @@ static void dspp_spr(struct sde_hw_dspp *c)
 
 		c->ops.setup_spr_init_config = reg_dmav1_setup_spr_init_cfgv1;
 		c->ops.setup_spr_pu_config = reg_dmav1_setup_spr_pu_cfgv1;
+		c->ops.read_spr_opr_value = sde_spr_read_opr_value;
+	} else if (c->cap->sblk->spr.version == SDE_COLOR_PROCESS_VER(0x2, 0x0)) {
+		ret = reg_dmav2_init_spr_op_v1(SDE_SPR_INIT, c->idx);
+		if (ret) {
+			SDE_ERROR("regdma init failed for spr, ret %d\n", ret);
+			return;
+		}
+
+		ret = reg_dmav2_init_spr_op_v1(SDE_SPR_UDC, c->idx);
+		if (ret) {
+			SDE_ERROR("regdma init failed for spr udc, ret %d\n", ret);
+			return;
+		}
+
+		c->ops.validate_spr_init_config = sde_spr_check_init_cfg;
+		c->ops.validate_spr_udc_config = sde_spr_check_udc_cfg;
+		c->ops.setup_spr_init_config = reg_dmav1_setup_spr_init_cfgv2;
+		c->ops.setup_spr_udc_config = reg_dmav1_setup_spr_udc_cfgv2;
+		c->ops.setup_spr_pu_config = reg_dmav1_setup_spr_pu_cfgv2;
 		c->ops.read_spr_opr_value = sde_spr_read_opr_value;
 	}
 }
