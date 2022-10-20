@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -9,6 +9,7 @@
 #include <linux/of_gpio.h>
 #include <linux/err.h>
 #include <linux/version.h>
+#include <linux/ktime.h>
 
 #include "msm_drv.h"
 #include "sde_connector.h"
@@ -1229,7 +1230,7 @@ static void _dsi_display_continuous_clk_ctrl(struct dsi_display *display,
 }
 
 int dsi_display_cmd_receive(void *display, const char *cmd_buf,
-		u32 cmd_buf_len,  u8 *recv_buf, u32 recv_buf_len)
+		u32 cmd_buf_len,  u8 *recv_buf, u32 recv_buf_len, ktime_t *ts)
 {
 	struct dsi_display *dsi_display = display;
 	struct dsi_cmd_desc cmd = {};
@@ -1281,6 +1282,9 @@ int dsi_display_cmd_receive(void *display, const char *cmd_buf,
 	rc = dsi_display_cmd_rx(dsi_display, &cmd);
 	if (rc <= 0)
 		DSI_ERR("[DSI] Display command receive failed, rc=%d\n", rc);
+
+	if (ts)
+		*ts = cmd.ts;
 
 end:
 	mutex_unlock(&dsi_display->display_lock);
@@ -7412,6 +7416,34 @@ int dsi_display_update_transfer_time(void *display, u32 transfer_time)
 	atomic_set(&disp->clkrate_change_pending, 1);
 
 	return 0;
+}
+
+int dsi_display_get_panel_scan_line(void *display, u16 *scan_line, ktime_t *scan_line_ts)
+{
+	struct dsi_display *dsi_display = (struct dsi_display *)display;
+	u8 scan_line_tx_buffer[] = {0x6, 0x1, 0x0, 0xa, 0x0, 0x0, 0x1, 0x45};
+	u8 rx_buffer[2];
+	int rx_len, rc = 0;
+	ktime_t ts = 0;
+
+	if (!dsi_display || !scan_line || !scan_line_ts)
+		return -EINVAL;
+
+	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
+	rx_len = dsi_display_cmd_receive(dsi_display, scan_line_tx_buffer,
+			ARRAY_SIZE(scan_line_tx_buffer), rx_buffer, ARRAY_SIZE(rx_buffer), &ts);
+	if (rx_len <= 0) {
+		rc = -EINVAL;
+		goto end;
+	}
+
+	*scan_line = (rx_buffer[0] << 8) | rx_buffer[1];
+	*scan_line_ts = ts;
+
+end:
+	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT, rx_len, rx_buffer[0], rx_buffer[1],
+			ktime_us_delta(ktime_get(), ts));
+	return rc;
 }
 
 static bool dsi_display_match_timings(const struct dsi_display_mode *mode1,

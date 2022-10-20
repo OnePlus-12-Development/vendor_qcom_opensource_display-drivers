@@ -253,6 +253,7 @@ struct dsi_ctrl_interrupts {
  *				which command transfer is successful.
  * @cmd_engine_refcount: Reference count enforcing single instance of cmd engine
  * @pending_cmd_flags: Flags associated with command that is currently being txed or pending.
+ * @cmd_success_ts:             Time stamp of when command transfer is successful in nano-seconds.
  */
 struct dsi_ctrl {
 	struct platform_device *pdev;
@@ -321,6 +322,7 @@ struct dsi_ctrl {
 	u32 cmd_success_frame;
 	u32 cmd_engine_refcount;
 	u32 pending_cmd_flags;
+	ktime_t cmd_success_ts;
 };
 
 /**

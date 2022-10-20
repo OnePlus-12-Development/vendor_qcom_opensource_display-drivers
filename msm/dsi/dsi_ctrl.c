@@ -2855,6 +2855,8 @@ static irqreturn_t dsi_ctrl_isr(int irq, void *ptr)
 					dsi_ctrl->cmd_success_line,
 					dsi_ctrl->cmd_success_frame);
 		}
+
+		dsi_ctrl->cmd_success_ts =  ktime_get();
 		atomic_set(&dsi_ctrl->dma_irq_trig, 1);
 		dsi_ctrl_disable_status_interrupt(dsi_ctrl,
 					DSI_SINT_CMD_MODE_DMA_DONE);
@@ -3501,6 +3503,7 @@ int dsi_ctrl_cmd_transfer(struct dsi_ctrl *dsi_ctrl, struct dsi_cmd_desc *cmd)
 					rc);
 	}
 
+	cmd->ts = dsi_ctrl->cmd_success_ts;
 	dsi_ctrl_update_state(dsi_ctrl, DSI_CTRL_OP_CMD_TX, 0x0);
 
 	mutex_unlock(&dsi_ctrl->ctrl_lock);
