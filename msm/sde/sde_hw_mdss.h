@@ -503,11 +503,27 @@ enum sde_sys_cache_state {
  * WB_USAGE_WFD: WB connector used for WFD
  * WB_USAGE_CWB: WB connector used for concurrent writeback
  * WB_USAGE_OFFLINE_WB: WB connector used for 2-pass composition
+ * WB_USAGE_ROT: WB connector used for image rotation for 2 pass composition
  */
 enum sde_wb_usage_type {
 	WB_USAGE_WFD,
 	WB_USAGE_CWB,
 	WB_USAGE_OFFLINE_WB,
+	WB_USAGE_ROT,
+};
+
+/**
+ * enum sde_wb_rot_type: Type of rotation use case of the WB connector
+ * WB_ROT_NONE : WB Rotation not in use
+ * WB_ROT_SINGLE: WB Rotation used in single job mode for full image rotation
+ * WB_ROT_JOB1: WB Rotation used for rotating half image as first-job
+ * WB_ROT_JOB2: WB Rotation used for rotating half image as second-job
+ */
+enum sde_wb_rot_type {
+	WB_ROT_NONE,
+	WB_ROT_SINGLE,
+	WB_ROT_JOB1,
+	WB_ROT_JOB2,
 };
 
 /** struct sde_format - defines the format configuration which

@@ -31,6 +31,13 @@
 	((SDE_FORMAT_IS_UBWC(fmt) || SDE_FORMAT_IS_YUV(fmt)) ? wb_cfg->sblk->maxlinewidth : \
 	wb_cfg->sblk->maxlinewidth_linear)
 
+/* a5x mini-tile width and height */
+#define MINI_TILE_W 4
+#define MINI_TILE_H 4
+
+#define SDE_WB_ROT_MAX_SRCW 4096
+#define SDE_WB_ROT_MAX_SRCH 4096
+
 static const u32 cwb_irq_tbl[PINGPONG_MAX] = {SDE_NONE, INTR_IDX_PP1_OVFL,
 	INTR_IDX_PP2_OVFL, INTR_IDX_PP3_OVFL, INTR_IDX_PP4_OVFL,
 	INTR_IDX_PP5_OVFL, SDE_NONE, SDE_NONE};
@@ -94,8 +101,7 @@ static void sde_encoder_phys_wb_set_ot_limit(struct sde_encoder_phys *phys_enc)
 	ot_params.num = hw_wb->idx - WB_0;
 	ot_params.width = wb_enc->wb_roi.w;
 	ot_params.height = wb_enc->wb_roi.h;
-	ot_params.is_wfd = ((phys_enc->in_clone_mode) || (usage_type == WB_USAGE_OFFLINE_WB)) ?
-					false : true;
+	ot_params.is_wfd = (usage_type == WB_USAGE_WFD);
 	ot_params.frame_rate = drm_mode_vrefresh(&phys_enc->cached_mode);
 	ot_params.vbif_idx = hw_wb->caps->vbif_idx;
 	ot_params.clk_ctrl = hw_wb->caps->clk_ctrl;
@@ -146,7 +152,7 @@ static void sde_encoder_phys_wb_set_qos_remap(struct sde_encoder_phys *phys_enc)
 	qos_params.num = hw_wb->idx - WB_0;
 	if (phys_enc->in_clone_mode)
 		qos_params.client_type = VBIF_CWB_CLIENT;
-	else if (usage_type == WB_USAGE_OFFLINE_WB)
+	else if (usage_type == WB_USAGE_OFFLINE_WB || usage_type == WB_USAGE_ROT)
 		qos_params.client_type = VBIF_OFFLINE_WB_CLIENT;
 	else
 		qos_params.client_type = VBIF_NRT_CLIENT;
@@ -199,13 +205,19 @@ static void sde_encoder_phys_wb_set_qos(struct sde_encoder_phys *phys_enc)
 	}
 
 	qos_cfg.danger_safe_en = true;
+	if (usage_type == WB_USAGE_ROT) {
+		qos_cfg.danger_safe_en = false;
+		qos_cfg.qos_mode = SDE_WB_QOS_MODE_DYNAMIC;
+		qos_cfg.bytes_per_clk = sde_connector_get_property(conn_state,
+				CONNECTOR_PROP_WB_ROT_BYTES_PER_CLK);
+	}
 
 	if (phys_enc->in_clone_mode)
 		lut_index = (SDE_FORMAT_IS_TILE(wb_enc->wb_fmt)
 				|| SDE_FORMAT_IS_UBWC(wb_enc->wb_fmt)) ?
 					SDE_QOS_LUT_USAGE_CWB_TILE : SDE_QOS_LUT_USAGE_CWB;
 	else
-		lut_index = (usage_type == WB_USAGE_OFFLINE_WB) ?
+		lut_index = (usage_type == WB_USAGE_OFFLINE_WB || usage_type == WB_USAGE_ROT) ?
 					SDE_QOS_LUT_USAGE_OFFLINE_WB : SDE_QOS_LUT_USAGE_NRT;
 
 	creq_index = lut_index * SDE_CREQ_LUT_TYPE_MAX;
@@ -336,9 +348,11 @@ static void _sde_enc_phys_wb_get_out_resolution(struct drm_crtc_state *crtc_stat
 	const struct drm_display_mode *mode = &crtc_state->mode;
 	struct sde_io_res ds_res = {0, }, dnsc_blur_res = {0, };
 	u32 ds_tap_pt = sde_crtc_get_property(cstate, CRTC_PROP_CAPTURE_OUTPUT);
+	enum sde_wb_rot_type rotation_type;
 
 	sde_crtc_get_ds_io_res(crtc_state, &ds_res);
 	sde_connector_get_dnsc_blur_io_res(conn_state, &dnsc_blur_res);
+	rotation_type = sde_connector_get_property(conn_state, CONNECTOR_PROP_WB_ROT_TYPE);
 
 	if (dnsc_blur_res.enabled) {
 		*out_width = dnsc_blur_res.dst_w;
@@ -354,10 +368,13 @@ static void _sde_enc_phys_wb_get_out_resolution(struct drm_crtc_state *crtc_stat
 			*out_width = mode->hdisplay;
 			*out_height = mode->vdisplay;
 		}
-	}  else {
+	} else {
 		*out_width = mode->hdisplay;
 		*out_height = mode->vdisplay;
 	}
+
+	if (rotation_type != WB_ROT_NONE)
+		swap(*out_width, *out_height);
 }
 
 static void _sde_encoder_phys_wb_setup_cdp(struct sde_encoder_phys *phys_enc,
@@ -469,9 +486,10 @@ static void sde_encoder_phys_wb_setup_fb(struct sde_encoder_phys *phys_enc,
 	struct sde_hw_wb *hw_wb;
 	struct sde_hw_wb_cfg *wb_cfg;
 	const struct msm_format *format;
-	int ret;
+	enum sde_wb_rot_type rotation_type;
 	struct msm_gem_address_space *aspace;
 	u32 fb_mode;
+	int ret;
 
 	if (!phys_enc || !phys_enc->sde_kms || !phys_enc->sde_kms->catalog ||
 			!phys_enc->connector) {
@@ -513,6 +531,17 @@ static void sde_encoder_phys_wb_setup_fb(struct sde_encoder_phys *phys_enc,
 		SDE_DEBUG("[enc:%d wb:%d] invalid fb fmt\n", DRMID(phys_enc->parent), WBID(wb_enc));
 		return;
 	}
+
+	rotation_type = sde_connector_get_property(phys_enc->connector->state,
+			CONNECTOR_PROP_WB_ROT_TYPE);
+	wb_cfg->rotate_90 = (rotation_type != WB_ROT_NONE);
+
+	SDE_DEBUG("[enc:%d wb:%d] conn:%d rotation_type:%d format %4.4s and modifier 0x%llX\n",
+			DRMID(phys_enc->parent), WBID(wb_enc), DRMID(phys_enc->connector),
+			rotation_type, (char *)&format->pixel_format, fb->modifier);
+
+	SDE_EVT32(DRMID(phys_enc->parent), WBID(wb_enc), rotation_type, out_width, out_height,
+			fb->width, fb->height);
 
 	wb_cfg->dest.format = sde_get_sde_format_ext(format->pixel_format, fb->modifier);
 	if (!wb_cfg->dest.format) {
@@ -803,13 +832,16 @@ static int _sde_enc_phys_wb_validate_dnsc_blur_ds(struct drm_crtc_state *crtc_st
 	struct sde_crtc_state *cstate = to_sde_crtc_state(crtc_state);
 	const struct drm_display_mode *mode = &crtc_state->mode;
 	struct sde_io_res ds_res = {0, }, dnsc_blur_res = {0, };
+	enum sde_wb_rot_type rotation_type;
 	u32 ds_tap_pt = sde_crtc_get_property(cstate, CRTC_PROP_CAPTURE_OUTPUT);
 
 	sde_crtc_get_ds_io_res(crtc_state, &ds_res);
 	sde_connector_get_dnsc_blur_io_res(conn_state, &dnsc_blur_res);
+	rotation_type = sde_connector_get_property(conn_state, CONNECTOR_PROP_WB_ROT_TYPE);
 
 	/* wb_roi should match with mode w/h if none of these features are enabled */
-	if ((!ds_res.enabled && !dnsc_blur_res.enabled && !cstate->cwb_enc_mask)
+	if ((rotation_type == WB_ROT_NONE) &&
+			(!ds_res.enabled && !dnsc_blur_res.enabled && !cstate->cwb_enc_mask)
 			&& ((wb_roi->w && (wb_roi->w != mode->hdisplay))
 				|| (wb_roi->h && (wb_roi->h != mode->vdisplay)))) {
 		SDE_ERROR("invalid wb-roi {%u,%u,%u,%u} mode:%ux%u\n",
@@ -849,8 +881,16 @@ static int _sde_enc_phys_wb_validate_dnsc_blur_ds(struct drm_crtc_state *crtc_st
 	} else if (SDE_FORMAT_IS_YUV(fmt)) {
 		SDE_ERROR("YUV output not supported with dnsc_blur\n");
 		return -EINVAL;
-	} else if ((wb_roi->w && (wb_roi->w != dnsc_blur_res.dst_w)) ||
-			(wb_roi->h && (wb_roi->h != dnsc_blur_res.dst_h))) {
+	} else if ((rotation_type != WB_ROT_NONE) &&
+			((wb_roi->w && (wb_roi->w != dnsc_blur_res.dst_h)) ||
+			 (wb_roi->h && (wb_roi->h != dnsc_blur_res.dst_w)))) {
+		SDE_ERROR("invalid WB ROI for dnsc and rotate, roi:{%d,%d,%d,%d}, dnsc dst:%ux%u\n",
+				wb_roi->x, wb_roi->y, wb_roi->w, wb_roi->h,
+				dnsc_blur_res.dst_w, dnsc_blur_res.dst_h);
+		return -EINVAL;
+	} else if ((rotation_type == WB_ROT_NONE) &&
+			((wb_roi->w && (wb_roi->w != dnsc_blur_res.dst_w)) ||
+			 (wb_roi->h && (wb_roi->h != dnsc_blur_res.dst_h)))) {
 		SDE_ERROR("invalid WB ROI with dnsc_blur, roi:{%d,%d,%d,%d}, dnsc_blur dst:%ux%u\n",
 				wb_roi->x, wb_roi->y, wb_roi->w, wb_roi->h,
 				dnsc_blur_res.dst_w, dnsc_blur_res.dst_h);
@@ -966,6 +1006,138 @@ static int _sde_enc_phys_wb_validate_cwb(struct sde_encoder_phys *phys_enc,
 	return ret;
 }
 
+static int _sde_encoder_phys_wb_validate_rotation(struct sde_encoder_phys *phys_enc,
+		struct drm_crtc_state *crtc_state, struct drm_connector_state *conn_state)
+{
+	enum sde_wb_rot_type rotation_type;
+	int ret = 0;
+	u32 src_w, src_h;
+	u32 bytes_per_clk;
+	struct sde_rect wb_src, wb_roi = {0,};
+	struct sde_io_res dnsc_res = {0,};
+	const struct sde_rect *crtc_roi = NULL;
+	struct drm_display_mode *mode;
+	enum sde_wb_usage_type usage_type;
+	struct sde_encoder_phys_wb *wb_enc = to_sde_encoder_phys_wb(phys_enc);
+
+	rotation_type = sde_connector_get_property(conn_state, CONNECTOR_PROP_WB_ROT_TYPE);
+	if (rotation_type == WB_ROT_NONE)
+		return ret;
+
+	usage_type = sde_connector_get_property(conn_state, CONNECTOR_PROP_WB_USAGE_TYPE);
+	if (usage_type != WB_USAGE_ROT) {
+		SDE_ERROR("[enc:%d wb:%d] invalid WB usage_ype:%d for rotation_type:%d\n",
+				DRMID(phys_enc->parent), WBID(wb_enc), usage_type, rotation_type);
+		return -EINVAL;
+	}
+
+	bytes_per_clk = sde_connector_get_property(conn_state, CONNECTOR_PROP_WB_ROT_BYTES_PER_CLK);
+	if (!bytes_per_clk) {
+		SDE_ERROR("[enc:%d wb:%d] WB output bytes per XO clock is must for rotation\n",
+				DRMID(phys_enc->parent), WBID(wb_enc));
+		return -EINVAL;
+	}
+
+	ret = sde_wb_connector_state_get_output_roi(conn_state, &wb_roi);
+	if (ret) {
+		SDE_ERROR("[enc:%d wb:%d] failed to get WB output roi, ret:%d\n",
+				DRMID(phys_enc->parent), WBID(wb_enc), ret);
+		return ret;
+	}
+
+	sde_crtc_get_crtc_roi(crtc_state, &crtc_roi);
+	if (!crtc_roi) {
+		SDE_ERROR("[enc:%d wb:%d] could not get crtc roi\n",
+				DRMID(phys_enc->parent), WBID(wb_enc));
+		return -EINVAL;
+	} else if (!sde_kms_rect_is_null(crtc_roi)) {
+		SDE_ERROR("[enc:%d wb:%d] not supporting pu scenario on wb\n",
+				DRMID(phys_enc->parent), WBID(wb_enc));
+		return -EINVAL;
+	}
+
+	mode = &crtc_state->mode;
+	sde_crtc_get_resolution(crtc_state->crtc, crtc_state, mode, &src_w, &src_h);
+	if (!src_w || !src_h) {
+		SDE_ERROR("[enc:%d wb:%d] invalid wb input dimensions src_w:%d src_h:%d\n",
+				 DRMID(phys_enc->parent), WBID(wb_enc), src_w, src_h);
+		return -EINVAL;
+	}
+
+	sde_connector_get_dnsc_blur_io_res(conn_state, &dnsc_res);
+	wb_src.w = dnsc_res.enabled ? dnsc_res.dst_w : src_w;
+	wb_src.h = dnsc_res.enabled ? dnsc_res.dst_h : src_h;
+
+	SDE_DEBUG("[enc:%d wb:%d] wb_src=[%dx%d] dnsc_dst=[%dx%d] wb_roi=[%dx%d]\n",
+			DRMID(phys_enc->parent), WBID(wb_enc), wb_src.w, wb_src.h,
+			dnsc_res.dst_w, dnsc_res.dst_h, wb_roi.w, wb_roi.h);
+
+	if (((wb_src.w != wb_roi.h) || (wb_src.h != wb_roi.w))) {
+		SDE_ERROR("[enc:%d wb:%d] invalid dimension for rotation src:%dx%d vs out:%dx%d\n",
+				 DRMID(phys_enc->parent), WBID(wb_enc), wb_src.w, wb_src.h,
+				 wb_roi.w, wb_roi.h);
+		return -EINVAL;
+	} else if ((wb_roi.x % MINI_TILE_W) || (wb_roi.y % MINI_TILE_H)) {
+		SDE_ERROR("[enc:%d wb:%d] unaligned x,y offsets for rotation:%d x:%d y:%d\n",
+				 DRMID(phys_enc->parent), WBID(wb_enc), rotation_type,
+				 wb_roi.x, wb_roi.y);
+		return -EINVAL;
+	} else if ((rotation_type == WB_ROT_JOB1) && (wb_roi.h % MINI_TILE_H)) {
+		SDE_ERROR("[enc:%d wb:%d] job1 rotation height:%d is not tile aligned\n",
+				 DRMID(phys_enc->parent), WBID(wb_enc), wb_roi.h);
+		return -EINVAL;
+	} else if (wb_src.w > SDE_WB_ROT_MAX_SRCW || wb_src.h > SDE_WB_ROT_MAX_SRCH) {
+	       SDE_ERROR("[enc:%d wb:%d] rotate limit exceeded srcw:[%d vs %d], srch:[%d vs %d]\n",
+			       DRMID(phys_enc->parent), WBID(wb_enc), wb_src.w, SDE_WB_ROT_MAX_SRCW,
+			       wb_src.h, SDE_WB_ROT_MAX_SRCH);
+	       return -EINVAL;
+	}
+
+	return ret;
+}
+
+static int _sde_encoder_phys_wb_validate_output_fmt(struct sde_encoder_phys *phys_enc,
+		struct drm_framebuffer *fb, enum sde_wb_rot_type rotation_type)
+{
+	int ret = 0;
+	struct sde_encoder_phys_wb *wb_enc = to_sde_encoder_phys_wb(phys_enc);
+	const struct sde_format *fmt;
+	const struct sde_format_extended *format_list;
+	struct sde_hw_wb *hw_wb = wb_enc->hw_wb;
+	const struct sde_wb_cfg *wb_cfg = hw_wb->caps;
+	struct sde_kms *sde_kms = phys_enc->sde_kms;
+
+	fmt = sde_get_sde_format_ext(fb->format->format, fb->modifier);
+	if (!fmt) {
+		SDE_ERROR("[enc:%d wb:%d] invalid output pixel format:0x%x mod:0x%x\n",
+				DRMID(phys_enc->parent), WBID(wb_enc),
+				fb->format->format, fb->modifier);
+		return -EINVAL;
+	}
+
+	/* find if sde format is listed as supported format on WB */
+	format_list = (rotation_type != WB_ROT_NONE) ?
+			wb_cfg->rot_format_list : wb_cfg->format_list;
+
+	ret = sde_format_validate_fmt(&sde_kms->base, fmt, format_list);
+	if (ret) {
+		SDE_ERROR("[enc:%d wb:%d] unsupported format for wb rotate:%d fmt:0x%x mod:0x%x\n",
+				DRMID(phys_enc->parent), WBID(wb_enc), rotation_type,
+				fb->format->format, fb->modifier);
+		return ret;
+	} else if (fmt->chroma_sample == SDE_CHROMA_H2V1 || fmt->chroma_sample == SDE_CHROMA_H1V2) {
+		SDE_ERROR("[enc:%d wb:%d] invalid chroma sample type in output format:%x\n",
+			DRMID(phys_enc->parent), WBID(wb_enc), fmt->base.pixel_format);
+		return -EINVAL;
+	} else if (SDE_FORMAT_IS_UBWC(fmt) && !(wb_cfg->features & BIT(SDE_WB_UBWC))) {
+		SDE_ERROR("[enc:%d wb:%d] invalid output format:%x\n",
+				DRMID(phys_enc->parent), WBID(wb_enc), fmt->base.pixel_format);
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
 /**
  * sde_encoder_phys_wb_atomic_check - verify and fixup given atomic states
  * @phys_enc:	Pointer to physical encoder
@@ -987,6 +1159,7 @@ static int sde_encoder_phys_wb_atomic_check(struct sde_encoder_phys *phys_enc,
 	const struct drm_display_mode *mode = &crtc_state->mode;
 	int rc;
 	bool clone_mode_curr = false;
+	enum sde_wb_rot_type rotation_type;
 
 	SDE_DEBUG("[enc:%d wb:%d] atomic_check:\"%s\",%d,%d]\n", DRMID(phys_enc->parent),
 			WBID(wb_enc), mode->name, mode->hdisplay, mode->vdisplay);
@@ -1028,28 +1201,27 @@ static int sde_encoder_phys_wb_atomic_check(struct sde_encoder_phys *phys_enc,
 		return -EINVAL;
 	}
 
+	rotation_type = sde_connector_get_property(conn_state, CONNECTOR_PROP_WB_ROT_TYPE);
+
 	fmt = sde_get_sde_format_ext(fb->format->format, fb->modifier);
 	if (!fmt) {
-		SDE_ERROR("[enc:%d wb:%d] unsupported output pixel format:%x\n",
-				DRMID(phys_enc->parent), WBID(wb_enc), fb->format->format);
+		SDE_ERROR("[enc:%d wb:%d] invalid output pixel format:0x%x mod:0x%x\n",
+				DRMID(phys_enc->parent), WBID(wb_enc),
+				fb->format->format, fb->modifier);
 		return -EINVAL;
 	}
 
-	SDE_DEBUG("[enc:%d enc:%d] fb_id:%u, wxh:%ux%u, fb_fmt:%x,%llx, roi:{%d,%d,%d,%d}\n",
+	SDE_DEBUG("[enc:%d wb:%d] fb_id:%u, wxh:%ux%u, fb_fmt:%x,%llx, roi:{%d,%d,%d,%d}, rot:%d\n",
 		DRMID(phys_enc->parent), WBID(wb_enc), fb->base.id, fb->width, fb->height,
-		fb->format->format, fb->modifier, wb_roi.x, wb_roi.y, wb_roi.w, wb_roi.h);
+		fb->format->format, fb->modifier, wb_roi.x, wb_roi.y, wb_roi.w, wb_roi.h,
+		rotation_type);
 
-	if (fmt->chroma_sample == SDE_CHROMA_H2V1 ||
-		fmt->chroma_sample == SDE_CHROMA_H1V2) {
-		SDE_ERROR("[enc:%d wb:%d] invalid chroma sample type in output format:%x\n",
-			DRMID(phys_enc->parent), WBID(wb_enc), fmt->base.pixel_format);
-		return -EINVAL;
-	}
-
-	if (SDE_FORMAT_IS_UBWC(fmt) && !(wb_cfg->features & BIT(SDE_WB_UBWC))) {
-		SDE_ERROR("[enc:%d wb:%d] invalid output format:%x\n",
-				DRMID(phys_enc->parent), WBID(wb_enc), fmt->base.pixel_format);
-		return -EINVAL;
+        rc = _sde_encoder_phys_wb_validate_output_fmt(phys_enc, fb, rotation_type);
+	if (rc) {
+		SDE_ERROR("[enc:%d wb:%d] output fmt validation failed fb:%u fmt:0x%x mod:0x%x\n",
+				 DRMID(phys_enc->parent), WBID(wb_enc), fb->base.id,
+				 fb->format->format, fb->modifier, rotation_type);
+		return rc;
 	}
 
 	if (SDE_FORMAT_IS_YUV(fmt) != !!phys_enc->hw_cdm)
@@ -1072,6 +1244,15 @@ static int sde_encoder_phys_wb_atomic_check(struct sde_encoder_phys *phys_enc,
 		return rc;
 	}
 
+	if (rotation_type != WB_ROT_NONE) {
+		rc = _sde_encoder_phys_wb_validate_rotation(phys_enc, crtc_state, conn_state);
+		if (rc) {
+			SDE_ERROR("[enc:%d wb:%d] failed in WB rotation validation %d\n",
+					DRMID(phys_enc->parent), WBID(wb_enc), rc);
+			return rc;
+		}
+	}
+
 	_sde_enc_phys_wb_get_out_resolution(crtc_state, conn_state, &out_width, &out_height);
 	if (!wb_roi.w || !wb_roi.h) {
 		wb_roi.x = 0;
@@ -1080,17 +1261,17 @@ static int sde_encoder_phys_wb_atomic_check(struct sde_encoder_phys *phys_enc,
 		wb_roi.h = out_height;
 	}
 
-	if ((wb_roi.x + wb_roi.w > fb->width) || (wb_roi.x + wb_roi.w > out_width)) {
+	if ((wb_roi.x + wb_roi.w > fb->width) || (wb_roi.w > out_width)) {
 		SDE_ERROR("[enc:%d wb:%d] invalid roi x:%d, w:%d, fb_w:%d, mode_w:%d, out_w:%d\n",
 				DRMID(phys_enc->parent), WBID(wb_enc), wb_roi.x, wb_roi.w,
 				fb->width, mode->hdisplay, out_width);
 		return -EINVAL;
-	} else if ((wb_roi.y + wb_roi.h > fb->height) || (wb_roi.y + wb_roi.h > out_height)) {
+	} else if ((wb_roi.y + wb_roi.h > fb->height) || (wb_roi.h > out_height)) {
 		SDE_ERROR("[enc:%d wb:%d] invalid roi y:%d, h:%d, fb_h:%d, mode_h%d, out_h:%d\n",
 				DRMID(phys_enc->parent), WBID(wb_enc), wb_roi.y, wb_roi.h,
 				fb->height, mode->vdisplay, out_height);
 		return -EINVAL;
-	} else if ((out_width > mode->hdisplay) || (out_height > mode->vdisplay)) {
+	} else if ((rotation_type == WB_ROT_NONE) && ((out_width > mode->hdisplay) || (out_height > mode->vdisplay))) {
 		SDE_ERROR("[enc:%d wb:%d] invalid o w/h o_w:%d, mode_w:%d, o_h:%d, mode_h:%d\n",
 				DRMID(phys_enc->parent), WBID(wb_enc), out_width, mode->hdisplay,
 				out_height, mode->vdisplay);

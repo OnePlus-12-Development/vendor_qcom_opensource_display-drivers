@@ -22,6 +22,7 @@ struct sde_hw_wb_cfg {
 	struct sde_rect roi;
 	struct sde_rect crop;
 	bool is_secure;
+	bool rotate_90;
 };
 
 /**
@@ -49,16 +50,30 @@ struct sde_hw_wb_cdp_cfg {
 };
 
 /**
+ * enum sde_hw_wb_qos_mode: enumeration of available QOS modes for WB
+ * @SDE_WB_QOS_MODE_STATIC: static qos mode same as existing NRT qos mode
+ * @SDE_WB_QOS_MODE_DYNAMIC: new qos mode to support rotation for real time
+ */
+enum sde_hw_wb_qos_mode {
+	SDE_WB_QOS_MODE_STATIC,
+	SDE_WB_QOS_MODE_DYNAMIC,
+};
+
+/**
  * struct sde_hw_wb_qos_cfg : Writeback pipe QoS configuration
  * @danger_lut: LUT for generate danger level based on fill level
  * @safe_lut: LUT for generate safe level based on fill level
  * @creq_lut: LUT for generate creq level based on fill level
+ * @bytes_per_clk: WB output bytes per XO clock value used in rotation
+ * @qos_mode: enum value mapped for selecting WB QOS mode
  * @danger_safe_en: enable danger safe generation
  */
 struct sde_hw_wb_qos_cfg {
 	u32 danger_lut;
 	u32 safe_lut;
 	u64 creq_lut;
+	u32 bytes_per_clk;
+	enum sde_hw_wb_qos_mode qos_mode;
 	bool danger_safe_en;
 };
 

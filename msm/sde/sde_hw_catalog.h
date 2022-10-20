@@ -637,6 +637,7 @@ enum {
  * @SDE_WB_DCWB_CTRL        Separate DCWB control is available for configuring
  * @SDE_WB_CWB_DITHER_CTRL  CWB dither is available for configuring
  * @SDE_WB_PROG_LINE        Writeback block supports programmable line ptr
+ * @SDE_WB_LINEAR_ROTATION  Writeback block supports line mode image rotation
  * @SDE_WB_MAX              maximum value
  */
 enum {
@@ -661,6 +662,7 @@ enum {
 	SDE_WB_DCWB_CTRL,
 	SDE_WB_CWB_DITHER_CTRL,
 	SDE_WB_PROG_LINE,
+	SDE_WB_LINEAR_ROTATION,
 	SDE_WB_MAX
 };
 
@@ -708,7 +710,7 @@ enum {
  * @SDE_FEATURE_CWB_DITHER     CWB dither is supported
  * @SDE_FEATURE_DEDICATED_CWB  Dedicated-CWB supported
  * @SDE_FEATURE_DUAL_DEDICATED_CWB   Dual Dedicated-CWB supported
- * @SDE_FEATURE_IDLE_PC        Idle Power Collapse supported
+ * @SDE_FEATURE_WB_ROTATION    Support for image rotation through WB block
  * @SDE_FEATURE_3D_MERGE_RESET 3D merge reset supported
  * @SDE_FEATURE_DECIMATION     Decimation supported
  * @SDE_FEATURE_COMBINED_ALPHA Combined Alpha supported
@@ -751,6 +753,7 @@ enum sde_mdss_features {
 	SDE_FEATURE_CWB_DITHER,
 	SDE_FEATURE_DEDICATED_CWB,
 	SDE_FEATURE_DUAL_DEDICATED_CWB,
+	SDE_FEATURE_WB_ROTATION,
 	SDE_FEATURE_IDLE_PC,
 	SDE_FEATURE_3D_MERGE_RESET,
 	SDE_FEATURE_DECIMATION,
@@ -1484,7 +1487,8 @@ struct sde_intf_cfg  {
  * @base               register offset of this block
  * @features           bit mask identifying sub-blocks/features
  * @sblk               sub-block information
- * @format_list: Pointer to list of supported formats
+ * @format_list:       Pointer to list of supported output formats
+ * @rot_format_list:   Pointer to list of supported output formats in WB rotation
  * @vbif_idx           vbif identifier
  * @xin_id             client interface identifier
  * @clk_ctrl           clock control identifier
@@ -1493,6 +1497,7 @@ struct sde_wb_cfg {
 	SDE_HW_BLK_INFO;
 	const struct sde_wb_sub_blocks *sblk;
 	const struct sde_format_extended *format_list;
+	const struct sde_format_extended *rot_format_list;
 	u32 vbif_idx;
 	u32 xin_id;
 	enum sde_clk_ctrl_type clk_ctrl;
@@ -1864,6 +1869,7 @@ struct sde_perf_cfg {
  * @dma_formats         supported formats for dma pipe
  * @vig_formats         supported formats for vig pipe
  * @wb_formats          supported formats for wb
+ * @wb_rot_formats      supported output formats for wb rotation operation
  * @virt_vig_formats    supported formats for virtual vig pipe
  * @inline_rot_formats  supported formats for inline rotation
  * @inline_rot_restricted_formats       restricted formats for inline rotation
@@ -1982,6 +1988,7 @@ struct sde_mdss_cfg {
 	struct sde_format_extended *dma_formats;
 	struct sde_format_extended *vig_formats;
 	struct sde_format_extended *wb_formats;
+	struct sde_format_extended *wb_rot_formats;
 	struct sde_format_extended *virt_vig_formats;
 	struct sde_format_extended *inline_rot_formats;
 	struct sde_format_extended *inline_rot_restricted_formats;

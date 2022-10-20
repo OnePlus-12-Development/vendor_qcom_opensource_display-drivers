@@ -23,6 +23,7 @@
 #define WB_DST3_ADDR			0x018
 #define WB_DST_YSTRIDE0			0x01C
 #define WB_DST_YSTRIDE1			0x020
+#define WB_TS_WR_CLIENT	                0x040
 #define WB_DST_WRITE_CONFIG		0x048
 #define WB_OUT_SIZE			0x074
 #define WB_ALPHA_X_VALUE		0x078
@@ -200,6 +201,13 @@ static void sde_hw_wb_setup_format(struct sde_hw_wb *ctx,
 	if (SDE_FORMAT_IS_DX(fmt))
 		dst_format |= BIT(21);
 
+	/* Set A5x tile bit for uncompressed tile formats also */
+	if (SDE_FORMAT_IS_TILE(fmt))
+		dst_format |= BIT(31);
+
+	if (data->rotate_90)
+		dst_format |= BIT(11);
+
 	pattern = (fmt->element[3] << 24) |
 			(fmt->element[2] << 16) |
 			(fmt->element[1] << 8)  |
@@ -299,6 +307,11 @@ static void sde_hw_wb_setup_qos_lut(struct sde_hw_wb *ctx,
 
 	if (cfg->danger_safe_en)
 		qos_ctrl |= WB_QOS_CTRL_DANGER_SAFE_EN;
+
+	if (test_bit(SDE_WB_LINEAR_ROTATION, &ctx->caps->features)) {
+		SDE_REG_WRITE(c, WB_TS_WR_CLIENT, cfg->bytes_per_clk & 0xFF);
+		qos_ctrl |= (cfg->qos_mode << 1);
+	}
 
 	SDE_REG_WRITE(c, WB_QOS_CTRL, qos_ctrl);
 }
