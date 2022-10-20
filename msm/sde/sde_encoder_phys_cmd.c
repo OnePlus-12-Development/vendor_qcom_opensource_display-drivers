@@ -202,6 +202,80 @@ static void sde_encoder_override_tearcheck_rd_ptr(struct sde_encoder_phys *phys_
 		info[1].rd_ptr_line_count, info[1].rd_ptr_frame_count, info[1].wr_ptr_line_count);
 }
 
+void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc)
+{
+	struct sde_hw_intf *hw_intf;
+	struct sde_hw_pp_vsync_info info[MAX_CHANNELS_PER_ENC] = {{0}};
+	struct drm_display_mode *mode;
+	struct sde_encoder_phys_cmd *cmd_enc;
+	struct sde_encoder_virt *sde_enc;
+	struct sde_connector *c_conn;
+	ktime_t nominal_period_ns, nominal_line_time_ns, panel_scan_line_ts_ns = 0;
+	ktime_t qsync_period_ns, time_into_frame_ns;
+	u32 qsync_timeout_lines, latency_margin_lines = 0, restored_rd_ptr_lines;
+	u16 panel_scan_line;
+	int rc;
+
+	if (!phys_enc || !phys_enc->connector) {
+		SDE_ERROR("invalid arguments\n");
+		return;
+	}
+
+	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
+	mode = &phys_enc->cached_mode;
+	hw_intf = phys_enc->hw_intf;
+	c_conn = to_sde_connector(phys_enc->connector);
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+
+	nominal_period_ns = mult_frac(1000000000, 1, drm_mode_vrefresh(mode));
+	qsync_period_ns = mult_frac(1000000000, 1, sde_enc->mode_info.qsync_min_fps);
+	nominal_line_time_ns = mult_frac(1, nominal_period_ns, mode->vtotal);
+	qsync_timeout_lines = mode->vtotal + cmd_enc->qsync_threshold_lines + 1;
+
+	/*
+	 * First read panel scan line value using a DCS command.
+	 * If the functionality is not supported or there is an error, defer trigger to
+	 * next TE by setting panel_scan_line to qsync_timeout_lines.
+	 */
+	if (c_conn->ops.get_panel_scan_line) {
+		rc = c_conn->ops.get_panel_scan_line(c_conn->display, &panel_scan_line,
+				&panel_scan_line_ts_ns);
+		if (rc || panel_scan_line >= qsync_timeout_lines) {
+			SDE_DEBUG_CMDENC(cmd_enc, "failed to get panel scan line, rc=%d\n", rc);
+			panel_scan_line = qsync_timeout_lines;
+		}
+	} else {
+		panel_scan_line = qsync_timeout_lines;
+	}
+
+	/* Compensate the latency from DCS scan line response*/
+	spin_lock(phys_enc->enc_spinlock);
+	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
+	time_into_frame_ns = ktime_sub(ktime_get(), phys_enc->last_vsync_timestamp);
+
+	if (panel_scan_line_ts_ns)
+		latency_margin_lines = mult_frac(1, ktime_sub(ktime_get(), panel_scan_line_ts_ns),
+				nominal_line_time_ns);
+
+	restored_rd_ptr_lines = panel_scan_line + latency_margin_lines;
+	if (restored_rd_ptr_lines >= qsync_timeout_lines)
+		restored_rd_ptr_lines = qsync_timeout_lines;
+
+	if (hw_intf && hw_intf->ops.override_tear_rd_ptr_val)
+		hw_intf->ops.override_tear_rd_ptr_val(hw_intf, restored_rd_ptr_lines);
+	spin_unlock(phys_enc->enc_spinlock);
+
+	SDE_EVT32(DRMID(phys_enc->parent), drm_mode_vrefresh(mode),
+			sde_enc->mode_info.qsync_min_fps,
+			mode->vtotal, panel_scan_line, qsync_timeout_lines, latency_margin_lines,
+			restored_rd_ptr_lines, info[0].rd_ptr_line_count - mode->vdisplay,
+			ktime_to_us(time_into_frame_ns));
+	SDE_DEBUG_CMDENC(cmd_enc, "scan_line:%u rest_rd_ptr:%u rd_ptr:%u frame_ns:%u\n",
+			panel_scan_line, restored_rd_ptr_lines,
+			info[0].rd_ptr_line_count - mode->vdisplay,
+			ktime_to_us(time_into_frame_ns));
+}
+
 static void _sde_encoder_phys_signal_frame_done(struct sde_encoder_phys *phys_enc)
 {
 	struct sde_encoder_phys_cmd *cmd_enc;
@@ -1374,7 +1448,7 @@ static void sde_encoder_phys_cmd_enable_helper(
 	if (sde_enc->idle_pc_restore) {
 		qsync_mode = sde_connector_get_qsync_mode(phys_enc->connector);
 		if (qsync_mode)
-			sde_encoder_override_tearcheck_rd_ptr(phys_enc);
+			sde_enc->restore_te_rd_ptr = true;
 	}
 
 	/*
@@ -1575,6 +1649,7 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 	struct sde_hw_tear_check tc_cfg = {0};
 	struct sde_encoder_phys_cmd *cmd_enc =
 			to_sde_encoder_phys_cmd(phys_enc);
+	struct sde_encoder_virt *sde_enc;
 	int ret = 0;
 	bool recovery_events;
 
@@ -1630,6 +1705,12 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 			phys_enc->hw_pp->ops.update_tearcheck(
 					phys_enc->hw_pp, &tc_cfg);
 		SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start);
+	}
+
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	if (sde_enc->restore_te_rd_ptr) {
+		sde_encoder_restore_tearcheck_rd_ptr(phys_enc);
+		sde_enc->restore_te_rd_ptr = false;
 	}
 
 	SDE_DEBUG_CMDENC(cmd_enc, "pp:%d pending_cnt %d\n",

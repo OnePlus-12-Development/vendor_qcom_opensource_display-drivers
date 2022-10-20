@@ -155,6 +155,8 @@ enum sde_enc_rc_states {
  * @misr_frame_count:		misr frame count before start capturing the data
  * @idle_pc_enabled:		indicate if idle power collapse is enabled
  *				currently. This can be controlled by user-mode
+ * @restore_te_rd_ptr:          flag to indicate that te read pointer value must
+ *                              be restored after idle power collapse
  * @rc_lock:			resource control mutex lock to protect
  *				virt encoder over various state changes
  * @rc_state:			resource controller state
@@ -242,6 +244,7 @@ struct sde_encoder_virt {
 	struct input_handler *input_handler;
 	bool vblank_enabled;
 	bool idle_pc_restore;
+	bool restore_te_rd_ptr;
 	enum frame_trigger_mode_type frame_trigger_mode;
 	bool dynamic_hdr_updated;
 

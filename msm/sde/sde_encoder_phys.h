@@ -786,6 +786,14 @@ void sde_encoder_helper_update_intf_cfg(
 		struct sde_encoder_phys *phys_enc);
 
 /**
+ * sde_encoder_restore_tearcheck_rd_ptr - restore interface rd_ptr configuration
+ *	This function reads the panel scan line value using a DCS command
+ *	and overrides the internal interface read pointer configuration.
+ * @phys_enc: Pointer to physical encoder structure
+ */
+void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc);
+
+/**
  * _sde_encoder_phys_is_dual_ctl - check if encoder needs dual ctl path.
  * @phys_enc: Pointer to physical encoder structure
  * @Return: true if dual ctl paths else false
