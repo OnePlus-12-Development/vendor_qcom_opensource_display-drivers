@@ -158,6 +158,7 @@
 #define SDE_UIDLE_VERSION_1_0_1		0x101
 #define SDE_UIDLE_VERSION_1_0_2		0x102
 #define SDE_UIDLE_VERSION_1_0_3		0x103
+#define SDE_UIDLE_VERSION_1_0_4		0x104
 
 #define IS_SDE_UIDLE_REV_100(rev) \
 	((rev) == SDE_UIDLE_VERSION_1_0_0)
@@ -167,6 +168,8 @@
 	((rev) == SDE_UIDLE_VERSION_1_0_2)
 #define IS_SDE_UIDLE_REV_103(rev) \
 	((rev) == SDE_UIDLE_VERSION_1_0_3)
+#define IS_SDE_UIDLE_REV_104(rev) \
+	((rev) == SDE_UIDLE_VERSION_1_0_4)
 
 #define SDE_UIDLE_MAJOR(rev)		((rev) >> 8)
 
@@ -693,10 +696,12 @@ enum {
 /**
  * uidle features
  * @SDE_UIDLE_QACTIVE_OVERRIDE    uidle sends qactive signal
+ * @SDE_UIDLE_WB_FAL_STATUS       wb contributes to fal status
  * @SDE_UIDLE_MAX                 maximum value
  */
 enum {
 	SDE_UIDLE_QACTIVE_OVERRIDE = 0x1,
+	SDE_UIDLE_WB_FAL_STATUS,
 	SDE_UIDLE_MAX
 };
 

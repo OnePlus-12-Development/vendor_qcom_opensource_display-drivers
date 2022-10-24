@@ -236,6 +236,9 @@ static void _sde_encoder_control_fal10_veto(struct drm_encoder *drm_enc, bool ve
 	if (!sde_kms || !sde_kms->hw_uidle || !sde_kms->hw_uidle->ops.uidle_fal10_override)
 		return;
 
+	if (test_bit(SDE_UIDLE_WB_FAL_STATUS, &sde_kms->catalog->uidle_cfg.features))
+		return;
+
 	/*
 	 * clone mode is the only scenario where we want to enable software override
 	 * of fal10 veto.
