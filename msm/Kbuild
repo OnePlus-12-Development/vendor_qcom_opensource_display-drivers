@@ -23,8 +23,13 @@ ifeq ($(CONFIG_ARCH_PARROT), y)
 endif
 
 ifeq ($(CONFIG_ARCH_PINEAPPLE), y)
+ifeq ($(CONFIG_ARCH_QTI_VM), y)
+    include $(DISPLAY_ROOT)/config/gki_pineappledisptui.conf
+    LINUX_INC += -include $(DISPLAY_ROOT)/config/gki_pineappledisptuiconf.h
+else
 	include $(DISPLAY_ROOT)/config/gki_pineappledisp.conf
 	LINUX_INC += -include $(DISPLAY_ROOT)/config/gki_pineappledispconf.h
+endif
 endif
 
 ifeq ($(CONFIG_ARCH_KALAMA), y)
