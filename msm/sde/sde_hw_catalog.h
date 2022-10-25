@@ -1615,6 +1615,7 @@ struct sde_vbif_qos_tbl {
  * @VBIF_LUTDMA_CLIENT: LUTDMA client
  * @VBIF_CNOC_CLIENT: HW fence client
  * @VBIF_OFFLINE_WB_CLIENT: Offline WB client used in 2-pass composition
+ * @VBIF_WB_ROT_CLIENT: WB Rotation client used in 2-pass composition
  * @VBIF_MAX_CLIENT: max number of clients
  */
 enum sde_vbif_client_type {
@@ -1624,6 +1625,7 @@ enum sde_vbif_client_type {
 	VBIF_LUTDMA_CLIENT,
 	VBIF_CNOC_CLIENT,
 	VBIF_OFFLINE_WB_CLIENT,
+	VBIF_WB_ROT_CLIENT,
 	VBIF_MAX_CLIENT
 };
 

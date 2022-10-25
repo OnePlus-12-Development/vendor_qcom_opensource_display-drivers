@@ -152,8 +152,10 @@ static void sde_encoder_phys_wb_set_qos_remap(struct sde_encoder_phys *phys_enc)
 	qos_params.num = hw_wb->idx - WB_0;
 	if (phys_enc->in_clone_mode)
 		qos_params.client_type = VBIF_CWB_CLIENT;
-	else if (usage_type == WB_USAGE_OFFLINE_WB || usage_type == WB_USAGE_ROT)
+	else if (usage_type == WB_USAGE_OFFLINE_WB)
 		qos_params.client_type = VBIF_OFFLINE_WB_CLIENT;
+	else if (usage_type == WB_USAGE_ROT)
+		qos_params.client_type = VBIF_WB_ROT_CLIENT;
 	else
 		qos_params.client_type = VBIF_NRT_CLIENT;
 
