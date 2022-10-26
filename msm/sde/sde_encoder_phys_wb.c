@@ -208,7 +208,6 @@ static void sde_encoder_phys_wb_set_qos(struct sde_encoder_phys *phys_enc)
 
 	qos_cfg.danger_safe_en = true;
 	if (usage_type == WB_USAGE_ROT) {
-		qos_cfg.danger_safe_en = false;
 		qos_cfg.qos_mode = SDE_WB_QOS_MODE_DYNAMIC;
 		qos_cfg.bytes_per_clk = sde_connector_get_property(conn_state,
 				CONNECTOR_PROP_WB_ROT_BYTES_PER_CLK);
@@ -218,8 +217,10 @@ static void sde_encoder_phys_wb_set_qos(struct sde_encoder_phys *phys_enc)
 		lut_index = (SDE_FORMAT_IS_TILE(wb_enc->wb_fmt)
 				|| SDE_FORMAT_IS_UBWC(wb_enc->wb_fmt)) ?
 					SDE_QOS_LUT_USAGE_CWB_TILE : SDE_QOS_LUT_USAGE_CWB;
+	else if (usage_type == WB_USAGE_ROT)
+		lut_index = SDE_QOS_LUT_USAGE_WB_ROT;
 	else
-		lut_index = (usage_type == WB_USAGE_OFFLINE_WB || usage_type == WB_USAGE_ROT) ?
+		lut_index = (usage_type == WB_USAGE_OFFLINE_WB) ?
 					SDE_QOS_LUT_USAGE_OFFLINE_WB : SDE_QOS_LUT_USAGE_NRT;
 
 	creq_index = lut_index * SDE_CREQ_LUT_TYPE_MAX;

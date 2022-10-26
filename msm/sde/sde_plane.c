@@ -288,7 +288,8 @@ static void _sde_plane_set_qos_lut(struct drm_plane *plane,
 		else
 			lut_index = SDE_QOS_LUT_USAGE_MACROTILE;
 	} else {
-		lut_index = (psde->wb_usage_type == WB_USAGE_OFFLINE_WB) ?
+		lut_index = (psde->wb_usage_type == WB_USAGE_OFFLINE_WB ||
+				psde->wb_usage_type == WB_USAGE_ROT) ?
 					SDE_QOS_LUT_USAGE_OFFLINE_WB : SDE_QOS_LUT_USAGE_NRT;
 	}
 
