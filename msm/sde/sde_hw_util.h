@@ -78,6 +78,8 @@ struct sde_hw_scaler3_de_cfg {
  * struct sde_hw_scaler3_cfg : QSEEDv3 configuration
  * @enable:        scaler enable
  * @dir_en:        direction detection block enable
+ * @dir45_en:      45/-45 degree direction filtering block enable
+ * @cor_en:        corner detection block enable
  * @ init_phase_x: horizontal initial phase
  * @ phase_step_x: horizontal phase step
  * @ init_phase_y: vertical initial phase
@@ -118,6 +120,8 @@ struct sde_hw_scaler3_de_cfg {
 struct sde_hw_scaler3_cfg {
 	u32 enable;
 	u32 dir_en;
+	u32 dir45_en;
+	u32 cor_en;
 	int32_t init_phase_x[SDE_MAX_PLANES];
 	int32_t phase_step_x[SDE_MAX_PLANES];
 	int32_t init_phase_y[SDE_MAX_PLANES];

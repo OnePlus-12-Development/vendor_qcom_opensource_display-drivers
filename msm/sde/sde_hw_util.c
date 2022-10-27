@@ -115,6 +115,8 @@ void sde_set_scaler_v2(struct sde_hw_scaler3_cfg *cfg,
 
 	cfg->enable = scale_v2->enable;
 	cfg->dir_en = scale_v2->dir_en;
+	cfg->dir45_en = scale_v2->dir45_en;
+	cfg->cor_en = scale_v2->cor_en;
 
 	for (i = 0; i < SDE_MAX_PLANES; i++) {
 		cfg->init_phase_x[i] = scale_v2->init_phase_x[i];
@@ -376,6 +378,8 @@ void sde_hw_setup_scaler3(struct sde_hw_blk_reg_map *c,
 
 	op_mode |= (scaler3_cfg->blend_cfg & 1) << 31;
 	op_mode |= (scaler3_cfg->dir_en) ? BIT(4) : 0;
+	op_mode |= (scaler3_cfg->dir_en && scaler3_cfg->cor_en) ? BIT(5) : 0;
+	op_mode |= (scaler3_cfg->dir_en && scaler3_cfg->dir45_en) ? BIT(6) : 0;
 	op_mode |= (scaler3_cfg->dyn_exp_disabled) ? BIT(13) : 0;
 
 	preload =
