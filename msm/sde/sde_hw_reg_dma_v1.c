@@ -75,11 +75,12 @@ static uint32_t reg_dma_decode_sel;
 static uint32_t reg_dma_opmode_offset;
 static uint32_t reg_dma_ctl0_queue0_cmd0_offset;
 static uint32_t reg_dma_ctl0_queue1_cmd0_offset;
-static uint32_t reg_dma_intr_status_offset;
+static uint32_t reg_dma_intr_0_status_offset[CTL_MAX][DMA_CTL_QUEUE_MAX];
+static uint32_t reg_dma_intr_0_clear_offset[CTL_MAX][DMA_CTL_QUEUE_MAX];
 static uint32_t reg_dma_intr_4_status_offset;
-static uint32_t reg_dma_intr_clear_offset;
+static uint32_t reg_dma_intr_4_clear_offset;
 static uint32_t reg_dma_ctl_trigger_offset;
-static uint32_t reg_dma_ctl0_reset_offset;
+static uint32_t reg_dma_ctl0_reset_offset[CTL_MAX][DMA_CTL_QUEUE_MAX];
 static uint32_t reg_dma_error_clear_mask;
 static uint32_t reg_dma_ctl_queue_off[CTL_MAX];
 static uint32_t reg_dma_ctl_queue1_off[CTL_MAX];
@@ -704,8 +705,7 @@ static int write_kick_off_v1(struct sde_reg_dma_kickoff_cfg *cfg)
 	if (val) {
 		DRM_DEBUG("LUT dma status %x\n", val);
 		mask = reg_dma_error_clear_mask;
-		SDE_REG_WRITE(&hw, reg_dma_intr_clear_offset + sizeof(u32) * 4,
-				mask);
+		SDE_REG_WRITE(&hw, reg_dma_intr_4_clear_offset, mask);
 		SDE_EVT32(val);
 	}
 
@@ -723,7 +723,8 @@ static int write_kick_off_v1(struct sde_reg_dma_kickoff_cfg *cfg)
 
 	if (cfg->last_command) {
 		mask = ctl_trigger_done_mask[cfg->ctl->idx][cfg->queue_select];
-		SDE_REG_WRITE(&hw, reg_dma_intr_clear_offset, mask);
+		SDE_REG_WRITE(&hw, reg_dma_intr_0_clear_offset[cfg->ctl->idx][cfg->queue_select],
+				mask);
 		/* DB LUTDMA use SW trigger while SB LUTDMA uses DSPP_SB
 		 * flush as its trigger event.
 		 */
@@ -834,12 +835,19 @@ int init_v1(struct sde_hw_reg_dma *cfg)
 	reg_dma_decode_sel = 0x180ac060;
 	reg_dma_opmode_offset = 0x4;
 	reg_dma_ctl0_queue0_cmd0_offset = 0x14;
-	reg_dma_intr_status_offset = 0x90;
 	reg_dma_intr_4_status_offset = 0xa0;
-	reg_dma_intr_clear_offset = 0xb0;
 	reg_dma_ctl_trigger_offset = 0xd4;
-	reg_dma_ctl0_reset_offset = 0xe4;
 	reg_dma_error_clear_mask = BIT(0) | BIT(1) | BIT(2) | BIT(16);
+	reg_dma_intr_4_clear_offset = 0xc0;
+
+	for (i = 0; i < CTL_MAX; i++) {
+		reg_dma_intr_0_status_offset[i][DMA_CTL_QUEUE0] = 0x90;
+		reg_dma_intr_0_status_offset[i][DMA_CTL_QUEUE1] = 0x90;
+		reg_dma_intr_0_clear_offset[i][DMA_CTL_QUEUE0] = 0xb0;
+		reg_dma_intr_0_clear_offset[i][DMA_CTL_QUEUE1] = 0xb0;
+		reg_dma_ctl0_reset_offset[i][DMA_CTL_QUEUE0] = 0xe4 + i * 4;
+		reg_dma_ctl0_reset_offset[i][DMA_CTL_QUEUE1] = 0xe4 + i * 4;
+	}
 
 	reg_dma_ctl_queue_off[CTL_0] = reg_dma_ctl0_queue0_cmd0_offset;
 	for (i = CTL_1; i < ARRAY_SIZE(reg_dma_ctl_queue_off); i++)
@@ -864,11 +872,9 @@ int init_v11(struct sde_hw_reg_dma *cfg)
 	reg_dma_decode_sel = 0x180ac114;
 	reg_dma_opmode_offset = 0x4;
 	reg_dma_ctl0_queue0_cmd0_offset = 0x14;
-	reg_dma_intr_status_offset = 0x160;
 	reg_dma_intr_4_status_offset = 0x170;
-	reg_dma_intr_clear_offset = 0x1a0;
 	reg_dma_ctl_trigger_offset = 0xd4;
-	reg_dma_ctl0_reset_offset = 0x200;
+	reg_dma_intr_4_clear_offset = 0x1b0;
 	reg_dma_error_clear_mask = BIT(0) | BIT(1) | BIT(2) | BIT(16) |
 		BIT(17) | BIT(18);
 
@@ -876,6 +882,14 @@ int init_v11(struct sde_hw_reg_dma *cfg)
 	for (i = CTL_1; i < ARRAY_SIZE(reg_dma_ctl_queue_off); i++)
 		reg_dma_ctl_queue_off[i] = reg_dma_ctl_queue_off[i - 1] +
 			(sizeof(u32) * 4);
+	for (i = 0; i < CTL_MAX; i++) {
+		reg_dma_intr_0_status_offset[i][DMA_CTL_QUEUE0] = 0x160;
+		reg_dma_intr_0_status_offset[i][DMA_CTL_QUEUE1] = 0x160;
+		reg_dma_intr_0_clear_offset[i][DMA_CTL_QUEUE0] = 0x1a0;
+		reg_dma_intr_0_clear_offset[i][DMA_CTL_QUEUE1] = 0x1a0;
+		reg_dma_ctl0_reset_offset[i][DMA_CTL_QUEUE0] = 0x200 + i * 4;
+		reg_dma_ctl0_reset_offset[i][DMA_CTL_QUEUE1] = 0x200 + i * 4;
+	}
 
 	v1_supported[IGC] = DSPP_IGC | GRP_DSPP_HW_BLK_SELECT |
 				GRP_VIG_HW_BLK_SELECT | GRP_DMA_HW_BLK_SELECT;
@@ -982,6 +996,40 @@ int init_v2(struct sde_hw_reg_dma *cfg)
 	return ret;
 }
 
+int init_v3(struct sde_hw_reg_dma *cfg)
+{
+	int ret = 0, i;
+
+	ret = init_v2(cfg);
+	if (ret) {
+		DRM_ERROR("failed to initialize v12: ret %d\n", ret);
+		return ret;
+	}
+	reg_dma_register_count = 0x7000;
+	reg_dma_decode_sel = 0x18180114;
+	reg_dma_ctl0_queue0_cmd0_offset = 0x1000;
+	reg_dma_ctl0_queue1_cmd0_offset = 0x1000;
+
+	for (i = CTL_0; i < ARRAY_SIZE(reg_dma_ctl_queue_off); i++) {
+		reg_dma_ctl_queue_off[i] = reg_dma_ctl0_queue0_cmd0_offset * i;
+		reg_dma_ctl_queue1_off[i] = reg_dma_ctl0_queue1_cmd0_offset * i + 8;
+	}
+
+	for (i = CTL_0; i < CTL_MAX; i++) {
+		ctl_trigger_done_mask[i][DMA_CTL_QUEUE0] = BIT(3);
+		ctl_trigger_done_mask[i][DMA_CTL_QUEUE1] = BIT(4);
+		reg_dma_intr_0_status_offset[i][DMA_CTL_QUEUE0] = 4096 * i + 0x44;
+		reg_dma_intr_0_status_offset[i][DMA_CTL_QUEUE1] = 4096 * i + 0x44;
+		reg_dma_intr_0_clear_offset[i][DMA_CTL_QUEUE0] =
+			reg_dma_intr_0_status_offset[i][DMA_CTL_QUEUE0] + 4;
+		reg_dma_intr_0_clear_offset[i][DMA_CTL_QUEUE1] =
+			reg_dma_intr_0_status_offset[i][DMA_CTL_QUEUE1] + 4;
+		reg_dma_ctl0_reset_offset[i][DMA_CTL_QUEUE0] = 4096 * i + 0x54;
+		reg_dma_ctl0_reset_offset[i][DMA_CTL_QUEUE1] = 4096 * i + 0x54;
+	}
+	return 0;
+}
+
 static int check_support_v1(enum sde_reg_dma_features feature,
 		     enum sde_reg_dma_blk blk,
 		     bool *is_supported)
@@ -1032,7 +1080,7 @@ static int kick_off_v1(struct sde_reg_dma_kickoff_cfg *cfg)
 int reset_v1(struct sde_hw_ctl *ctl)
 {
 	struct sde_hw_blk_reg_map hw;
-	u32 index, val, i = 0, k = 0;
+	u32 val, i = 0, k = 0;
 
 	if (!ctl || ctl->idx > CTL_MAX) {
 		DRM_ERROR("invalid ctl %pK ctl idx %d\n",
@@ -1040,7 +1088,6 @@ int reset_v1(struct sde_hw_ctl *ctl)
 		return -EINVAL;
 	}
 
-	index = ctl->idx - CTL_0;
 	for (k = 0; k < REG_DMA_TYPE_MAX; k++) {
 		memset(&hw, 0, sizeof(hw));
 		SET_UP_REG_DMA_REG(hw, reg_dma, k);
@@ -1048,16 +1095,13 @@ int reset_v1(struct sde_hw_ctl *ctl)
 			continue;
 
 		SDE_REG_WRITE(&hw, reg_dma_opmode_offset, BIT(0));
-		SDE_REG_WRITE(&hw, (reg_dma_ctl0_reset_offset +
-				index * sizeof(u32)), BIT(0));
+		SDE_REG_WRITE(&hw, reg_dma_ctl0_reset_offset[ctl->idx][k], BIT(0));
 
 		i = 0;
 		do {
 			udelay(1000);
 			i++;
-			val = SDE_REG_READ(&hw,
-					(reg_dma_ctl0_reset_offset +
-					index * sizeof(u32)));
+			val = SDE_REG_READ(&hw, reg_dma_ctl0_reset_offset[ctl->idx][k]);
 		} while (i < 2 && val);
 	}
 
@@ -1309,7 +1353,7 @@ static int last_cmd_v1(struct sde_hw_ctl *ctl, enum sde_reg_dma_queue q,
 	if (mode == REG_DMA_WAIT4_COMP) {
 		rc = read_poll_timeout(sde_reg_read, val,
 				(val & ctl_trigger_done_mask[ctl->idx][q]), 10, false, 20000,
-				&hw, reg_dma_intr_status_offset);
+				&hw, reg_dma_intr_0_status_offset[ctl->idx][q]);
 		if (rc)
 			DRM_ERROR("poll wait failed %d val %x mask %x\n",
 			    rc, val, ctl_trigger_done_mask[ctl->idx][q]);

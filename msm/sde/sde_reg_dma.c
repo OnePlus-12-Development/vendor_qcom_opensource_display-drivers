@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -12,6 +13,7 @@
 #define REG_DMA_VER_1_1 0x00010001
 #define REG_DMA_VER_1_2 0x00010002
 #define REG_DMA_VER_2_0 0x00020000
+#define REG_DMA_VER_3_0 0x00030000
 
 static int default_check_support(enum sde_reg_dma_features feature,
 		     enum sde_reg_dma_blk blk,
@@ -131,6 +133,11 @@ int sde_reg_dma_init(void __iomem *addr, struct sde_mdss_cfg *m,
 		rc = init_v2(&reg_dma);
 		if (rc)
 			DRM_DEBUG("init v2 dma ops failed\n");
+		break;
+	case REG_DMA_VER_3_0:
+		rc = init_v3(&reg_dma);
+		if (rc)
+			DRM_DEBUG("init v3 dma ops failed\n");
 		break;
 	default:
 		break;
