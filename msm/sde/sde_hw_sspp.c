@@ -59,6 +59,7 @@
 #define SSPP_DGM_CSC_1                     0x1800
 #define SSPP_DGM_CSC_SIZE                  0xFC
 #define VIG_GAMUT_SIZE                     0x1CC
+#define SSPP_UCSC_SIZE                     0x80
 
 #define MDSS_MDP_OP_DEINTERLACE            BIT(22)
 #define MDSS_MDP_OP_DEINTERLACE_ODD        BIT(23)
@@ -1340,6 +1341,26 @@ static void _setup_layer_ops_colorproc(struct sde_hw_pipe *c,
 	if (test_bit(SDE_SSPP_FP16_UNMULT, &features) &&
 			IS_SDE_CP_VER_1_0(c->cap->sblk->fp16_unmult_blk[0].version))
 		c->ops.setup_fp16_unmult = sde_setup_fp16_unmultv1;
+
+	if (test_bit(SDE_SSPP_UCSC_IGC, &features) &&
+			IS_SDE_CP_VER_1_0(c->cap->sblk->ucsc_igc_blk[0].version))
+		c->ops.setup_ucsc_igc = sde_setup_ucsc_igcv1;
+
+	if (test_bit(SDE_SSPP_UCSC_GC, &features) &&
+			IS_SDE_CP_VER_1_0(c->cap->sblk->ucsc_gc_blk[0].version))
+		c->ops.setup_ucsc_gc = sde_setup_ucsc_gcv1;
+
+	if (test_bit(SDE_SSPP_UCSC_CSC, &features) &&
+			IS_SDE_CP_VER_1_0(c->cap->sblk->ucsc_csc_blk[0].version))
+		c->ops.setup_ucsc_csc = sde_setup_ucsc_cscv1;
+
+	if (test_bit(SDE_SSPP_UCSC_UNMULT, &features) &&
+			IS_SDE_CP_VER_1_0(c->cap->sblk->ucsc_unmult_blk[0].version))
+		c->ops.setup_ucsc_unmult = sde_setup_ucsc_unmultv1;
+
+	if (test_bit(SDE_SSPP_UCSC_ALPHA_DITHER, &features) &&
+			IS_SDE_CP_VER_1_0(c->cap->sblk->ucsc_alpha_dither_blk[0].version))
+		c->ops.setup_ucsc_alpha_dither = sde_setup_ucsc_alpha_ditherv1;
 }
 
 static void sde_hw_sspp_setup_inverse_pma(struct sde_hw_pipe *ctx,
@@ -1671,6 +1692,17 @@ struct sde_hw_pipe *sde_hw_sspp_init(enum sde_sspp idx,
 				hw_pipe->hw.blk_off + cfg->sblk->gamut_blk.base,
 				hw_pipe->hw.blk_off + cfg->sblk->gamut_blk.base + VIG_GAMUT_SIZE,
 				hw_pipe->hw.xin_id);
+		}
+
+		if (test_bit(SDE_SSPP_UCSC_CSC, &hw_pipe->cap->features)) {
+			sde_dbg_reg_register_dump_range(SDE_DBG_NAME, "UCSC_0",
+				hw_pipe->hw.blk_off + cfg->sblk->ucsc_csc_blk[0].base,
+				hw_pipe->hw.blk_off + cfg->sblk->ucsc_csc_blk[0].base +\
+				SSPP_UCSC_SIZE, hw_pipe->hw.xin_id);
+			sde_dbg_reg_register_dump_range(SDE_DBG_NAME, "UCSC_0",
+				hw_pipe->hw.blk_off + cfg->sblk->ucsc_csc_blk[1].base,
+				hw_pipe->hw.blk_off + cfg->sblk->ucsc_csc_blk[1].base +\
+				SSPP_UCSC_SIZE, hw_pipe->hw.xin_id);
 		}
 	}
 

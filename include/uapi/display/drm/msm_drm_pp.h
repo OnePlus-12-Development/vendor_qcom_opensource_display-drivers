@@ -775,4 +775,11 @@ struct drm_msm_misr_sign {
 	__u64 misr_sign_value[MAX_DSI_DISPLAY];
 };
 
+#define UCSC_SUPPORTED
+
+#define UCSC_CSC_CFG0_PARAM_LEN FP16_CSC_CFG0_PARAM_LEN
+#define UCSC_CSC_CFG1_PARAM_LEN FP16_CSC_CFG1_PARAM_LEN
+
+typedef struct drm_msm_fp16_csc drm_msm_ucsc_csc;
+
 #endif /* _MSM_DRM_PP_H_ */

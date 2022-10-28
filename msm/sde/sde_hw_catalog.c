@@ -299,6 +299,11 @@ enum {
 	VIG_FP16_GC_PROP,
 	VIG_FP16_CSC_PROP,
 	VIG_FP16_UNMULT_PROP,
+	VIG_UCSC_IGC_PROP,
+	VIG_UCSC_GC_PROP,
+	VIG_UCSC_CSC_PROP,
+	VIG_UCSC_UNMULT_PROP,
+	VIG_UCSC_ALPHA_DITHER_PROP,
 	VIG_PROP_MAX,
 };
 
@@ -313,6 +318,11 @@ enum {
 	DMA_FP16_GC_PROP,
 	DMA_FP16_CSC_PROP,
 	DMA_FP16_UNMULT_PROP,
+	DMA_UCSC_IGC_PROP,
+	DMA_UCSC_GC_PROP,
+	DMA_UCSC_CSC_PROP,
+	DMA_UCSC_UNMULT_PROP,
+	DMA_UCSC_ALPHA_DITHER_PROP,
 	DMA_PROP_MAX,
 };
 
@@ -732,6 +742,16 @@ static struct sde_prop_type vig_prop[] = {
 			PROP_TYPE_U32_ARRAY},
 	[VIG_FP16_UNMULT_PROP] = {VIG_FP16_UNMULT_PROP, "qcom,sde-fp16-unmult",
 			false, PROP_TYPE_U32_ARRAY},
+	[VIG_UCSC_IGC_PROP] = {VIG_UCSC_IGC_PROP, "qcom,sde-ucsc-igc", false,
+			PROP_TYPE_U32_ARRAY},
+	[VIG_UCSC_GC_PROP] = {VIG_UCSC_GC_PROP, "qcom,sde-ucsc-gc", false,
+			PROP_TYPE_U32_ARRAY},
+	[VIG_UCSC_CSC_PROP] = {VIG_UCSC_CSC_PROP, "qcom,sde-ucsc-csc", false,
+			PROP_TYPE_U32_ARRAY},
+	[VIG_UCSC_UNMULT_PROP] = {VIG_UCSC_UNMULT_PROP, "qcom,sde-ucsc-unmult",
+			false, PROP_TYPE_U32_ARRAY},
+	[VIG_UCSC_ALPHA_DITHER_PROP] = {VIG_UCSC_ALPHA_DITHER_PROP, "qcom,sde-ucsc-alpha-dither",
+			false, PROP_TYPE_U32_ARRAY},
 };
 
 static struct sde_prop_type dma_prop[] = {
@@ -754,6 +774,16 @@ static struct sde_prop_type dma_prop[] = {
 	[DMA_FP16_CSC_PROP] = {DMA_FP16_CSC_PROP, "qcom,sde-fp16-csc", false,
 			PROP_TYPE_U32_ARRAY},
 	[DMA_FP16_UNMULT_PROP] = {DMA_FP16_UNMULT_PROP, "qcom,sde-fp16-unmult",
+			false, PROP_TYPE_U32_ARRAY},
+	[DMA_UCSC_IGC_PROP] = {DMA_UCSC_IGC_PROP, "qcom,sde-ucsc-igc", false,
+			PROP_TYPE_U32_ARRAY},
+	[DMA_UCSC_GC_PROP] = {DMA_UCSC_GC_PROP, "qcom,sde-ucsc-gc", false,
+			PROP_TYPE_U32_ARRAY},
+	[DMA_UCSC_CSC_PROP] = {DMA_UCSC_CSC_PROP, "qcom,sde-ucsc-csc", false,
+			PROP_TYPE_U32_ARRAY},
+	[DMA_UCSC_UNMULT_PROP] = {DMA_UCSC_UNMULT_PROP, "qcom,sde-ucsc-unmult",
+			false, PROP_TYPE_U32_ARRAY},
+	[DMA_UCSC_ALPHA_DITHER_PROP] = {DMA_UCSC_ALPHA_DITHER_PROP, "qcom,sde-ucsc-alpha-dither",
 			false, PROP_TYPE_U32_ARRAY},
 };
 
@@ -1559,6 +1589,12 @@ static int _sde_sspp_setup_vigs(struct device_node *np,
 		sblk->num_fp16_csc_blk = 0;
 		sblk->num_fp16_unmult_blk = 0;
 
+		sblk->num_ucsc_igc_blk = 0;
+		sblk->num_ucsc_gc_blk = 0;
+		sblk->num_ucsc_csc_blk = 0;
+		sblk->num_ucsc_unmult_blk = 0;
+		sblk->num_ucsc_alpha_dither_blk = 0;
+
 		for (j = 0; j < SSPP_SUBBLK_COUNT_MAX; j++) {
 			if (!props[j])
 				continue;
@@ -1590,6 +1626,41 @@ static int _sde_sspp_setup_vigs(struct device_node *np,
 					SDE_SSPP_FP16_UNMULT,
 					VIG_FP16_UNMULT_PROP, true))
 				sblk->num_fp16_unmult_blk += 1;
+
+			if (_sde_sspp_setup_vcm(sspp, props[j],
+					"sspp_vig_ucsc_igc",
+					&sblk->ucsc_igc_blk[j],
+					SDE_SSPP_UCSC_IGC, VIG_UCSC_IGC_PROP,
+					true))
+				sblk->num_ucsc_igc_blk += 1;
+
+			if (_sde_sspp_setup_vcm(sspp, props[j],
+					"sspp_vig_ucsc_gc",
+					&sblk->ucsc_gc_blk[j],
+					SDE_SSPP_UCSC_GC, VIG_UCSC_GC_PROP,
+					true))
+				sblk->num_ucsc_gc_blk += 1;
+
+			if (_sde_sspp_setup_vcm(sspp, props[j],
+					"sspp_vig_ucsc_csc",
+					&sblk->ucsc_csc_blk[j],
+					SDE_SSPP_UCSC_CSC, VIG_UCSC_CSC_PROP,
+					true))
+				sblk->num_ucsc_csc_blk += 1;
+
+			if (_sde_sspp_setup_vcm(sspp, props[j],
+					"sspp_vig_ucsc_unmult",
+					&sblk->ucsc_unmult_blk[j],
+					SDE_SSPP_UCSC_UNMULT,
+					VIG_UCSC_UNMULT_PROP, true))
+				sblk->num_ucsc_unmult_blk += 1;
+
+			if (_sde_sspp_setup_vcm(sspp, props[j],
+					"sspp_vig_ucsc_alpha_dither",
+					&sblk->ucsc_alpha_dither_blk[j],
+					SDE_SSPP_UCSC_ALPHA_DITHER,
+					VIG_UCSC_ALPHA_DITHER_PROP, true))
+				sblk->num_ucsc_alpha_dither_blk += 1;
 		}
 
 		/* PP + scaling only supported on VIG rect 0 */
@@ -1805,6 +1876,41 @@ static int _sde_sspp_setup_dmas(struct device_node *np,
 						&sblk->fp16_unmult_blk[j],
 						SDE_SSPP_FP16_UNMULT,
 						DMA_FP16_UNMULT_PROP, true);
+
+			if (props[j]->exists[DMA_UCSC_IGC_PROP])
+				_sde_sspp_setup_dgm(sspp, props[j],
+						"sspp_dma_ucsc_igc",
+						&sblk->ucsc_igc_blk[j],
+						SDE_SSPP_UCSC_IGC,
+						DMA_UCSC_IGC_PROP, true);
+
+			if (props[j]->exists[DMA_UCSC_GC_PROP])
+				_sde_sspp_setup_dgm(sspp, props[j],
+						"sspp_dma_ucsc_gc",
+						&sblk->ucsc_gc_blk[j],
+						SDE_SSPP_UCSC_GC,
+						DMA_UCSC_GC_PROP, true);
+
+			if (props[j]->exists[DMA_UCSC_CSC_PROP])
+				_sde_sspp_setup_dgm(sspp, props[j],
+						"sspp_dma_ucsc_csc",
+						&sblk->ucsc_csc_blk[j],
+						SDE_SSPP_UCSC_CSC,
+						DMA_UCSC_CSC_PROP, true);
+
+			if (props[j]->exists[DMA_UCSC_UNMULT_PROP])
+				_sde_sspp_setup_dgm(sspp, props[j],
+						"sspp_dma_ucsc_unmult",
+						&sblk->ucsc_unmult_blk[j],
+						SDE_SSPP_UCSC_UNMULT,
+						DMA_UCSC_UNMULT_PROP, true);
+
+			if (props[j]->exists[DMA_UCSC_ALPHA_DITHER_PROP])
+				_sde_sspp_setup_dgm(sspp, props[j],
+						"sspp_dma_ucsc_alpha_dither",
+						&sblk->ucsc_alpha_dither_blk[j],
+						SDE_SSPP_UCSC_ALPHA_DITHER,
+						DMA_UCSC_ALPHA_DITHER_PROP, true);
 		}
 	}
 

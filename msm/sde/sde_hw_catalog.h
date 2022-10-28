@@ -320,6 +320,11 @@ enum {
  * @SDE_SSPP_UBWC_STATS:     Support for ubwc stats
  * @SDE_SSPP_SCALER_DE_LPF_BLEND:     Support for detail enhancer
  * @SDE_SSPP_LINE_INSERTION  Line insertion support
+ * @SDE_SSPP_UCSC_IGC        UCSC IGC color processing block support
+ * @SDE_SSPP_UCSC_GC         UCSC GC color processing block support
+ * @SDE_SSPP_UCSC_CSC        UCSC CSC color processing block support
+ * @SDE_SSPP_UCSC_UNMULT     UCSC alpha unmult color processing block support
+ * @SDE_SSPP_UCSC_ALPHA_DITHER UCSC alpha dither color processing block support
  * @SDE_SSPP_MAX             maximum value
  */
 enum {
@@ -357,6 +362,11 @@ enum {
 	SDE_SSPP_UBWC_STATS,
 	SDE_SSPP_SCALER_DE_LPF_BLEND,
 	SDE_SSPP_LINE_INSERTION,
+	SDE_SSPP_UCSC_IGC,
+	SDE_SSPP_UCSC_GC,
+	SDE_SSPP_UCSC_CSC,
+	SDE_SSPP_UCSC_UNMULT,
+	SDE_SSPP_UCSC_ALPHA_DITHER,
 	SDE_SSPP_MAX
 };
 
@@ -747,6 +757,7 @@ enum {
  * @SDE_FEATURE_SYS_CACHE_NSE  Support for no-self-evict feature
  * @SDE_FEATURE_HW_FENCE_IPCC  HW fence supports ipcc signaling in dpu
  * @SDE_FEATURE_EMULATED_ENV   Emulated environment supported
+ * @SDE_FEATURE_UCSC_SUPPORTED  UCSC pipe format supported
  * @SDE_FEATURE_MAX:             MAX features value
  */
 enum sde_mdss_features {
@@ -791,6 +802,7 @@ enum sde_mdss_features {
 	SDE_FEATURE_SYS_CACHE_NSE,
 	SDE_FEATURE_HW_FENCE_IPCC,
 	SDE_FEATURE_EMULATED_ENV,
+	SDE_FEATURE_UCSC_SUPPORTED,
 	SDE_FEATURE_MAX
 };
 
@@ -974,6 +986,16 @@ enum sde_danger_safe_lut_types {
  * @fp16_csc_blk: FP16 CSC block array
  * @num_fp16_unmult_blk: number of FP16 UNMULT blocks
  * @fp16_unmult_blk: FP16 UNMULT block array
+ * @num_ucsc_igc_blk: number of UCSC IGC blocks
+ * @ucsc_igc_blk: UCSC IGC block array
+ * @num_ucsc_gc_blk: number of UCSC GC blocks
+ * @ucsc_gc_blk: UCSC GC block array
+ * @num_ucsc_csc_blk: number of UCSC CSC blocks
+ * @ucsc_csc_blk: UCSC CSC block array
+ * @num_ucsc_unmult_blk: number of ucsc UNMULT blocks
+ * @ucsc_unmult_blk: UCSC UNMULT block array
+ * @num_ucsc_alpha_dither_blk: number of ucsc ALPHA DITHER blocks
+ * @ucsc_alpha_dither_blk: UCSC ALPHA DITHER block array
  * @unmult_offset: Unmult register offset
  * @format_list: Pointer to list of supported formats
  * @virt_format_list: Pointer to list of supported formats for virtual planes
@@ -1026,6 +1048,16 @@ struct sde_sspp_sub_blks {
 	struct sde_pp_blk fp16_csc_blk[SSPP_SUBBLK_COUNT_MAX];
 	u32 num_fp16_unmult_blk;
 	struct sde_pp_blk fp16_unmult_blk[SSPP_SUBBLK_COUNT_MAX];
+	u32 num_ucsc_igc_blk;
+	struct sde_pp_blk ucsc_igc_blk[SSPP_SUBBLK_COUNT_MAX];
+	u32 num_ucsc_gc_blk;
+	struct sde_pp_blk ucsc_gc_blk[SSPP_SUBBLK_COUNT_MAX];
+	u32 num_ucsc_csc_blk;
+	struct sde_pp_blk ucsc_csc_blk[SSPP_SUBBLK_COUNT_MAX];
+	u32 num_ucsc_unmult_blk;
+	struct sde_pp_blk ucsc_unmult_blk[SSPP_SUBBLK_COUNT_MAX];
+	u32 num_ucsc_alpha_dither_blk;
+	struct sde_pp_blk ucsc_alpha_dither_blk[SSPP_SUBBLK_COUNT_MAX];
 	u32 unmult_offset[SSPP_SUBBLK_COUNT_MAX];
 
 	const struct sde_format_extended *format_list;
