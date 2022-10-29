@@ -2037,30 +2037,42 @@ static void sde_encoder_phys_cmd_trigger_start(
 	cmd_enc->wr_ptr_wait_success = false;
 }
 
-static void _sde_encoder_phys_cmd_calculate_wd_params(struct sde_encoder_phys *phys_enc,
-		struct intf_wd_jitter_params *wd_jitter)
+static void _sde_encoder_phys_cmd_calculate_wd_params(struct sde_encoder_phys *phys_enc)
 {
 	u32 nominal_te_value;
 	struct sde_encoder_virt *sde_enc;
 	struct msm_mode_info *mode_info;
 	const u32 multiplier = 1 << 10;
+	struct intf_wd_jitter_params wd_jtr;
 
 	sde_enc = to_sde_encoder_virt(phys_enc->parent);
 	mode_info = &sde_enc->mode_info;
 
-	if (mode_info->wd_jitter.jitter_type & MSM_DISPLAY_WD_INSTANTANEOUS_JITTER)
-		wd_jitter->jitter = mult_frac(multiplier, mode_info->wd_jitter.inst_jitter_numer,
+	if (mode_info->wd_jitter.jitter_type & MSM_DISPLAY_WD_INSTANTANEOUS_JITTER) {
+		wd_jtr.jitter = mult_frac(multiplier,
+				mode_info->wd_jitter.inst_jitter_numer,
 				(mode_info->wd_jitter.inst_jitter_denom * 100));
+		phys_enc->wd_jitter.jitter = wd_jtr.jitter;
+	}
 
 	if (mode_info->wd_jitter.jitter_type & MSM_DISPLAY_WD_LTJ_JITTER) {
 		nominal_te_value = CALCULATE_WD_LOAD_VALUE(mode_info->frame_rate) * MDP_TICK_COUNT;
-		wd_jitter->ltj_max = mult_frac(nominal_te_value, mode_info->wd_jitter.ltj_max_numer,
+		wd_jtr.ltj_max = mult_frac(nominal_te_value,
+				mode_info->wd_jitter.ltj_max_numer,
 				(mode_info->wd_jitter.ltj_max_denom) * 100);
-		wd_jitter->ltj_slope = mult_frac((1 << 16), wd_jitter->ltj_max,
+		wd_jtr.ltj_slope = mult_frac((1 << 16), wd_jtr.ltj_max,
 				(mode_info->wd_jitter.ltj_time_sec * mode_info->frame_rate));
+		phys_enc->wd_jitter.ltj_max = wd_jtr.ltj_max;
+		phys_enc->wd_jitter.ltj_slope = wd_jtr.ltj_slope;
 	}
 
-	phys_enc->hw_intf->ops.configure_wd_jitter(phys_enc->hw_intf, wd_jitter);
+	phys_enc->hw_intf->ops.configure_wd_jitter(phys_enc->hw_intf, &phys_enc->wd_jitter);
+}
+
+static void sde_encoder_phys_cmd_store_ltj_values(struct sde_encoder_phys *phys_enc)
+{
+	if (phys_enc && phys_enc->hw_intf->ops.get_wd_ltj_status)
+		phys_enc->hw_intf->ops.get_wd_ltj_status(phys_enc->hw_intf, &phys_enc->wd_jitter);
 }
 
 static void sde_encoder_phys_cmd_setup_vsync_source(struct sde_encoder_phys *phys_enc,
@@ -2068,7 +2080,6 @@ static void sde_encoder_phys_cmd_setup_vsync_source(struct sde_encoder_phys *phy
 {
 	struct sde_encoder_virt *sde_enc;
 	struct sde_connector *sde_conn;
-	struct intf_wd_jitter_params wd_jitter = {0, 0};
 
 	if (!phys_enc || !phys_enc->hw_intf)
 		return;
@@ -2083,7 +2094,7 @@ static void sde_encoder_phys_cmd_setup_vsync_source(struct sde_encoder_phys *phy
 			phys_enc->hw_intf->ops.setup_vsync_source) {
 		vsync_source = SDE_VSYNC_SOURCE_WD_TIMER_0;
 		if (phys_enc->hw_intf->ops.configure_wd_jitter)
-			_sde_encoder_phys_cmd_calculate_wd_params(phys_enc, &wd_jitter);
+			_sde_encoder_phys_cmd_calculate_wd_params(phys_enc);
 		phys_enc->hw_intf->ops.setup_vsync_source(phys_enc->hw_intf,
 				sde_enc->mode_info.frame_rate);
 	} else {
@@ -2136,6 +2147,7 @@ static void sde_encoder_phys_cmd_init_ops(struct sde_encoder_phys_ops *ops)
 	ops->collect_misr = sde_encoder_helper_collect_misr;
 	ops->add_to_minidump = sde_encoder_phys_cmd_add_enc_to_minidump;
 	ops->disable_autorefresh = _sde_encoder_phys_disable_autorefresh;
+	ops->idle_pc_cache_display_status = sde_encoder_phys_cmd_store_ltj_values;
 }
 
 static inline bool sde_encoder_phys_cmd_intf_te_supported(
