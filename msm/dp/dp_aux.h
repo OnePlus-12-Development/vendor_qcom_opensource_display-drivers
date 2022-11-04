@@ -56,9 +56,10 @@ struct dp_aux {
 	void (*deinit)(struct dp_aux *aux);
 	void (*reconfig)(struct dp_aux *aux);
 	void (*abort)(struct dp_aux *aux, bool abort);
-	void (*set_sim_mode)(struct dp_aux *aux,
-		struct dp_aux_bridge *sim_bridge);
-	int (*aux_switch)(struct dp_aux *aux, bool enable, int orientation);
+	void (*set_sim_mode)(struct dp_aux *aux, struct dp_aux_bridge *sim_bridge);
+	int (*switch_configure)(struct dp_aux *aux, bool enable, int orientation);
+	int (*switch_register_notifier)(struct notifier_block *nb, struct device_node *node);
+	int (*switch_unregister_notifier)(struct notifier_block *nb, struct device_node *node);
 };
 
 struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog_aux *catalog,
