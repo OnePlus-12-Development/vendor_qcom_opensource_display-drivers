@@ -3047,7 +3047,7 @@ void sde_crtc_opr_event_notify(struct drm_crtc *crtc)
 		rc = sde_dspp_spr_read_opr_value(sde_crtc->mixers[i].hw_dspp,
 			&current_opr_value[i]);
 		if (rc) {
-			SDE_ERROR("failed to collect OPR %d", i, rc);
+			SDE_ERROR("failed to collect OPR idx: %d rc: %d\n", i, rc);
 			continue;
 		}
 
