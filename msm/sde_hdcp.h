@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012, 2014-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __SDE_HDCP_H__
@@ -14,7 +15,9 @@
 #include <linux/list.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_edid.h>
+#if IS_ENABLED(CONFIG_HDCP_QSEECOM)
 #include <linux/hdcp_qseecom.h>
+#endif
 #include "sde_kms.h"
 
 #define MAX_STREAM_COUNT 2
@@ -111,10 +114,40 @@ static inline const char *sde_hdcp_version(enum sde_hdcp_version hdcp_version)
 	}
 }
 
+#if IS_ENABLED(CONFIG_HDCP_QSEECOM)
 void *sde_hdcp_1x_init(struct sde_hdcp_init_data *init_data);
 void sde_hdcp_1x_deinit(void *input);
 struct sde_hdcp_ops *sde_hdcp_1x_get(void *input);
 void *sde_dp_hdcp2p2_init(struct sde_hdcp_init_data *init_data);
 void sde_dp_hdcp2p2_deinit(void *input);
 struct sde_hdcp_ops *sde_dp_hdcp2p2_get(void *input);
+#else
+void *sde_hdcp_1x_init(struct sde_hdcp_init_data *init_data)
+{
+	return NULL;
+}
+
+void sde_hdcp_1x_deinit(void *input)
+{
+}
+
+struct sde_hdcp_ops *sde_hdcp_1x_get(void *input)
+{
+	return NULL;
+}
+
+void *sde_dp_hdcp2p2_init(struct sde_hdcp_init_data *init_data)
+{
+	return NULL;
+}
+
+void sde_dp_hdcp2p2_deinit(void *input)
+{
+}
+
+struct sde_hdcp_ops *sde_dp_hdcp2p2_get(void *input)
+{
+	return NULL;
+}
+#endif
 #endif /* __SDE_HDCP_H__ */

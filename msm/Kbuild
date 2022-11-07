@@ -93,7 +93,10 @@ endif
 ######### CONFIG_DRM_MSM ########
 obj-m += msm_drm.o
 
-msm_drm-$(CONFIG_HDCP_QSEECOM) := ../hdcp/msm_hdcp.o
+msm_drm-$(CONFIG_HDCP_QSEECOM) := ../hdcp/msm_hdcp.o \
+				  dp/dp_hdcp2p2.o \
+				  sde_hdcp_1x.o \
+				  sde_hdcp_2x.o
 
 msm_drm-$(CONFIG_MSM_SDE_ROTATOR) += ../rotator/sde_rotator_dev.o \
 				     ../rotator/sde_rotator_dev.o \
@@ -143,9 +146,6 @@ msm_drm-$(CONFIG_DRM_MSM_DP) += dp/dp_altmode.o \
 				dp/dp_lphw_hpd.o \
 				dp/dp_display.o \
 				dp/dp_drm.o \
-				dp/dp_hdcp2p2.o \
-				sde_hdcp_1x.o \
-				sde_hdcp_2x.o \
 				dp/dp_pll.o \
 				dp/dp_pll_5nm.o \
 				dp/dp_pll_4nm.o
