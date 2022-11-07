@@ -1184,18 +1184,6 @@ static void sde_rot_dmabuf_unmap(struct dma_buf_attachment *attach,
 	kfree(sgt);
 }
 
-static void *sde_rot_dmabuf_no_map(struct dma_buf *buf, unsigned long n)
-{
-	SDEROT_WARN("NOT SUPPORTING dmabuf map\n");
-	return NULL;
-}
-
-static void sde_rot_dmabuf_no_unmap(struct dma_buf *buf, unsigned long n,
-		void *addr)
-{
-	SDEROT_WARN("NOT SUPPORTING dmabuf unmap\n");
-}
-
 static void sde_rot_dmabuf_release(struct dma_buf *buf)
 {
 	SDEROT_DBG("Release dmabuf:%pK\n", buf);
@@ -1212,8 +1200,6 @@ static const struct dma_buf_ops sde_rot_dmabuf_ops = {
 	.map_dma_buf	= sde_rot_dmabuf_map_tiny,
 	.unmap_dma_buf	= sde_rot_dmabuf_unmap,
 	.release	= sde_rot_dmabuf_release,
-	.map		= sde_rot_dmabuf_no_map,
-	.unmap		= sde_rot_dmabuf_no_unmap,
 	.mmap		= sde_rot_dmabuf_no_mmap,
 };
 
