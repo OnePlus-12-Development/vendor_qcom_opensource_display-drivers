@@ -82,6 +82,8 @@ ifeq ($(call cc-option-yn, -Wheader-guard),y)
 EXTRA_CFLAGS += -Wheader-guard
 endif
 
+EXTRA_CFLAGS += -Wformat-extra-args -Wstrict-prototypes
+
 ifneq ($(MODNAME), qdsp6v2)
 CHIP_NAME ?= $(MODNAME)
 CDEFINES += -DMULTI_IF_NAME=\"$(CHIP_NAME)\"

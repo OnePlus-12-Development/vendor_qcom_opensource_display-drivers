@@ -6138,7 +6138,7 @@ void sde_encoder_misr_sign_event_notify(struct drm_encoder *drm_enc)
 		phys = sde_enc->phys_encs[i];
 
 		if (!phys || !phys->ops.collect_misr) {
-			SDE_DEBUG("invalid misr ops\n", i);
+			SDE_DEBUG("invalid misr ops idx:%d\n", i);
 			continue;
 		}
 

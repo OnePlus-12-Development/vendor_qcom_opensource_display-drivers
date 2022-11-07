@@ -1211,14 +1211,14 @@ static int sde_encoder_phys_wb_atomic_check(struct sde_encoder_phys *phys_enc,
 		return -EINVAL;
 	}
 
-	SDE_DEBUG("[enc:%d wb:%d] fb_id:%u, wxh:%ux%u, fb_fmt:%x,%llx, roi:{%d,%d,%d,%d}, rot:%d\n",
+	SDE_DEBUG("[enc:%d wb:%d] fb_id:%u, wxh:%ux%u, fb_fmt:%x,%llx, roi:{%d,%d,%d,%d}, rot:%u\n",
 		DRMID(phys_enc->parent), WBID(wb_enc), fb->base.id, fb->width, fb->height,
 		fb->format->format, fb->modifier, wb_roi.x, wb_roi.y, wb_roi.w, wb_roi.h,
 		rotation_type);
 
         rc = _sde_encoder_phys_wb_validate_output_fmt(phys_enc, fb, rotation_type);
 	if (rc) {
-		SDE_ERROR("[enc:%d wb:%d] output fmt validation failed fb:%u fmt:0x%x mod:0x%x\n",
+		SDE_ERROR("[enc:%d wb:%d] output fmt failed fb:%u fmt:0x%x mod:0x%x rot:%d",
 				 DRMID(phys_enc->parent), WBID(wb_enc), fb->base.id,
 				 fb->format->format, fb->modifier, rotation_type);
 		return rc;
