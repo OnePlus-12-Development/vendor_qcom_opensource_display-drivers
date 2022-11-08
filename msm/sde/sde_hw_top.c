@@ -68,6 +68,7 @@
 #define MDP_SID_V2_LUTDMA_RD     0x300
 #define MDP_SID_V2_LUTDMA_WR     0x304
 #define MDP_SID_V2_LUTDMA_SB_RD  0x308
+#define MDP_SID_V2_LUTDMA_VM_0   0x310
 #define MDP_SID_V2_DSI0          0x500
 #define MDP_SID_V2_DSI1          0x504
 
@@ -440,6 +441,13 @@ void sde_hw_set_vm_sid_v2(struct sde_hw_sid *sid, u32 vm, struct sde_mdss_cfg *m
 	for (i = 0; i < m->ltm_count; i++) {
 		offset = MDP_SID_V2_LTM0 + (i * 4);
 		SDE_REG_WRITE(&sid->hw, offset, vm << 2);
+	}
+
+	if (SDE_HW_MAJOR(sid->hw.hw_rev) >= SDE_HW_MAJOR(SDE_HW_VER_A00)) {
+		for (i = 0; i < m->ctl_count; i++) {
+			offset = MDP_SID_V2_LUTDMA_VM_0 + (i * 4);
+			SDE_REG_WRITE(&sid->hw, offset, vm << 2);
+		}
 	}
 
 	SDE_REG_WRITE(&sid->hw, MDP_SID_V2_IPC_READ, vm << 2);
