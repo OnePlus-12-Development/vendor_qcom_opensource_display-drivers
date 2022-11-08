@@ -1294,7 +1294,7 @@ static int dsi_panel_parse_avr_caps(struct dsi_panel *panel,
 		return rc;
 	} else if (val > 1 && val != panel->dfps_caps.dfps_list_len) {
 		DSI_ERR("[%s] avr step list size %d not same as dfps list %d\n",
-				val, panel->dfps_caps.dfps_list_len);
+				panel->name, val, panel->dfps_caps.dfps_list_len);
 		return -EINVAL;
 	}
 
