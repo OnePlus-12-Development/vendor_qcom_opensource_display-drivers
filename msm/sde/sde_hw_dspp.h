@@ -257,11 +257,34 @@ struct sde_hw_dspp_ops {
 	int (*setup_rc_data)(struct sde_hw_dspp *ctx, void *cfg);
 
 	/**
+	 * validate_spr_init_config -  Validate SPR configuration
+	 * @ctx: Pointer to dspp context.
+	 * @cfg: Pointer to configuration.
+	 * Return: 0 on success, non-zero otherwise.
+	 */
+	int (*validate_spr_init_config)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
+	 * validate_spr_udc_config -  Validate SPR configuration
+	 * @ctx: Pointer to dspp context.
+	 * @cfg: Pointer to configuration.
+	 * Return: 0 on success, non-zero otherwise.
+	 */
+	int (*validate_spr_udc_config)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
 	 * setup_spr_init_config - function to configure spr hw block
 	 * @ctx: Pointer to dspp context
 	 * @cfg: Pointer to configuration
 	 */
 	void (*setup_spr_init_config)(struct sde_hw_dspp *ctx, void *cfg);
+
+	/**
+	 * setup_spr_udc_config - function to configure spr hw block
+	 * @ctx: Pointer to dspp context
+	 * @cfg: Pointer to configuration
+	 */
+	void (*setup_spr_udc_config)(struct sde_hw_dspp *ctx, void *cfg);
 
 	/**
 	 * setup_spr_pu_config - function to configure spr hw block pu offsets
@@ -315,6 +338,7 @@ struct sde_hw_dspp_ops {
  * @sb_dma_in_use: hint indicating if sb dma is being used for this dspp
  * @ops: Pointer to operations possible for this DSPP
  * @ltm_checksum_support: flag to check if checksum present
+ * @spr_cfg_18_default: Default SPR cfg 18 HW details. Needed for PU handling
  */
 struct sde_hw_dspp {
 	struct sde_hw_blk_reg_map hw;
@@ -327,6 +351,7 @@ struct sde_hw_dspp {
 	const struct sde_dspp_cfg *cap;
 	bool sb_dma_in_use;
 	bool ltm_checksum_support;
+	u32 spr_cfg_18_default;
 
 	/* Ops */
 	struct sde_hw_dspp_ops ops;

@@ -489,6 +489,18 @@ enum {
 };
 
 /**
+ * SPR sub-features
+ * @SDE_SPR_INIT             SPR INIT feature
+ * @SDE_SPR_UDC              SPR UDC feature
+ * @SDE_SPR_MAX              maximum value
+ */
+enum {
+	SDE_SPR_INIT = 0x1,
+	SDE_SPR_UDC,
+	SDE_SPR_MAX
+};
+
+/**
  * PINGPONG sub-blocks
  * @SDE_PINGPONG_TE              Tear check block
  * @SDE_PINGPONG_TE2             Additional tear check block for split pipes

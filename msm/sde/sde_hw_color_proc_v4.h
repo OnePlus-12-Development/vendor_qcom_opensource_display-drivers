@@ -155,6 +155,20 @@ void sde_setup_fp16_unmultv1(struct sde_hw_pipe *ctx,
 void sde_demura_pu_cfg(struct sde_hw_dspp *ctx, void *cfg);
 
 /**
+ * sde_spr_check_init_cfg - api to validate the SPR configuration for the frame
+ * @ctx: pointer to dspp object.
+ * @cfg: spr configuration  for the frame.
+ */
+int sde_spr_check_init_cfg(struct sde_hw_dspp *ctx, void *cfg);
+
+/**
+ * sde_spr_check_udc_cfg - api to validate the SPR UDC configuration for the frame
+ * @ctx: pointer to dspp object.
+ * @cfg: spr UDC configuration  for the frame.
+ */
+int sde_spr_check_udc_cfg(struct sde_hw_dspp *ctx, void *cfg);
+
+/**
  * sde_spr_read_opr_value - api to read spr opr value
  * @ctx: pointer to dspp object.
  * @opr_value: Pointer to opr value.
