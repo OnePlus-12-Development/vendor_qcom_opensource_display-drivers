@@ -5840,7 +5840,7 @@ static int __reg_dmav1_setup_demurav1_cfg0(struct sde_hw_dspp *ctx,
 			goto quit;
 	}
 
-	width = hw_cfg->panel_width >> 1;
+	width = hw_cfg->panel_width >> ((dcfg->flags & DEMURA_FLAG_1) ? 2 : 1);
 	DRM_DEBUG_DRIVER("0x80: value %x\n", width);
 	REG_DMA_SETUP_OPS(*dma_write_cfg, demura_base + 0x80,
 		&width, sizeof(width), REG_SINGLE_WRITE, 0, 0, 0);
@@ -6044,7 +6044,7 @@ static bool __reg_dmav1_valid_hfc_en_cfg(struct drm_msm_dem_cfg *dcfg,
 
 	h = hw_cfg->num_ds_enabled ? hw_cfg->panel_height : hw_cfg->displayv;
 	w = hw_cfg->panel_width;
-	temp = hw_cfg->panel_width / 2;
+	temp = hw_cfg->panel_width / (2 * ((dcfg->flags & DEMURA_FLAG_1) ? 2 : 1));
 	if (dcfg->pentile) {
 		w = dcfg->c0_depth * (temp / 2) + dcfg->c1_depth * temp +
 			dcfg->c2_depth * (temp / 2);
