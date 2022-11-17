@@ -703,12 +703,12 @@ void sde_demura_read_plane_status(struct sde_hw_dspp *ctx, u32 *status)
 	value = SDE_REG_READ(&ctx->hw, demura_base + 0x4);
 	if (!(value & 0x4)) {
 		*status = DEM_FETCH_DMA_INVALID;
-	} else if (ctx->idx == DSPP_0) {
+	} else if (ctx->idx == DSPP_0 || ctx->idx == DSPP_2) {
 		if (value & 0x80000000)
 			*status = DEM_FETCH_DMA1_RECT0;
 		else
 			*status = DEM_FETCH_DMA3_RECT0;
-	} else {
+	} else if (ctx->idx == DSPP_1 || ctx->idx == DSPP_3) {
 		if (value & 0x80000000)
 			*status = DEM_FETCH_DMA1_RECT1;
 		else
