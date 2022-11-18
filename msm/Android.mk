@@ -23,8 +23,8 @@ KBUILD_OPTIONS += BOARD_PLATFORM=$(TARGET_BOARD_PLATFORM)
 KBUILD_OPTIONS += $(DISPLAY_SELECT)
 
 ifneq ($(TARGET_BOARD_AUTO),true)
-ifneq ($(TARGET_BOARD_PLATFORM), pineapple)
 KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,mmrm-module-symvers)/Module.symvers
+ifneq ($(TARGET_BOARD_PLATFORM), pineapple)
 ifneq ($(TARGET_BOARD_PLATFORM), taro)
 	KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,msm-ext-disp-module-symvers)/Module.symvers
 	KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,sec-module-symvers)/Module.symvers
@@ -44,9 +44,9 @@ LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 
 ifneq ($(TARGET_BOARD_AUTO),true)
-ifneq ($(TARGET_BOARD_PLATFORM), pineapple)
 LOCAL_REQUIRED_MODULES    += mmrm-module-symvers
 LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,mmrm-module-symvers)/Module.symvers
+ifneq ($(TARGET_BOARD_PLATFORM), pineapple)
 ifneq ($(TARGET_BOARD_PLATFORM), taro)
 	LOCAL_REQUIRED_MODULES    += msm-ext-disp-module-symvers
 	LOCAL_REQUIRED_MODULES    += sec-module-symvers
