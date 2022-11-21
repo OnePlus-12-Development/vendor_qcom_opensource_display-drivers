@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -54,6 +54,10 @@
 
 /* below this fps limit, timeouts are adjusted based on fps */
 #define DEFAULT_TIMEOUT_FPS_THRESHOLD            24
+
+#define SDE_ENC_IRQ_REGISTERED(phys_enc, idx) \
+		((!(phys_enc) || ((idx) < 0) || ((idx) >= INTR_IDX_MAX)) ? \
+		0 : ((phys_enc)->irq[(idx)].irq_idx >= 0))
 
 /**
  * Encoder functions and data types
@@ -186,6 +190,7 @@ enum sde_enc_rc_states {
  *				encoder due to autorefresh concurrency.
  * @ctl_done_supported          boolean flag to indicate the availability of
  *                              ctl done irq support for the hardware
+ * @dynamic_irqs_config         bitmask config to enable encoder dynamic irqs
  */
 struct sde_encoder_virt {
 	struct drm_encoder base;
@@ -254,6 +259,8 @@ struct sde_encoder_virt {
 	bool delay_kickoff;
 	bool autorefresh_solver_disable;
 	bool ctl_done_supported;
+
+	unsigned long dynamic_irqs_config;
 };
 
 #define to_sde_encoder_virt(x) container_of(x, struct sde_encoder_virt, base)

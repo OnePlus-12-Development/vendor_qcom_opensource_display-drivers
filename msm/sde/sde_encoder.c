@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -1735,6 +1735,9 @@ void sde_encoder_irq_control(struct drm_encoder *drm_enc, bool enable)
 
 		if (phys && phys->ops.irq_control)
 			phys->ops.irq_control(phys, enable);
+
+		if (phys && phys->ops.dynamic_irq_control)
+			phys->ops.dynamic_irq_control(phys, enable);
 	}
 	sde_kms_cpu_vote_for_irq(sde_encoder_get_kms(drm_enc), enable);
 
@@ -5200,6 +5203,9 @@ static int _sde_encoder_init_debugfs(struct drm_encoder *drm_enc)
 
 	debugfs_create_u32("frame_trigger_mode", 0400, sde_enc->debugfs_root,
 			&sde_enc->frame_trigger_mode);
+
+	debugfs_create_x32("dynamic_irqs_config", 0600, sde_enc->debugfs_root,
+			(u32 *)&sde_enc->dynamic_irqs_config);
 
 	for (i = 0; i < sde_enc->num_phys_encs; i++)
 		if (sde_enc->phys_encs[i] &&

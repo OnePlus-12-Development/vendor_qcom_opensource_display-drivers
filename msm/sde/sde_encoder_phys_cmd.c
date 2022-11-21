@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -396,6 +396,63 @@ static void sde_encoder_phys_cmd_wr_ptr_irq(void *arg, int irq_idx)
 	SDE_ATRACE_END("wr_ptr_irq");
 }
 
+static void sde_encoder_phys_cmd_tear_detect_irq(void *arg, int irq_idx)
+{
+	struct sde_encoder_phys *phys_enc = arg;
+	struct sde_encoder_phys_cmd *cmd_enc;
+
+	if (!phys_enc)
+		return;
+
+	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
+	if (!cmd_enc)
+		return;
+
+	SDE_ATRACE_BEGIN("tear_detect_irq");
+
+	SDE_EVT32_IRQ(DRMID(phys_enc->parent));
+
+	SDE_ATRACE_END("tear_detect_irq");
+}
+
+static void sde_encoder_phys_cmd_te_assert_irq(void *arg, int irq_idx)
+{
+	struct sde_encoder_phys *phys_enc = arg;
+	struct sde_encoder_phys_cmd *cmd_enc;
+
+	if (!phys_enc)
+		return;
+
+	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
+	if (!cmd_enc)
+		return;
+
+	SDE_ATRACE_BEGIN("te_assert_irq");
+
+	SDE_EVT32_IRQ(DRMID(phys_enc->parent));
+
+	SDE_ATRACE_END("te_assert_irq");
+}
+
+static void sde_encoder_phys_cmd_te_deassert_irq(void *arg, int irq_idx)
+{
+	struct sde_encoder_phys *phys_enc = arg;
+	struct sde_encoder_phys_cmd *cmd_enc;
+
+	if (!phys_enc)
+		return;
+
+	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
+	if (!cmd_enc)
+		return;
+
+	SDE_ATRACE_BEGIN("te_deassert_irq");
+
+	SDE_EVT32_IRQ(DRMID(phys_enc->parent));
+
+	SDE_ATRACE_END("te_deassert_irq");
+}
+
 static void _sde_encoder_phys_cmd_setup_irq_hw_idx(
 		struct sde_encoder_phys *phys_enc)
 {
@@ -441,6 +498,22 @@ static void _sde_encoder_phys_cmd_setup_irq_hw_idx(
 		irq->hw_idx = phys_enc->hw_intf->idx;
 	else
 		irq->hw_idx = phys_enc->hw_pp->idx;
+
+	irq = &phys_enc->irq[INTF_IDX_TEAR_DETECT];
+	if (phys_enc->has_intf_te)
+		irq->hw_idx = phys_enc->hw_intf->idx;
+	else
+		irq->hw_idx = phys_enc->hw_pp->idx;
+
+	if (phys_enc->has_intf_te) {
+		irq = &phys_enc->irq[INTR_IDX_TE_ASSERT];
+		irq->hw_idx = phys_enc->hw_intf->idx;
+
+		if (test_bit(SDE_INTF_TE_DEASSERT_DETECT, &phys_enc->hw_intf->cap->features)) {
+			irq = &phys_enc->irq[INTR_IDX_TE_DEASSERT];
+			irq->hw_idx = phys_enc->hw_intf->idx;
+		}
+	}
 }
 
 static void sde_encoder_phys_cmd_cont_splash_mode_set(
@@ -924,6 +997,49 @@ end:
 	}
 
 	return ret;
+}
+
+void sde_encoder_phys_cmd_dynamic_irq_control(struct sde_encoder_phys *phys_enc, bool enable)
+{
+	struct sde_encoder_virt *sde_enc;
+
+	if (!phys_enc)
+		return;
+
+	/**
+	 * pingpong split slaves do not register for IRQs
+	 * check old and new topologies
+	 */
+	if (_sde_encoder_phys_is_ppsplit_slave(phys_enc) ||
+			_sde_encoder_phys_is_disabling_ppsplit_slave(phys_enc))
+		return;
+
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+
+	if (enable) {
+		if (test_bit(SDE_ENC_CMD_TEAR_DETECT, &sde_enc->dynamic_irqs_config))
+			sde_encoder_helper_register_irq(phys_enc, INTF_IDX_TEAR_DETECT);
+
+		if (test_bit(SDE_ENC_CMD_TE_ASSERT, &sde_enc->dynamic_irqs_config) &&
+				phys_enc->has_intf_te)
+			sde_encoder_helper_register_irq(phys_enc, INTR_IDX_TE_ASSERT);
+
+		if (test_bit(SDE_ENC_CMD_TE_DEASSERT, &sde_enc->dynamic_irqs_config) &&
+				test_bit(SDE_INTF_TE_DEASSERT_DETECT,
+				&phys_enc->hw_intf->cap->features) &&
+				phys_enc->has_intf_te)
+			sde_encoder_helper_register_irq(phys_enc, INTR_IDX_TE_DEASSERT);
+	} else {
+		if (SDE_ENC_IRQ_REGISTERED(phys_enc, INTF_IDX_TEAR_DETECT))
+			sde_encoder_helper_unregister_irq(phys_enc, INTF_IDX_TEAR_DETECT);
+
+		if (SDE_ENC_IRQ_REGISTERED(phys_enc, INTR_IDX_TE_ASSERT))
+			sde_encoder_helper_unregister_irq(phys_enc, INTR_IDX_TE_ASSERT);
+
+		if (test_bit(SDE_INTF_TE_DEASSERT_DETECT, &phys_enc->hw_intf->cap->features) &&
+				SDE_ENC_IRQ_REGISTERED(phys_enc, INTR_IDX_TE_DEASSERT))
+			sde_encoder_helper_unregister_irq(phys_enc, INTR_IDX_TE_DEASSERT);
+	}
 }
 
 void sde_encoder_phys_cmd_irq_control(struct sde_encoder_phys *phys_enc,
@@ -2135,6 +2251,7 @@ static void sde_encoder_phys_cmd_init_ops(struct sde_encoder_phys_ops *ops)
 	ops->needs_single_flush = sde_encoder_phys_needs_single_flush;
 	ops->hw_reset = sde_encoder_helper_hw_reset;
 	ops->irq_control = sde_encoder_phys_cmd_irq_control;
+	ops->dynamic_irq_control = sde_encoder_phys_cmd_dynamic_irq_control;
 	ops->update_split_role = sde_encoder_phys_cmd_update_split_role;
 	ops->restore = sde_encoder_phys_cmd_enable_helper;
 	ops->control_te = sde_encoder_phys_cmd_connect_te;
@@ -2159,49 +2276,10 @@ static inline bool sde_encoder_phys_cmd_intf_te_supported(
 	return false;
 }
 
-struct sde_encoder_phys *sde_encoder_phys_cmd_init(
-		struct sde_enc_phys_init_params *p)
+static void _sde_encoder_phys_cmd_init_irqs(struct sde_encoder_phys *phys_enc)
 {
-	struct sde_encoder_phys *phys_enc = NULL;
-	struct sde_encoder_phys_cmd *cmd_enc = NULL;
-	struct sde_hw_mdp *hw_mdp;
 	struct sde_encoder_irq *irq;
-	int i, ret = 0;
-
-	SDE_DEBUG("intf %d\n", p->intf_idx - INTF_0);
-
-	cmd_enc = kzalloc(sizeof(*cmd_enc), GFP_KERNEL);
-	if (!cmd_enc) {
-		ret = -ENOMEM;
-		SDE_ERROR("failed to allocate\n");
-		goto fail;
-	}
-	phys_enc = &cmd_enc->base;
-
-	hw_mdp = sde_rm_get_mdp(&p->sde_kms->rm);
-	if (IS_ERR_OR_NULL(hw_mdp)) {
-		ret = PTR_ERR(hw_mdp);
-		SDE_ERROR("failed to get mdptop\n");
-		goto fail_mdp_init;
-	}
-	phys_enc->hw_mdptop = hw_mdp;
-	phys_enc->intf_idx = p->intf_idx;
-
-	phys_enc->parent = p->parent;
-	phys_enc->parent_ops = p->parent_ops;
-	phys_enc->sde_kms = p->sde_kms;
-	phys_enc->split_role = p->split_role;
-	phys_enc->intf_mode = INTF_MODE_CMD;
-	phys_enc->enc_spinlock = p->enc_spinlock;
-	phys_enc->vblank_ctl_lock = p->vblank_ctl_lock;
-	cmd_enc->stream_sel = 0;
-	phys_enc->enable_state = SDE_ENC_DISABLED;
-	phys_enc->kickoff_timeout_ms = DEFAULT_KICKOFF_TIMEOUT_MS;
-	sde_encoder_phys_cmd_init_ops(&phys_enc->ops);
-	phys_enc->comp_type = p->comp_type;
-
-	phys_enc->has_intf_te = sde_encoder_phys_cmd_intf_te_supported(
-			phys_enc->sde_kms->catalog, phys_enc->intf_idx);
+	int i;
 
 	for (i = 0; i < INTR_IDX_MAX; i++) {
 		irq = &phys_enc->irq[i];
@@ -2260,6 +2338,75 @@ struct sde_encoder_phys *sde_encoder_phys_cmd_init(
 	else
 		irq->intr_type = SDE_IRQ_TYPE_PING_PONG_WR_PTR;
 	irq->cb.func = sde_encoder_phys_cmd_wr_ptr_irq;
+
+	irq = &phys_enc->irq[INTF_IDX_TEAR_DETECT];
+	irq->intr_idx = INTF_IDX_TEAR_DETECT;
+	irq->name = "te_tear_detect";
+	if (phys_enc->has_intf_te)
+		irq->intr_type = SDE_IRQ_TYPE_INTF_TEAR_TEAR_DETECT;
+	else
+		irq->intr_type = SDE_IRQ_TYPE_PING_PONG_TEAR_CHECK;
+	irq->cb.func = sde_encoder_phys_cmd_tear_detect_irq;
+
+	if (phys_enc->has_intf_te) {
+		irq = &phys_enc->irq[INTR_IDX_TE_ASSERT];
+		irq->intr_idx = INTR_IDX_TE_ASSERT;
+		irq->name = "te_assert";
+		irq->intr_type = SDE_IRQ_TYPE_INTF_TEAR_TE_ASSERT;
+		irq->cb.func = sde_encoder_phys_cmd_te_assert_irq;
+
+		irq = &phys_enc->irq[INTR_IDX_TE_DEASSERT];
+		irq->intr_idx = INTR_IDX_TE_DEASSERT;
+		irq->name = "te_deassert";
+		irq->intr_type = SDE_IRQ_TYPE_INTF_TEAR_TE_DEASSERT;
+		irq->cb.func = sde_encoder_phys_cmd_te_deassert_irq;
+	}
+}
+
+struct sde_encoder_phys *sde_encoder_phys_cmd_init(
+		struct sde_enc_phys_init_params *p)
+{
+	struct sde_encoder_phys *phys_enc = NULL;
+	struct sde_encoder_phys_cmd *cmd_enc = NULL;
+	struct sde_hw_mdp *hw_mdp;
+	int i, ret = 0;
+
+	SDE_DEBUG("intf %d\n", p->intf_idx - INTF_0);
+
+	cmd_enc = kzalloc(sizeof(*cmd_enc), GFP_KERNEL);
+	if (!cmd_enc) {
+		ret = -ENOMEM;
+		SDE_ERROR("failed to allocate\n");
+		goto fail;
+	}
+	phys_enc = &cmd_enc->base;
+
+	hw_mdp = sde_rm_get_mdp(&p->sde_kms->rm);
+	if (IS_ERR_OR_NULL(hw_mdp)) {
+		ret = PTR_ERR(hw_mdp);
+		SDE_ERROR("failed to get mdptop\n");
+		goto fail_mdp_init;
+	}
+	phys_enc->hw_mdptop = hw_mdp;
+	phys_enc->intf_idx = p->intf_idx;
+
+	phys_enc->parent = p->parent;
+	phys_enc->parent_ops = p->parent_ops;
+	phys_enc->sde_kms = p->sde_kms;
+	phys_enc->split_role = p->split_role;
+	phys_enc->intf_mode = INTF_MODE_CMD;
+	phys_enc->enc_spinlock = p->enc_spinlock;
+	phys_enc->vblank_ctl_lock = p->vblank_ctl_lock;
+	cmd_enc->stream_sel = 0;
+	phys_enc->enable_state = SDE_ENC_DISABLED;
+	phys_enc->kickoff_timeout_ms = DEFAULT_KICKOFF_TIMEOUT_MS;
+	sde_encoder_phys_cmd_init_ops(&phys_enc->ops);
+	phys_enc->comp_type = p->comp_type;
+
+	phys_enc->has_intf_te = sde_encoder_phys_cmd_intf_te_supported(
+			phys_enc->sde_kms->catalog, phys_enc->intf_idx);
+
+	_sde_encoder_phys_cmd_init_irqs(phys_enc);
 
 	atomic_set(&phys_enc->vblank_refcount, 0);
 	atomic_set(&phys_enc->pending_kickoff_cnt, 0);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -171,6 +171,7 @@
 #define SDE_INTR_INTF_TEAR_RD_PTR BIT(2)
 #define SDE_INTR_INTF_TEAR_TE_DETECTED BIT(3)
 #define SDE_INTR_INTF_TEAR_TEAR_DETECTED BIT(4)
+#define SDE_INTR_INTF_TEAR_TE_DEASSERT_DETECTED BIT(6)
 
 /**
  * LTM interrupt status bit definitions
@@ -379,8 +380,12 @@ static struct sde_irq_type sde_irq_intf_te_map[] = {
 		SDE_INTR_INTF_TEAR_WR_PTR, -1},
 	{ SDE_IRQ_TYPE_INTF_TEAR_RD_PTR, -1,
 		SDE_INTR_INTF_TEAR_RD_PTR, -1},
-	{ SDE_IRQ_TYPE_INTF_TEAR_TEAR_CHECK, -1,
+	{ SDE_IRQ_TYPE_INTF_TEAR_TEAR_DETECT, -1,
 		SDE_INTR_INTF_TEAR_TEAR_DETECTED, -1},
+	{ SDE_IRQ_TYPE_INTF_TEAR_TE_ASSERT, -1,
+		SDE_INTR_INTF_TEAR_TE_DETECTED, -1},
+	{ SDE_IRQ_TYPE_INTF_TEAR_TE_DEASSERT, -1,
+		SDE_INTR_INTF_TEAR_TE_DEASSERT_DETECTED, -1},
 };
 
 static struct sde_irq_type sde_irq_ltm_map[] = {
