@@ -126,7 +126,17 @@ static void sde_hw_setup_split_pipe(struct sde_hw_mdp *mdp,
 
 	c = &mdp->hw;
 
-	if (cfg->en) {
+	if (test_bit(SDE_MDP_PERIPH_TOP_0_REMOVED, &mdp->caps->features) && cfg->en) {
+		/* avoid programming of legacy bits like SW_TRG_MUX for new targets */
+		if (cfg->mode == INTF_MODE_CMD) {
+			lower_pipe |= BIT(mdp->caps->smart_panel_align_mode);
+
+			upper_pipe = lower_pipe;
+
+			if (cfg->pp_split_slave != INTF_MAX)
+				lower_pipe = FLD_SMART_PANEL_FREE_RUN;
+		}
+	} else if (cfg->en) {
 		if (cfg->mode == INTF_MODE_CMD) {
 			lower_pipe = FLD_SPLIT_DISPLAY_CMD;
 			/* interface controlling sw trigger */
