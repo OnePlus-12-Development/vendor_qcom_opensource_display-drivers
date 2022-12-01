@@ -99,6 +99,13 @@ int sde_reg_dma_init(void __iomem *addr, struct sde_mdss_cfg *m,
 	int rc = 0;
 	set_default_dma_ops(&reg_dma);
 
+	/**
+	 * Register dummy range to ensure register dump is only done on
+	 * targeted LUTDMA regions. start = 1, end = 1 so full range isn't used
+	 */
+	sde_dbg_reg_register_dump_range(LUTDMA_DBG_NAME, "DUMMY_LUTDMA", 1, 1,
+			m->dma_cfg.xin_id);
+
 	if (!addr || !m || !dev) {
 		DRM_DEBUG("invalid addr %pK catalog %pK dev %pK\n", addr, m,
 				dev);

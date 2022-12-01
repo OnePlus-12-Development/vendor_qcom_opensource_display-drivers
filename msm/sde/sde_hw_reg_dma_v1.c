@@ -967,6 +967,7 @@ static int init_reg_dma_vbif(struct sde_hw_reg_dma *cfg)
 	return ret;
 }
 
+#define BASE_REG_SIZE 0x400
 int init_v2(struct sde_hw_reg_dma *cfg)
 {
 	int ret = 0, i = 0;
@@ -989,8 +990,24 @@ int init_v2(struct sde_hw_reg_dma *cfg)
 
 	v1_supported[IGC] = GRP_DSPP_HW_BLK_SELECT | GRP_VIG_HW_BLK_SELECT |
 			GRP_DMA_HW_BLK_SELECT;
-	if (cfg->caps->reg_dma_blks[REG_DMA_TYPE_SB].valid == true)
+	if (cfg->caps->reg_dma_blks[REG_DMA_TYPE_SB].valid == true) {
+		char name[20];
+		uint32_t base = cfg->caps->reg_dma_blks[REG_DMA_TYPE_SB].base;
+
+		snprintf(name, sizeof(name), "REG_DMA_SB");
+		sde_dbg_reg_register_dump_range(LUTDMA_DBG_NAME, name, base,
+				base + BASE_REG_SIZE, cfg->caps->xin_id);
 		reg_dma->ops.last_command_sb = last_cmd_sb_v2;
+	}
+
+	if (cfg->caps->reg_dma_blks[REG_DMA_TYPE_DB].valid == true) {
+		char name[20];
+		uint32_t base = cfg->caps->reg_dma_blks[REG_DMA_TYPE_DB].base;
+
+		snprintf(name, sizeof(name), "REG_DMA_DB");
+		sde_dbg_reg_register_dump_range(LUTDMA_DBG_NAME, name, base,
+				base + BASE_REG_SIZE, cfg->caps->xin_id);
+	}
 
 	if (cfg->caps->split_vbif_supported)
 		ret = init_reg_dma_vbif(cfg);
@@ -998,8 +1015,10 @@ int init_v2(struct sde_hw_reg_dma *cfg)
 	return ret;
 }
 
+#define CTL_REG_SIZE 0x80
 int init_v3(struct sde_hw_reg_dma *cfg)
 {
+	char name[20];
 	int ret = 0, i;
 
 	ret = init_v2(cfg);
@@ -1015,6 +1034,29 @@ int init_v3(struct sde_hw_reg_dma *cfg)
 	for (i = CTL_0; i < ARRAY_SIZE(reg_dma_ctl_queue_off); i++) {
 		reg_dma_ctl_queue_off[i] = reg_dma_ctl0_queue0_cmd0_offset * i;
 		reg_dma_ctl_queue1_off[i] = reg_dma_ctl0_queue1_cmd0_offset * i + 8;
+	}
+
+	/* Register DBG DUMP RANGES - CTL paths are 0x80 in size */
+	if (cfg->caps->reg_dma_blks[REG_DMA_TYPE_DB].valid) {
+		for (i = CTL_0; i < ARRAY_SIZE(reg_dma_ctl_queue_off); i++) {
+			u32 base = cfg->caps->reg_dma_blks[REG_DMA_TYPE_DB].base +
+					reg_dma_ctl_queue_off[i];
+
+			snprintf(name, sizeof(name), "REG_DMA_DB_CTL%d", i);
+			sde_dbg_reg_register_dump_range(LUTDMA_DBG_NAME, name, base,
+					base + CTL_REG_SIZE, cfg->caps->xin_id);
+		}
+	}
+
+	if (cfg->caps->reg_dma_blks[REG_DMA_TYPE_SB].valid) {
+		for (i = CTL_0; i < ARRAY_SIZE(reg_dma_ctl_queue_off); i++) {
+			u32 base = cfg->caps->reg_dma_blks[REG_DMA_TYPE_SB].base +
+					reg_dma_ctl_queue_off[i];
+
+			snprintf(name, sizeof(name), "REG_DMA_SB_CTL%d", i);
+			sde_dbg_reg_register_dump_range(LUTDMA_DBG_NAME, name, base,
+					base + CTL_REG_SIZE, cfg->caps->xin_id);
+		}
 	}
 
 	for (i = CTL_0; i < CTL_MAX; i++) {

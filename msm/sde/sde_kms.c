@@ -4849,7 +4849,7 @@ static int _sde_kms_hw_init_ioremap(struct sde_kms *sde_kms,
 		unsigned long mdp_addr = msm_get_phys_addr(platformdev, "mdp_phys");
 		sde_kms->reg_dma_len = msm_iomap_size(platformdev, "regdma_phys");
 		sde_kms->reg_dma_off = msm_get_phys_addr(platformdev, "regdma_phys") - mdp_addr;
-		rc =  sde_dbg_reg_register_base("reg_dma", sde_kms->reg_dma,
+		rc =  sde_dbg_reg_register_base(LUTDMA_DBG_NAME, sde_kms->reg_dma,
 				sde_kms->reg_dma_len,
 				msm_get_phys_addr(platformdev, "regdma_phys"),
 				SDE_DBG_LUTDMA);

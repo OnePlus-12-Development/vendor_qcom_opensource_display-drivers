@@ -42,8 +42,8 @@
 /* offsets from LUTDMA top address for the debug buses */
 #define LUTDMA_0_DEBUG_BUS_CTRL		0x1e8
 #define LUTDMA_0_DEBUG_BUS_STATUS	0x1ec
-#define LUTDMA_1_DEBUG_BUS_CTRL		0x5e8
-#define LUTDMA_1_DEBUG_BUS_STATUS	0x5ec
+#define LUTDMA_1_DEBUG_BUS_CTRL		0x9e8
+#define LUTDMA_1_DEBUG_BUS_STATUS	0x9ec
 
 /* offsets from sde top address for the debug buses */
 #define DBGBUS_SSPP0		0x188

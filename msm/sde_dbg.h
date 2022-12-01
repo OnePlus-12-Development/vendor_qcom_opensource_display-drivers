@@ -34,6 +34,8 @@
 #define SDE_EVTLOG_H32(val) (val >> 32)
 #define SDE_EVTLOG_L32(val) (val & 0xffffffff)
 
+#define LUTDMA_DBG_NAME "reg_dma"
+
 /* flags to enable the HW block dumping */
 #define SDE_DBG_SDE		BIT(0)
 #define SDE_DBG_RSC		BIT(1)
