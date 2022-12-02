@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -232,8 +232,6 @@ struct dsi_ctrl_interrupts {
  * @frame_threshold_time_us: Frame threshold time in microseconds, where
  *		 	  dsi data lane will be idle i.e from pingpong done to
  *			  next TE for command mode.
- * @phy_isolation_enabled:    A boolean property allows to isolate the phy from
- *                          dsi controller and run only dsi controller.
  * @phy_pll_bypass:      A boolean property that enables skipping HW access in
  *                       DSI PHY/PLL drivers for running on emulation platforms.
  * @null_insertion_enabled:  A boolean property to allow dsi controller to
@@ -311,7 +309,6 @@ struct dsi_ctrl {
 	unsigned long jiffies_start;
 	unsigned int error_interrupt_count;
 
-	bool phy_isolation_enabled;
 	bool phy_pll_bypass;
 	bool null_insertion_enabled;
 	bool modeupdated;
