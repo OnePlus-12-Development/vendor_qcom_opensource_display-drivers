@@ -399,6 +399,12 @@ static void _dp_mst_update_timeslots(struct dp_mst_private *mst,
 	struct dp_mst_bridge *dp_bridge;
 	int pbn, start_slot, num_slots;
 
+#if (KERNEL_VERSION(5, 19, 0) <= LINUX_VERSION_CODE)
+	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, 1);
+#else
+	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr);
+#endif
+
 	for (i = 0; i < MAX_DP_MST_DRM_BRIDGES; i++) {
 		dp_bridge = &mst->mst_bridge[i];
 
@@ -413,14 +419,8 @@ static void _dp_mst_update_timeslots(struct dp_mst_private *mst,
 			pbn = dp_bridge->pbn;
 		}
 
-		if (mst_bridge == dp_bridge) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
-			mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, start_slot);
-#else
-			mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr);
-#endif
+		if (mst_bridge == dp_bridge)
 			dp_bridge->num_slots = num_slots;
-		}
 
 		mst->dp_display->set_stream_info(mst->dp_display,
 				dp_bridge->dp_panel,
