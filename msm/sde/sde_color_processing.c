@@ -1025,6 +1025,22 @@ static int _set_demura_feature(struct sde_hw_dspp *hw_dspp,
 	return ret;
 }
 
+static int _set_demura_cfg0_param2(struct sde_hw_dspp *hw_dspp,
+				   struct sde_hw_cp_cfg *hw_cfg,
+				   struct sde_crtc *sde_crtc)
+{
+	int ret = 0;
+
+	if (!hw_dspp) {
+		ret = -EINVAL;
+	} else {
+		if (hw_dspp->ops.setup_demura_cfg0_param2)
+			hw_dspp->ops.setup_demura_cfg0_param2(hw_dspp, hw_cfg);
+	}
+
+	return ret;
+}
+
 static int _feature_unsupported(struct sde_hw_dspp *hw_dspp,
 				   struct sde_hw_cp_cfg *hw_cfg,
 				   struct sde_crtc *sde_crtc)
@@ -1098,6 +1114,7 @@ do { \
 	wrappers[SDE_CP_CRTC_DSPP_SPR_INIT] = _set_spr_init_feature; \
 	wrappers[SDE_CP_CRTC_DSPP_SPR_UDC] = _set_spr_udc_feature; \
 	wrappers[SDE_CP_CRTC_DSPP_DEMURA_INIT] = _set_demura_feature; \
+	wrappers[SDE_CP_CRTC_DSPP_DEMURA_CFG0_PARAM2] = _set_demura_cfg0_param2; \
 } while (0)
 
 feature_wrapper set_crtc_pu_feature_wrappers[SDE_CP_CRTC_MAX_PU_FEATURES];
@@ -1921,6 +1938,7 @@ static const int dspp_feature_to_sub_blk_tbl[SDE_CP_CRTC_MAX_FEATURES] = {
 	[SDE_CP_CRTC_DSPP_DEMURA_INIT] = SDE_DSPP_DEMURA,
 	[SDE_CP_CRTC_DSPP_DEMURA_BACKLIGHT] = SDE_DSPP_DEMURA,
 	[SDE_CP_CRTC_DSPP_MAX] = SDE_DSPP_MAX,
+	[SDE_CP_CRTC_DSPP_DEMURA_CFG0_PARAM2] = SDE_DSPP_DEMURA,
 	[SDE_CP_CRTC_LM_GC] = SDE_DSPP_MAX,
 };
 
@@ -3537,6 +3555,9 @@ static  void _dspp_demura_install_property(struct drm_crtc *crtc)
 				SDE_CP_CRTC_DSPP_DEMURA_BOOT_PLANE, true,
 				sde_demura_fetch_planes,
 				ARRAY_SIZE(sde_demura_fetch_planes), 0xf);
+		_sde_cp_crtc_install_blob_property(crtc, "SDE_DEMURA_CFG0_PARAM2",
+			SDE_CP_CRTC_DSPP_DEMURA_CFG0_PARAM2,
+			sizeof(struct drm_msm_dem_cfg0_param2));
 		break;
 	default:
 		DRM_ERROR("version %d not supported\n", version);

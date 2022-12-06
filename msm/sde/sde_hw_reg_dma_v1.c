@@ -937,6 +937,7 @@ int init_v12(struct sde_hw_reg_dma *cfg)
 	v1_supported[SPR_PU_CFG] = (GRP_DSPP_HW_BLK_SELECT |
 			GRP_MDSS_HW_BLK_SELECT);
 	v1_supported[DEMURA_CFG] = MDSS | DSPP0 | DSPP1;
+	v1_supported[DEMURA_CFG0_PARAM2] = MDSS | DSPP0 | DSPP1;
 
 	return 0;
 }
@@ -1083,6 +1084,7 @@ int init_v3(struct sde_hw_reg_dma *cfg)
 	}
 
 	v1_supported[DEMURA_CFG] = v1_supported[DEMURA_CFG] | DSPP2 | DSPP3;
+	v1_supported[DEMURA_CFG0_PARAM2] = v1_supported[DEMURA_CFG0_PARAM2] | DSPP2 | DSPP3;
 	return 0;
 }
 

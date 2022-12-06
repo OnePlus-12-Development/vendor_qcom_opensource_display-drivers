@@ -455,6 +455,7 @@ enum {
  * @SDE_DSPP_DEMURA          Demura block
  * @SDE_DSPP_RC              RC block
  * @SDE_DSPP_SB              SB LUT DMA
+ * @SDE_DSPP_DEMURA_CFG0_PARAM2 Demura block
  * @SDE_DSPP_MAX             maximum value
  */
 enum {
@@ -474,6 +475,7 @@ enum {
 	SDE_DSPP_DEMURA,
 	SDE_DSPP_RC,
 	SDE_DSPP_SB,
+	SDE_DSPP_DEMURA_CFG0_PARAM2,
 	SDE_DSPP_MAX
 };
 

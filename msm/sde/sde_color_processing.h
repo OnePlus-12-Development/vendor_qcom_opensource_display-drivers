@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -108,6 +108,7 @@ enum sde_cp_crtc_features {
 	SDE_CP_CRTC_DSPP_DEMURA_INIT,
 	SDE_CP_CRTC_DSPP_DEMURA_BACKLIGHT,
 	SDE_CP_CRTC_DSPP_DEMURA_BOOT_PLANE,
+	SDE_CP_CRTC_DSPP_DEMURA_CFG0_PARAM2,
 	SDE_CP_CRTC_DSPP_MAX,
 	/* DSPP features end */
 
