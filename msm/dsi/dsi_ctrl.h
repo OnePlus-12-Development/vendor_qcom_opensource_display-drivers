@@ -234,6 +234,8 @@ struct dsi_ctrl_interrupts {
  *			  next TE for command mode.
  * @phy_isolation_enabled:    A boolean property allows to isolate the phy from
  *                          dsi controller and run only dsi controller.
+ * @phy_pll_bypass:      A boolean property that enables skipping HW access in
+ *                       DSI PHY/PLL drivers for running on emulation platforms.
  * @null_insertion_enabled:  A boolean property to allow dsi controller to
  *                           insert null packet.
  * @modeupdated:	  Boolean to send new roi if mode is updated.
@@ -310,6 +312,7 @@ struct dsi_ctrl {
 	unsigned int error_interrupt_count;
 
 	bool phy_isolation_enabled;
+	bool phy_pll_bypass;
 	bool null_insertion_enabled;
 	bool modeupdated;
 	bool split_link_supported;

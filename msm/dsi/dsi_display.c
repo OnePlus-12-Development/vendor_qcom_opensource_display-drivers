@@ -70,6 +70,11 @@ static bool is_sim_panel(struct dsi_display *display)
 			display->panel->panel_ack_disabled);
 }
 
+static bool phy_pll_bypass(struct dsi_display *display)
+{
+	return display->ctrl[display->cmd_master_idx].phy->hw.phy_pll_bypass;
+}
+
 static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
 			u32 mask, bool enable)
 {
@@ -773,6 +778,9 @@ static int dsi_display_read_status(struct dsi_display_ctrl *ctrl,
 	if (!dsi_ctrl_validate_host_state(ctrl->ctrl))
 		return 1;
 
+	if (phy_pll_bypass(display))
+		return 0;
+
 	config = &(panel->esd_config);
 	lenp = config->status_valid_params ?: config->status_cmds_rlen;
 	count = config->status_cmd.count;
@@ -1066,6 +1074,9 @@ static int dsi_display_cmd_rx(struct dsi_display *display,
 		DSI_DEBUG("panel not initialized\n");
 		goto release_panel_lock;
 	}
+
+	if (phy_pll_bypass(display))
+		goto release_panel_lock;
 
 	flags = DSI_CTRL_CMD_READ;
 
@@ -2810,7 +2821,7 @@ int dsi_display_phy_pll_toggle(void *priv, bool prepare)
 		return -EINVAL;
 	}
 
-	if (is_skip_op_required(display))
+	if (is_skip_op_required(display) || phy_pll_bypass(display))
 		return 0;
 
 	if (prepare)
@@ -3254,6 +3265,9 @@ static int dsi_display_broadcast_cmd(struct dsi_display *display, struct dsi_cmd
 	int i;
 	u32 flags = 0;
 
+	if (phy_pll_bypass(display))
+		return 0;
+
 	/*
 	 * 1. Setup commands in FIFO
 	 * 2. Trigger commands
@@ -3335,7 +3349,7 @@ static int dsi_display_phy_sw_reset(struct dsi_display *display)
 	 * ctrl states are updated separately and hence we do
 	 * an early return
 	 */
-	if (is_skip_op_required(display)) {
+	if (is_skip_op_required(display) || phy_pll_bypass(display)) {
 		DSI_DEBUG(
 			"cont splash/trusted vm use case, phy sw reset not required\n");
 		return 0;
@@ -3389,6 +3403,9 @@ int dsi_host_transfer_sub(struct mipi_dsi_host *host, struct dsi_cmd_desc *cmd)
 	}
 
 	display = to_dsi_display(host);
+
+	if (phy_pll_bypass(display))
+		return 0;
 
 	/* Avoid sending DCS commands when ESD recovery is pending */
 	if (atomic_read(&display->panel->esd_recovery_pending)) {
@@ -5689,6 +5706,7 @@ static int dsi_display_bind(struct device *dev,
 	info.priv_data = display;
 	info.master_ndx = display->clk_master_idx;
 	info.dsi_ctrl_count = display->ctrl_count;
+	info.phy_pll_bypass = phy_pll_bypass(display);
 	snprintf(info.name, MAX_STRING_LEN,
 			"DSI_MNGR-%s", display->name);
 

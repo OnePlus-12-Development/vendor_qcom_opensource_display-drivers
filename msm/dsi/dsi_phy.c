@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of_device.h>
@@ -404,6 +404,9 @@ static int dsi_phy_driver_probe(struct platform_device *pdev)
 	dsi_phy->name = of_get_property(pdev->dev.of_node, "label", NULL);
 	if (!dsi_phy->name)
 		dsi_phy->name = DSI_PHY_DEFAULT_LABEL;
+
+	dsi_phy->hw.phy_pll_bypass = of_property_read_bool(pdev->dev.of_node,
+			"qcom,dsi-phy-pll-bypass");
 
 	DSI_PHY_DBG(dsi_phy, "Probing device\n");
 

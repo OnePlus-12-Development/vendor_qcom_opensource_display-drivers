@@ -4720,6 +4720,9 @@ static int _sde_kms_get_splash_data(struct sde_splash_data *data)
 	int num_displays, num_regions;
 	struct sde_splash_display *splash_display;
 
+	if (of_find_node_with_property(NULL, "qcom,sde-emulated-env"))
+		return 0;
+
 	if (!data)
 		return -EINVAL;
 

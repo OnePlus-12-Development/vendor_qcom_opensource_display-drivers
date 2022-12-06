@@ -304,6 +304,8 @@ int dsi_pll_init(struct platform_device *pdev, struct dsi_pll_resource **pll)
 			pll_res->ssc_center = true;
 	}
 
+	pll_res->phy_pll_bypass = of_property_read_bool(pdev->dev.of_node,
+			"qcom,dsi-phy-pll-bypass");
 
 	if (dsi_pll_get_ioresources(pdev, &pll_res->pll_base, "pll_base")) {
 		DSI_PLL_ERR(pll_res, "Unable to remap pll base resources\n");
@@ -334,6 +336,9 @@ int dsi_pll_init(struct platform_device *pdev, struct dsi_pll_resource **pll)
 			"Bypassing PLL clock register for Trusted VM\n");
 		return rc;
 	}
+
+	if (pll_res->phy_pll_bypass)
+		return 0;
 
 	rc = dsi_pll_clock_register(pdev, pll_res);
 	if (rc) {

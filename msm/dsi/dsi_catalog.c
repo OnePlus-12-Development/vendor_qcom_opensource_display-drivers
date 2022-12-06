@@ -111,6 +111,7 @@ static void dsi_catalog_cmn_init(struct dsi_ctrl_hw *ctrl,
  * @version:     DSI controller version.
  * @index:       DSI controller instance ID.
  * @phy_isolation_enabled:       DSI controller works isolated from phy.
+ * @phy_pll_bypass:              DSI PHY/PLL drivers bypass HW access.
  * @null_insertion_enabled:      DSI controller inserts null packet.
  *
  * This function setups the catalog information in the dsi_ctrl_hw object.
@@ -119,7 +120,8 @@ static void dsi_catalog_cmn_init(struct dsi_ctrl_hw *ctrl,
  */
 int dsi_catalog_ctrl_setup(struct dsi_ctrl_hw *ctrl,
 		   enum dsi_ctrl_version version, u32 index,
-		   bool phy_isolation_enabled, bool null_insertion_enabled)
+		   bool phy_isolation_enabled, bool phy_pll_bypass,
+		   bool null_insertion_enabled)
 {
 	int rc = 0;
 
@@ -143,6 +145,7 @@ int dsi_catalog_ctrl_setup(struct dsi_ctrl_hw *ctrl,
 	case DSI_CTRL_VERSION_2_3:
 	case DSI_CTRL_VERSION_2_4:
 		ctrl->phy_isolation_enabled = phy_isolation_enabled;
+		ctrl->phy_pll_bypass = phy_pll_bypass;
 		dsi_catalog_cmn_init(ctrl, version);
 		break;
 	case DSI_CTRL_VERSION_2_5:
@@ -151,6 +154,7 @@ int dsi_catalog_ctrl_setup(struct dsi_ctrl_hw *ctrl,
 	case DSI_CTRL_VERSION_2_8:
 		ctrl->widebus_support = true;
 		ctrl->phy_isolation_enabled = phy_isolation_enabled;
+		ctrl->phy_pll_bypass = phy_pll_bypass;
 		dsi_catalog_cmn_init(ctrl, version);
 		break;
 	default:
@@ -324,6 +328,8 @@ int dsi_catalog_phy_pll_setup(struct dsi_phy_hw *phy, u32 pll_ver)
 	if (pll_ver >= DSI_PLL_VERSION_UNKNOWN) {
 		DSI_ERR("Unsupported version: %d\n", pll_ver);
 		return -EOPNOTSUPP;
+	} else if (phy->phy_pll_bypass) {
+		return 0;
 	}
 
 	switch (pll_ver) {
