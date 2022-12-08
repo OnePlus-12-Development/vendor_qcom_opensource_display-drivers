@@ -115,6 +115,9 @@
 #define HW_FENCE_DPU_INPUT_FENCE_START_N		0
 #define HW_FENCE_DPU_OUTPUT_FENCE_START_N		4
 
+#define HW_FENCE_IPCC_FENCE_PROTOCOL_ID 4
+#define HW_FENCE_DPU_FENCE_PROTOCOL_ID 3
+
 static void sde_hw_setup_split_pipe(struct sde_hw_mdp *mdp,
 		struct split_pipe_cfg *cfg)
 {
@@ -681,7 +684,9 @@ static void sde_hw_setup_hw_fences_config(struct sde_hw_mdp *mdp, u32 protocol_i
 	c.blk_off = 0x0;
 
 	/*select ipcc protocol id for dpu */
-	SDE_REG_WRITE(&c, MDP_CTL_HW_FENCE_CTRL, protocol_id);
+	val = (protocol_id == HW_FENCE_IPCC_FENCE_PROTOCOL_ID) ?
+		HW_FENCE_DPU_FENCE_PROTOCOL_ID : protocol_id;
+	SDE_REG_WRITE(&c, MDP_CTL_HW_FENCE_CTRL, val);
 
 	/* configure the start of the FENCE_IDn_ISR ops for input and output fence isr's */
 	val = (HW_FENCE_DPU_OUTPUT_FENCE_START_N << 16) | (HW_FENCE_DPU_INPUT_FENCE_START_N & 0xFF);
