@@ -7845,6 +7845,7 @@ void sde_crtc_static_img_control(struct drm_crtc *crtc,
 
 		kthread_cancel_delayed_work_sync(
 				&sde_crtc->static_cache_read_work);
+		sde_core_perf_llcc_stale_frame(crtc, SDE_SYS_CACHE_DISP);
 		break;
 	case CACHE_STATE_FRAME_WRITE:
 		if (sde_crtc->cache_state != CACHE_STATE_NORMAL)
@@ -7860,7 +7861,8 @@ void sde_crtc_static_img_control(struct drm_crtc *crtc,
 		return;
 	}
 
-	if (test_bit(SDE_SYS_CACHE_DISP_1, sde_kms->catalog->sde_sys_cache_type_map)) {
+	if (test_bit(SDE_SYS_CACHE_DISP_1, sde_kms->catalog->sde_sys_cache_type_map) &&
+			!test_bit(SDE_FEATURE_SYS_CACHE_STALING, sde_kms->catalog->features)) {
 		if (state == CACHE_STATE_FRAME_WRITE)
 			sde_crtc->cache_type = (sde_crtc->cache_type == SDE_SYS_CACHE_DISP) ?
 					SDE_SYS_CACHE_DISP_1 : SDE_SYS_CACHE_DISP;

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -10,6 +11,7 @@
 #include <linux/dcache.h>
 #include <linux/mutex.h>
 #include <drm/drm_crtc.h>
+#include <linux/soc/qcom/llcc-qcom.h>
 
 #include "sde_hw_catalog.h"
 #include "sde_power_handle.h"
@@ -101,6 +103,21 @@ struct sde_core_perf {
 	u64 core_clk_reserve_rate;
 	u32 sys_cache_enabled;
 };
+
+/**
+ * sde_core_perf_llcc_stale_configure - configure llcc staling feature
+ * @sde_cfg: Pointer to sde catalog
+ * @slice:   Pointer to llcc slice
+ */
+void sde_core_perf_llcc_stale_configure(struct sde_mdss_cfg *sde_cfg,
+		struct llcc_slice_desc *slice);
+
+/**
+ * sde_core_perf_llcc_stale_frame - update llcc stale frame
+ * @crtc: Pointer to crtc
+ * @type: System Cache type
+ */
+void sde_core_perf_llcc_stale_frame(struct drm_crtc *crtc, enum sde_sys_cache_type type);
 
 /**
  * sde_core_perf_crtc_update_llcc - update llcc performance for crtc
