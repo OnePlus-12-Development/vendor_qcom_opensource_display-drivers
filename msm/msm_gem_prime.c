@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -28,7 +28,11 @@
 #include <linux/qcom-dma-mapping.h>
 #include <linux/dma-buf.h>
 #include <linux/version.h>
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
+#include <linux/mem-buf.h>
+#include <soc/qcom/secure_buffer.h>
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+#include <linux/qti-smmu-proxy-callbacks.h>
+#elif (KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE)
 #include <linux/ion.h>
 #include <linux/msm_ion.h>
 #endif
@@ -114,8 +118,12 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 	struct msm_drm_private *priv;
 	struct msm_kms *kms;
 	int ret;
-	bool lazy_unmap = true;
 	u32 domain;
+	bool lazy_unmap = true, is_nested_sec_vmid = false;
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	int *vmid_list, *perms_list;
+	int nelems = 0, i;
+#endif
 
 	if (!dma_buf || !dev->dev_private)
 		return ERR_PTR(-EINVAL);
@@ -148,13 +156,30 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 		goto fail_put;
 	}
 
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	ret = mem_buf_dma_buf_copy_vmperm(dma_buf, &vmid_list, &perms_list, &nelems);
+	if (ret) {
+		DRM_ERROR("get vmid list failure, ret:%d", ret);
+		goto fail_put;
+	}
+
+	for (i = 0; i < nelems; i++)
+		if (vmid_list[i] == VMID_TVM)
+			is_nested_sec_vmid = true;
+
+	/* mem_buf_dma_buf_copy_vmperm uses kmemdup, do kfree to free up the memory */
+	kfree(vmid_list);
+	kfree(perms_list);
+#endif
+
 	/*
 	 * - attach default drm device for all S2 only buffers or
 	 *   when IOMMU is not available
 	 * - avoid using lazying unmap feature as it doesn't add
-	 * any value without nested translations
+	 *   any value without nested translations
+	 * - use the same drm device for nested secure-camera buffer
 	 */
-	if (!iommu_present(&platform_bus_type)) {
+	if (!iommu_present(&platform_bus_type) || is_nested_sec_vmid) {
 		attach_dev = dev->dev;
 		lazy_unmap = false;
 	} else {
@@ -187,6 +212,12 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 	 */
 	if (lazy_unmap)
 		attach->dma_map_attrs |= DMA_ATTR_DELAYED_UNMAP;
+
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	if (is_nested_sec_vmid)
+		attach->dma_map_attrs |= DMA_ATTR_QTI_SMMU_PROXY_MAP;
+#endif
+
 	sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
 	if (IS_ERR(sgt)) {
 		ret = PTR_ERR(sgt);
