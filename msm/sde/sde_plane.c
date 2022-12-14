@@ -3004,6 +3004,12 @@ static void _sde_plane_map_prop_to_dirty_bits(void)
 	plane_prop_array[PLANE_PROP_FP16_GC] = SDE_PLANE_DIRTY_FP16_GC;
 	plane_prop_array[PLANE_PROP_FP16_CSC] = SDE_PLANE_DIRTY_FP16_CSC;
 	plane_prop_array[PLANE_PROP_FP16_UNMULT] = SDE_PLANE_DIRTY_FP16_UNMULT;
+
+	plane_prop_array[PLANE_PROP_UCSC_UNMULT] = SDE_PLANE_DIRTY_UCSC_UNMULT;
+	plane_prop_array[PLANE_PROP_UCSC_IGC] = SDE_PLANE_DIRTY_UCSC_IGC;
+	plane_prop_array[PLANE_PROP_UCSC_CSC] = SDE_PLANE_DIRTY_UCSC_CSC;
+	plane_prop_array[PLANE_PROP_UCSC_GC] = SDE_PLANE_DIRTY_UCSC_GC;
+	plane_prop_array[PLANE_PROP_UCSC_ALPHA_DITHER] = SDE_PLANE_DIRTY_UCSC_ALPHA_DITHER;
 }
 
 static inline bool _sde_plane_allow_uidle(struct sde_plane *psde,
