@@ -1457,6 +1457,8 @@ int sde_kms_vm_pre_release(struct sde_kms *sde_kms,
 	sde_kms_cancel_delayed_work(crtc);
 
 	kthread_flush_worker(&priv->event_thread[crtc->index].worker);
+	/* Flush pp_event thread queue for any pending events */
+	kthread_flush_worker(&priv->pp_event_worker);
 
 	/* disable SDE encoder irq's */
 	drm_for_each_encoder_mask(encoder, crtc->dev,
