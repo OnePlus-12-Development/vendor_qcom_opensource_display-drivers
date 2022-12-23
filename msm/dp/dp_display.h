@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -106,6 +106,7 @@ struct dp_display {
 			const struct msm_resource_caps_info *avail_res,
 			struct msm_resource_caps_info *max_dp_avail_res);
 	void (*clear_reservation)(struct dp_display *dp, struct dp_panel *panel);
+	int (*get_mst_pbn_div)(struct dp_display *dp);
 };
 
 void *get_ipc_log_context(void);
