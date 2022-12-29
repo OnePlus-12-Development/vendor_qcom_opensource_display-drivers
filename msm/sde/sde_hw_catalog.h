@@ -151,6 +151,8 @@
 
 #define DNSC_BLUR_MAX_RATIO_COUNT	7
 
+#define MDP_PPB_FIFO_ENTRY_SIZE                4
+
 /*
  * UIDLE supported versions
  */
@@ -267,8 +269,8 @@ struct sde_intr_irq_offsets {
  * @SDE_MDP_DHDR_MEMPOOL   Dynamic HDR Metadata mempool present
  * @SDE_MDP_DHDR_MEMPOOL_4K Dynamic HDR mempool is 4k aligned
  * @SDE_MDP_PERIPH_TOP_REMOVED Indicates if periph top0 block is removed
- * @SDE_MDP_MAX            Maximum value
-
+ * @SDE_MDP_TOP_PPB_SET_SIZE   Indicates if top block supports ppb size setting
+ * @SDE_MDP_MAX                Maximum value
  */
 enum {
 	SDE_MDP_PANIC_PER_PIPE = 0x1,
@@ -281,6 +283,7 @@ enum {
 	SDE_MDP_DHDR_MEMPOOL,
 	SDE_MDP_DHDR_MEMPOOL_4K,
 	SDE_MDP_PERIPH_TOP_0_REMOVED,
+	SDE_MDP_TOP_PPB_SET_SIZE,
 	SDE_MDP_MAX
 };
 
@@ -512,6 +515,7 @@ enum {
  * @SDE_PINGPONG_MERGE_3D,  Separate MERGE_3D block exists
  * @SDE_PINGPONG_CWB,           PP block supports CWB
  * @SDE_PINGPONG_CWB_DITHER,    PP block supports CWB dither
+ * @SDE_PINGPONG_SET_SIZE,      PP block supports setting latency buffer size
  * @SDE_PINGPONG_MAX
  */
 enum {
@@ -525,6 +529,7 @@ enum {
 	SDE_PINGPONG_MERGE_3D,
 	SDE_PINGPONG_CWB,
 	SDE_PINGPONG_CWB_DITHER,
+	SDE_PINGPONG_SET_SIZE,
 	SDE_PINGPONG_MAX
 };
 
@@ -729,6 +734,18 @@ enum {
 	SDE_UIDLE_QACTIVE_OVERRIDE = 0x1,
 	SDE_UIDLE_WB_FAL_STATUS,
 	SDE_UIDLE_MAX
+};
+
+/**
+ * sde_ppb_size_option           PPB size limit programming choice
+ * @SDE_PPB_SIZE_THRU_NONE       ppb size programming not available
+ * @SDE_PPB_SIZE_THRU_TOP        ppb size programming supported in top block
+ * @SDE_PPB_SIZE_THRU_PINGPONG   ppb size programming supported in pingpong block
+ */
+enum sde_ppb_size_option {
+	SDE_PPB_SIZE_THRU_NONE,
+	SDE_PPB_SIZE_THRU_TOP,
+	SDE_PPB_SIZE_THRU_PINGPONG,
 };
 
 /**
@@ -1941,6 +1958,8 @@ struct sde_perf_cfg {
  * @dnsc_blur_filter_count   supported filter count for downscale blur
  * @ipcc_protocol_id    ipcc protocol id for the hw
  * @ipcc_client_phys_id dpu ipcc client id for the hw, physical client id if supported
+ * @ppb_sz_program      enum value for pingpong buffer size programming choice by hw
+ * @ppb_buf_max_lines   maximum lines needed for pingpong latency buffer size
  */
 struct sde_mdss_cfg {
 	/* Block Revisions */
@@ -2062,6 +2081,9 @@ struct sde_mdss_cfg {
 
 	u32 ipcc_protocol_id;
 	u32 ipcc_client_phys_id;
+
+	enum sde_ppb_size_option ppb_sz_program;
+	u32 ppb_buf_max_lines;
 };
 
 struct sde_mdss_hw_cfg_handler {

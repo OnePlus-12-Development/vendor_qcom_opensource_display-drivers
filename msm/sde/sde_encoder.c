@@ -1431,6 +1431,85 @@ static int _sde_encoder_update_roi(struct drm_encoder *drm_enc)
 	return 0;
 }
 
+static void _sde_encoder_update_ppb_size(struct drm_encoder *drm_enc)
+{
+	struct sde_kms *sde_kms;
+	struct sde_hw_mdp *hw_mdp;
+	struct drm_display_mode *mode;
+	struct sde_encoder_virt *sde_enc;
+	u32 maxw, pixels_per_pp, num_lm_or_pp, latency_lines;
+	int i;
+
+	if (!drm_enc) {
+		SDE_ERROR("invalid encoder parameter\n");
+		return;
+	}
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	if (!sde_enc->cur_master || !sde_enc->cur_master->connector) {
+		SDE_ERROR_ENC(sde_enc, "invalid master or conn\n");
+		return;
+	}
+
+	/* program only for realtime displays */
+	if (sde_enc->disp_info.intf_type == DRM_MODE_CONNECTOR_VIRTUAL)
+		return;
+
+	sde_kms = sde_encoder_get_kms(&sde_enc->base);
+	if (!sde_kms) {
+		SDE_ERROR_ENC(sde_enc, "invalid sde_kms\n");
+		return;
+	}
+
+	/* check if hw support is available, early return if not available */
+	if (sde_kms->catalog->ppb_sz_program == SDE_PPB_SIZE_THRU_NONE)
+		return;
+
+	hw_mdp = sde_kms->hw_mdp;
+	if (!hw_mdp) {
+		SDE_ERROR_ENC(sde_enc, "invalid mdp top\n");
+		return;
+	}
+
+	mode = &drm_enc->crtc->state->adjusted_mode;
+	num_lm_or_pp = sde_enc->cur_channel_cnt;
+	latency_lines = sde_kms->catalog->ppb_buf_max_lines;
+
+	for (i = 0; i < num_lm_or_pp; i++) {
+		struct sde_hw_pingpong *hw_pp = sde_enc->hw_pp[i];
+		if (!hw_pp) {
+			SDE_ERROR_ENC(sde_enc, "invalid hw_pp i:%d pp_cnt:%d\n", i, num_lm_or_pp);
+			return;
+		}
+
+		if (hw_pp->ops.set_ppb_fifo_size) {
+			pixels_per_pp = mult_frac(mode->hdisplay, latency_lines, num_lm_or_pp);
+			hw_pp->ops.set_ppb_fifo_size(hw_pp, pixels_per_pp);
+
+			SDE_EVT32(DRMID(drm_enc), i, hw_pp->idx, mode->hdisplay, pixels_per_pp,
+					sde_kms->catalog->ppb_sz_program, SDE_EVTLOG_FUNC_CASE1);
+			SDE_DEBUG_ENC(sde_enc, "hw-pp i:%d pp_cnt:%d pixels_per_pp:%d\n",
+					i, num_lm_or_pp, pixels_per_pp);
+		} else if (hw_mdp->ops.set_ppb_fifo_size) {
+			maxw = sde_conn_get_max_mode_width(sde_enc->cur_master->connector);
+			if (!maxw) {
+				SDE_ERROR_ENC(sde_enc, "failed to get max horizantal resolution\n");
+				return;
+			}
+
+			pixels_per_pp = mult_frac(maxw, latency_lines, num_lm_or_pp);
+			hw_mdp->ops.set_ppb_fifo_size(hw_mdp, hw_pp->idx, pixels_per_pp);
+
+			SDE_EVT32(DRMID(drm_enc), i, hw_pp->idx, maxw, pixels_per_pp,
+					sde_kms->catalog->ppb_sz_program, SDE_EVTLOG_FUNC_CASE2);
+			SDE_DEBUG_ENC(sde_enc, "hw-pp i:%d pp_cnt:%d pixels_per_pp:%d\n",
+					i, num_lm_or_pp, pixels_per_pp);
+		} else {
+			SDE_ERROR_ENC(sde_enc, "invalid - ppb fifo size support is partial\n");
+		}
+	}
+}
+
 void sde_encoder_helper_vsync_config(struct sde_encoder_phys *phys_enc, u32 vsync_source)
 {
 	struct sde_vsync_source_cfg vsync_cfg = { 0 };
@@ -2549,12 +2628,14 @@ static void _sde_encoder_virt_populate_hw_res(struct drm_encoder *drm_enc)
 	struct sde_rm_hw_request request_hw;
 	int i, j;
 
+	sde_enc->cur_channel_cnt = 0;
 	sde_rm_init_hw_iter(&pp_iter, drm_enc->base.id, SDE_HW_BLK_PINGPONG);
 	for (i = 0; i < MAX_CHANNELS_PER_ENC; i++) {
 		sde_enc->hw_pp[i] = NULL;
 		if (!sde_rm_get_hw(&sde_kms->rm, &pp_iter))
 			break;
 		sde_enc->hw_pp[i] = to_sde_hw_pingpong(pp_iter.hw);
+		sde_enc->cur_channel_cnt++;
 	}
 
 	for (i = 0; i < sde_enc->num_phys_encs; i++) {
@@ -2999,6 +3080,9 @@ static void _sde_encoder_virt_enable_helper(struct drm_encoder *drm_enc)
 				&sde_enc->cur_master->intf_cfg_v1);
 
 	_sde_encoder_update_vsync_source(sde_enc, &sde_enc->disp_info);
+
+	if (!sde_encoder_in_cont_splash(drm_enc))
+		_sde_encoder_update_ppb_size(drm_enc);
 
 	memset(&sde_enc->prv_conn_roi, 0, sizeof(sde_enc->prv_conn_roi));
 	memset(&sde_enc->cur_conn_roi, 0, sizeof(sde_enc->cur_conn_roi));

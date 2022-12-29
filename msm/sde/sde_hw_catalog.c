@@ -147,6 +147,7 @@
 #define DEFAULT_AXI_BUS_WIDTH			32
 #define DEFAULT_CPU_MASK			0
 #define DEFAULT_CPU_DMA_LATENCY			PM_QOS_DEFAULT_VALUE
+#define DEFAULT_PPB_BUF_MAX_LINES		4
 
 /* Uidle values */
 #define SDE_UIDLE_FAL10_EXIT_CNT 128
@@ -4050,6 +4051,9 @@ static int sde_pp_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 			}
 		}
 
+		if (sde_cfg->ppb_sz_program == SDE_PPB_SIZE_THRU_PINGPONG)
+			set_bit(SDE_PINGPONG_SET_SIZE, &pp->features);
+
 		sblk->dither.base = PROP_VALUE_ACCESS(prop_value, DITHER_OFF,
 				i);
 		if (sblk->dither.base) {
@@ -4242,6 +4246,9 @@ static int sde_top_parse_dt(struct device_node *np, struct sde_mdss_cfg *cfg)
 		set_bit(SDE_MDP_VSYNC_SEL, &cfg->mdp[0].features);
 	else if (major_version < SDE_HW_MAJOR(SDE_HW_VER_810))
 		set_bit(SDE_MDP_WD_TIMER, &cfg->mdp[0].features);
+
+	if (cfg->ppb_sz_program == SDE_PPB_SIZE_THRU_TOP)
+		set_bit(SDE_MDP_TOP_PPB_SET_SIZE, &cfg->mdp[0].features);
 
 	rc = _add_to_irq_offset_list(cfg, SDE_INTR_HWBLK_TOP,
 			SDE_INTR_TOP_INTR, cfg->mdp[0].base);
@@ -5017,6 +5024,9 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 	set_bit(SDE_FEATURE_HDR, sde_cfg->features);
 	sde_cfg->mdss_hw_block_size = DEFAULT_MDSS_HW_BLOCK_SIZE;
 
+	/* Set target specific value based on sytems recommendation if not same as default value */
+	sde_cfg->ppb_buf_max_lines = DEFAULT_PPB_BUF_MAX_LINES;
+
 	for (i = 0; i < SSPP_MAX; i++) {
 		sde_cfg->demura_supported[i][0] = ~0x0;
 		sde_cfg->demura_supported[i][1] = ~0x0;
@@ -5399,6 +5409,8 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		set_bit(SDE_FEATURE_EPT_FPS, sde_cfg->features);
 		sde_cfg->allowed_dsc_reservation_switch = SDE_DP_DSC_RESERVATION_SWITCH;
 		sde_cfg->autorefresh_disable_seq = AUTOREFRESH_DISABLE_SEQ2;
+		/* if pingpong block supports it this should not be set on top block */
+		sde_cfg->ppb_sz_program = SDE_PPB_SIZE_THRU_TOP;
 		sde_cfg->perf.min_prefill_lines = 40;
 		sde_cfg->vbif_qos_nlvl = 8;
 		sde_cfg->qos_target_time_ns = 11160;
