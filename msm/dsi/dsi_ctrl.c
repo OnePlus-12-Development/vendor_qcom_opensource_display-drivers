@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2057,9 +2057,6 @@ static int dsi_ctrl_dts_parse(struct dsi_ctrl *dsi_ctrl,
 	if (!dsi_ctrl->name)
 		dsi_ctrl->name = DSI_CTRL_DEFAULT_LABEL;
 
-	dsi_ctrl->phy_isolation_enabled = of_property_read_bool(of_node,
-				    "qcom,dsi-phy-isolation-enabled");
-
 	dsi_ctrl->null_insertion_enabled = of_property_read_bool(of_node,
 					"qcom,null-insertion-enabled");
 
@@ -2141,8 +2138,8 @@ static int dsi_ctrl_dev_probe(struct platform_device *pdev)
 	}
 
 	rc = dsi_catalog_ctrl_setup(&dsi_ctrl->hw, dsi_ctrl->version,
-		dsi_ctrl->cell_index, dsi_ctrl->phy_isolation_enabled,
-		dsi_ctrl->phy_pll_bypass, dsi_ctrl->null_insertion_enabled);
+		dsi_ctrl->cell_index, dsi_ctrl->phy_pll_bypass,
+		dsi_ctrl->null_insertion_enabled);
 	if (rc) {
 		DSI_CTRL_ERR(dsi_ctrl, "Catalog does not support version (%d)\n",
 		       dsi_ctrl->version);

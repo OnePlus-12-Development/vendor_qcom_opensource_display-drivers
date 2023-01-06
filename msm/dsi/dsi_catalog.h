@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DSI_CATALOG_H_
@@ -15,7 +15,6 @@
  * @ctrl:        Pointer to DSI controller hw object.
  * @version:     DSI controller version.
  * @index:       DSI controller instance ID.
- * @phy_isolation_enabled:       DSI controller works isolated from phy.
  * @phy_pll_bypass:              DSI PHY/PLL drivers bypass HW access.
  * @null_insertion_enabled:      DSI controller inserts null packet.
  *
@@ -25,8 +24,7 @@
  */
 int dsi_catalog_ctrl_setup(struct dsi_ctrl_hw *ctrl,
 		   enum dsi_ctrl_version version, u32 index,
-		   bool phy_isolation_enabled, bool phy_pll_bypass,
-		   bool null_insertion_enabled);
+		   bool phy_pll_bypass, bool null_insertion_enabled);
 
 /**
  * dsi_catalog_phy_setup() - return catalog info for dsi phy hardware

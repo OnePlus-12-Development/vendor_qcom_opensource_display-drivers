@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -147,7 +147,7 @@ void dsi_ctrl_hw_cmn_host_setup(struct dsi_ctrl_hw *ctrl,
 	if (cfg->phy_type == DSI_PHY_TYPE_CPHY)
 		DSI_W32(ctrl, DSI_CPHY_MODE_CTRL, BIT(0));
 
-	if (ctrl->phy_isolation_enabled)
+	if (ctrl->phy_pll_bypass)
 		DSI_W32(ctrl, DSI_DEBUG_CTRL, BIT(28));
 	DSI_CTRL_HW_DBG(ctrl, "Host configuration complete\n");
 }
