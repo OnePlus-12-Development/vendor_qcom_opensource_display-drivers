@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -17,6 +17,7 @@
 #define DP_INTR_STATUS2				(0x00000024)
 #define DP_INTR_STATUS3				(0x00000028)
 #define DP_INTR_STATUS5				(0x00000034)
+#define DP_INTR_STATUS6				(0x00000038)
 
 #define DP_DP_HPD_CTRL				(0x00000000)
 #define DP_DP_HPD_INT_STATUS			(0x00000004)

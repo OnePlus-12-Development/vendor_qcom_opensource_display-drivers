@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -33,9 +33,22 @@
 #define DP_INTR_IDLE_PATTERN_SENT	BIT(3)
 #define DP_INTR_FRAME_END		BIT(6)
 #define DP_INTR_CRC_UPDATED		BIT(9)
+#define DP_INTR_SST_FIFO_UNDERFLOW	BIT(28)
 
 #define DP_INTR_MST_DP0_VCPF_SENT	BIT(0)
 #define DP_INTR_MST_DP1_VCPF_SENT	BIT(3)
+
+#define DP_INTR_SST_ML_FIFO_OVERFLOW	BIT(12)
+#define DP_INTR_MST0_ML_FIFO_OVERFLOW	BIT(15)
+#define DP_INTR_MST1_ML_FIFO_OVERFLOW	BIT(18)
+#define DP_INTR_DP1_FRAME_END		BIT(21)
+#define DP_INTR_SDP0_COLLISION		BIT(24)
+#define DP_INTR_SDP1_COLLISION		BIT(27)
+
+#define DP_INTR_DP0_BACKPRESSURE_ERROR	(BIT(1) | BIT(0))
+#define DP_INTR_DP1_BACKPRESSURE_ERROR	(BIT(5) | BIT(4))
+#define DP_INTR_SST_BS_LATE	BIT(8)
+
 
 #define DP_MAX_TIME_SLOTS	64
 
@@ -76,7 +89,9 @@ struct dp_catalog_aux {
 
 struct dp_catalog_ctrl {
 	u32 isr;
+	u32 isr3;
 	u32 isr5;
+	u32 isr6;
 
 	void (*state_ctrl)(struct dp_catalog_ctrl *ctrl, u32 state);
 	void (*config_ctrl)(struct dp_catalog_ctrl *ctrl, u8 ln_cnt);

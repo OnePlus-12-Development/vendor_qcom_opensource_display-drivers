@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -36,9 +36,17 @@
 
 #define DP_INTERRUPT_STATUS2 \
 	(DP_INTR_READY_FOR_VIDEO | DP_INTR_IDLE_PATTERN_SENT | \
-	DP_INTR_FRAME_END | DP_INTR_CRC_UPDATED)
+	DP_INTR_FRAME_END | DP_INTR_CRC_UPDATED | DP_INTR_SST_FIFO_UNDERFLOW)
 
 #define DP_INTR_MASK2		(DP_INTERRUPT_STATUS2 << 2)
+
+
+#define DP_INTERRUPT_STATUS3 \
+	(DP_INTR_SST_ML_FIFO_OVERFLOW | DP_INTR_MST0_ML_FIFO_OVERFLOW | \
+	DP_INTR_MST1_ML_FIFO_OVERFLOW | DP_INTR_DP1_FRAME_END | DP_INTR_SDP0_COLLISION | \
+	DP_INTR_SDP1_COLLISION)
+
+#define DP_INTR_MASK3		(DP_INTERRUPT_STATUS3 << 2)
 
 #define DP_INTERRUPT_STATUS5 \
 	(DP_INTR_MST_DP0_VCPF_SENT | DP_INTR_MST_DP1_VCPF_SENT)
@@ -46,6 +54,11 @@
 #define DP_INTR_MASK5		(DP_INTERRUPT_STATUS5 << 2)
 #define DP_TPG_PATTERN_MAX	9
 #define DP_TPG_PATTERN_DEFAULT	8
+
+#define DP_INTERRUPT_STATUS6 \
+	(DP_INTR_SST_BS_LATE | DP_INTR_DP0_BACKPRESSURE_ERROR | DP_INTR_DP1_BACKPRESSURE_ERROR)
+
+#define DP_INTR_MASK6		(DP_INTERRUPT_STATUS6 << 2)
 
 #define dp_catalog_fill_io(x) { \
 	catalog->io.x = parser->get_io(parser, #x); \
@@ -1800,18 +1813,25 @@ static void dp_catalog_ctrl_enable_irq(struct dp_catalog_ctrl *ctrl,
 	if (enable) {
 		dp_write(DP_INTR_STATUS, DP_INTR_MASK1);
 		dp_write(DP_INTR_STATUS2, DP_INTR_MASK2);
+		dp_write(DP_INTR_STATUS3, DP_INTR_MASK3);
 		dp_write(DP_INTR_STATUS5, DP_INTR_MASK5);
+		dp_write(DP_INTR_STATUS6, DP_INTR_MASK6);
 	} else {
 		/* disable interrupts */
 		dp_write(DP_INTR_STATUS, 0x00);
 		dp_write(DP_INTR_STATUS2, 0x00);
+		dp_write(DP_INTR_STATUS3, 0x00);
 		dp_write(DP_INTR_STATUS5, 0x00);
+		dp_write(DP_INTR_STATUS6, 0x00);
 		wmb();
 
 		/* clear all pending interrupts */
 		dp_write(DP_INTR_STATUS, DP_INTERRUPT_STATUS1 << 1);
 		dp_write(DP_INTR_STATUS2, DP_INTERRUPT_STATUS2 << 1);
+		dp_write(DP_INTR_STATUS3, DP_INTERRUPT_STATUS3 << 1);
 		dp_write(DP_INTR_STATUS5, DP_INTERRUPT_STATUS5 << 1);
+		dp_write(DP_INTR_STATUS6, DP_INTERRUPT_STATUS6 << 1);
+
 		wmb();
 	}
 }
@@ -1837,12 +1857,27 @@ static void dp_catalog_ctrl_get_interrupt(struct dp_catalog_ctrl *ctrl)
 	ack |= DP_INTR_MASK2;
 	dp_write(DP_INTR_STATUS2, ack);
 
+	ctrl->isr3 = dp_read(DP_INTR_STATUS3);
+	ctrl->isr3 &= ~DP_INTR_MASK3;
+	ack = ctrl->isr3 & DP_INTERRUPT_STATUS3;
+	ack <<= 1;
+	ack |= DP_INTR_MASK3;
+	dp_write(DP_INTR_STATUS3, ack);
+
 	ctrl->isr5 = dp_read(DP_INTR_STATUS5);
 	ctrl->isr5 &= ~DP_INTR_MASK5;
 	ack = ctrl->isr5 & DP_INTERRUPT_STATUS5;
 	ack <<= 1;
 	ack |= DP_INTR_MASK5;
 	dp_write(DP_INTR_STATUS5, ack);
+
+	ctrl->isr6 = dp_read(DP_INTR_STATUS6);
+	ctrl->isr6 &= ~DP_INTR_MASK6;
+	ack = ctrl->isr6 & DP_INTERRUPT_STATUS6;
+	ack <<= 1;
+	ack |= DP_INTR_MASK6;
+	dp_write(DP_INTR_STATUS6, ack);
+
 }
 
 static void dp_catalog_ctrl_phy_reset(struct dp_catalog_ctrl *ctrl)
