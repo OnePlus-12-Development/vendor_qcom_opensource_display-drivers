@@ -1049,7 +1049,6 @@ void sde_setup_ucsc_igcv1(struct sde_hw_pipe *ctx,
 	igc &= 0x600FD;
 
 	if (*ucsc_igc == UCSC_IGC_MODE_DISABLE) {
-		DRM_INFO("UCSC IGC is not enabled!\n");
 		goto reset_igc;
 	}
 

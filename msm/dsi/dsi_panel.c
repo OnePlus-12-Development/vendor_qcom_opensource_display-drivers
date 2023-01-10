@@ -700,7 +700,11 @@ static int dsi_panel_pwm_register(struct dsi_panel *panel)
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
+	bl->pwm_bl = devm_pwm_get(panel->parent, NULL);
+#else
 	bl->pwm_bl = devm_of_pwm_get(panel->parent, panel->panel_of_node, NULL);
+#endif
 	if (IS_ERR_OR_NULL(bl->pwm_bl)) {
 		rc = PTR_ERR(bl->pwm_bl);
 		DSI_ERR("[%s] failed to request pwm, rc=%d\n", panel->name,

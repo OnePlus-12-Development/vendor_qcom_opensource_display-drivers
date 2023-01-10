@@ -68,6 +68,7 @@
 #define MDP_SID_V2_LUTDMA_RD     0x300
 #define MDP_SID_V2_LUTDMA_WR     0x304
 #define MDP_SID_V2_LUTDMA_SB_RD  0x308
+#define MDP_SID_V2_LUTDMA_VM_0   0x310
 #define MDP_SID_V2_DSI0          0x500
 #define MDP_SID_V2_DSI1          0x504
 
@@ -113,6 +114,9 @@
 
 #define HW_FENCE_DPU_INPUT_FENCE_START_N		0
 #define HW_FENCE_DPU_OUTPUT_FENCE_START_N		4
+
+#define HW_FENCE_IPCC_FENCE_PROTOCOL_ID 4
+#define HW_FENCE_DPU_FENCE_PROTOCOL_ID 3
 
 static void sde_hw_setup_split_pipe(struct sde_hw_mdp *mdp,
 		struct split_pipe_cfg *cfg)
@@ -452,6 +456,13 @@ void sde_hw_set_vm_sid_v2(struct sde_hw_sid *sid, u32 vm, struct sde_mdss_cfg *m
 		SDE_REG_WRITE(&sid->hw, offset, vm << 2);
 	}
 
+	if (SDE_HW_MAJOR(sid->hw.hw_rev) >= SDE_HW_MAJOR(SDE_HW_VER_A00)) {
+		for (i = 0; i < m->ctl_count; i++) {
+			offset = MDP_SID_V2_LUTDMA_VM_0 + (i * 4);
+			SDE_REG_WRITE(&sid->hw, offset, vm << 2);
+		}
+	}
+
 	SDE_REG_WRITE(&sid->hw, MDP_SID_V2_IPC_READ, vm << 2);
 	SDE_REG_WRITE(&sid->hw, MDP_SID_V2_LUTDMA_RD, vm << 2);
 	SDE_REG_WRITE(&sid->hw, MDP_SID_V2_LUTDMA_WR, vm << 2);
@@ -673,7 +684,9 @@ static void sde_hw_setup_hw_fences_config(struct sde_hw_mdp *mdp, u32 protocol_i
 	c.blk_off = 0x0;
 
 	/*select ipcc protocol id for dpu */
-	SDE_REG_WRITE(&c, MDP_CTL_HW_FENCE_CTRL, protocol_id);
+	val = (protocol_id == HW_FENCE_IPCC_FENCE_PROTOCOL_ID) ?
+		HW_FENCE_DPU_FENCE_PROTOCOL_ID : protocol_id;
+	SDE_REG_WRITE(&c, MDP_CTL_HW_FENCE_CTRL, val);
 
 	/* configure the start of the FENCE_IDn_ISR ops for input and output fence isr's */
 	val = (HW_FENCE_DPU_OUTPUT_FENCE_START_N << 16) | (HW_FENCE_DPU_INPUT_FENCE_START_N & 0xFF);

@@ -213,13 +213,21 @@ static void _sde_hw_dnsc_blur_bind_pingpong_blk(struct sde_hw_dnsc_blur *hw_dnsc
 	struct sde_hw_blk_reg_map *hw = &hw_dnsc_blur->hw;
 	int mux_cfg;
 
-	if (enable && (pp < PINGPONG_0 || pp >= PINGPONG_MAX))
+	if (enable && (pp < PINGPONG_0 || pp >= PINGPONG_MAX)) {
+		SDE_ERROR("invalid args enable:%d pp:%d\n", enable, pp - PINGPONG_0);
 		return;
+	}
+
+	if (cwb && pp < PINGPONG_CWB_0) {
+		SDE_ERROR("invalid pp:%d for cwb\n", pp - PINGPONG_0);
+		return;
+	}
 
 	if (enable)
-		mux_cfg = cwb ? 0xD : (pp - PINGPONG_0) & 0x7;
+		mux_cfg = cwb ? (pp < PINGPONG_CWB_2 ? 0xd : 0xb) : (pp - PINGPONG_0) & 0x7;
 	else
 		mux_cfg = 0xF;
+
 	SDE_REG_WRITE(hw, DNSC_BLUR_MUX, mux_cfg);
 }
 
