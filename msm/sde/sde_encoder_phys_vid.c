@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -283,12 +283,16 @@ static void programmable_fetch_config(struct sde_encoder_phys *phys_enc,
 
 	m = phys_enc->sde_kms->catalog;
 
+	phys_enc->pf_time_in_us = 0;
 	vfp_fetch_lines = programmable_fetch_get_num_lines(vid_enc, timing);
 	if (vfp_fetch_lines) {
 		vert_total = get_vertical_total(timing);
 		horiz_total = get_horizontal_total(timing);
 		vfp_fetch_start_vsync_counter =
 			(vert_total - vfp_fetch_lines) * horiz_total + 1;
+
+		phys_enc->pf_time_in_us = DIV_ROUND_UP(1000000 * vfp_fetch_lines,
+				vert_total * timing->vrefresh);
 
 		/**
 		 * Check if we need to throttle the fetch to start

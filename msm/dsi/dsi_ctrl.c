@@ -2516,13 +2516,14 @@ exit:
  * dsi_ctrl_timing_db_update() - update only controller Timing DB
  * @dsi_ctrl:          DSI controller handle.
  * @enable:            Enable/disable Timing DB register
+ * @pf_time_in_us:           Programmable fetch time in micro-seconds
  *
  *  Update timing db register value during dfps usecases
  *
  * Return: error code.
  */
 int dsi_ctrl_timing_db_update(struct dsi_ctrl *dsi_ctrl,
-		bool enable)
+		bool enable, u32 pf_time_in_us)
 {
 	int rc = 0;
 
@@ -2550,7 +2551,13 @@ int dsi_ctrl_timing_db_update(struct dsi_ctrl *dsi_ctrl,
 	 * flush is after panel_vsync. So, added the recommended
 	 * delays after dfps update.
 	 */
-	usleep_range(2000, 2010);
+	if (pf_time_in_us > 2000) {
+		DSI_CTRL_ERR(dsi_ctrl, "Programmable fetch time check failed, pf_time_in_us=%u\n",
+				pf_time_in_us);
+		pf_time_in_us = 2000;
+	}
+
+	usleep_range(pf_time_in_us, pf_time_in_us + 10);
 
 	dsi_ctrl->hw.ops.set_timing_db(&dsi_ctrl->hw, enable);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -703,6 +703,13 @@ bool sde_encoder_is_line_insertion_supported(struct drm_encoder *drm_enc);
  * @Return: pointer to the hw ctl from the encoder upon success, otherwise null
  */
 struct sde_hw_ctl *sde_encoder_get_hw_ctl(struct sde_connector *c_conn);
+
+/*
+ * sde_encoder_get_programmed_fetch_time - gets the programmable fetch time for video encoders
+ * @drm_enc:    Pointer to drm encoder structure
+ * @Return: programmable fetch time in microseconds
+ */
+u32 sde_encoder_get_programmed_fetch_time(struct drm_encoder *encoder);
 
 void sde_encoder_add_data_to_minidump_va(struct drm_encoder *drm_enc);
 

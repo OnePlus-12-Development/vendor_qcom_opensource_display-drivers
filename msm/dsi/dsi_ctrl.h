@@ -412,13 +412,14 @@ int dsi_ctrl_update_host_config(struct dsi_ctrl *dsi_ctrl,
  * dsi_ctrl_timing_db_update() - update only controller Timing DB
  * @dsi_ctrl:          DSI controller handle.
  * @enable:            Enable/disable Timing DB register
+ * @pf_time_in_us:           Programmable fetch time in micro-seconds
  *
  * Update timing db register value during dfps usecases
  *
  * Return: error code.
  */
 int dsi_ctrl_timing_db_update(struct dsi_ctrl *dsi_ctrl,
-		bool enable);
+		bool enable, u32 pf_time_in_us);
 
 /**
  * dsi_ctrl_async_timing_update() - update only controller timing

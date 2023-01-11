@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1292,6 +1292,7 @@ int dsi_conn_post_kickoff(struct drm_connector *connector,
 	struct dsi_display *display;
 	struct dsi_display_ctrl *m_ctrl, *ctrl;
 	int i, rc = 0, ctrl_version;
+	u32 pf_time_in_us = 0;
 	bool enable;
 	struct dsi_dyn_clk_caps *dyn_clk_caps;
 
@@ -1316,10 +1317,12 @@ int dsi_conn_post_kickoff(struct drm_connector *connector,
 	display = c_bridge->display;
 	dyn_clk_caps = &(display->panel->dyn_clk_caps);
 
+	pf_time_in_us = sde_encoder_get_programmed_fetch_time(encoder);
+
 	if (adj_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR) {
 		m_ctrl = &display->ctrl[display->clk_master_idx];
 		ctrl_version = m_ctrl->ctrl->version;
-		rc = dsi_ctrl_timing_db_update(m_ctrl->ctrl, false);
+		rc = dsi_ctrl_timing_db_update(m_ctrl->ctrl, false, pf_time_in_us);
 		if (rc) {
 			DSI_ERR("[%s] failed to dfps update  rc=%d\n",
 				display->name, rc);
@@ -1354,7 +1357,7 @@ int dsi_conn_post_kickoff(struct drm_connector *connector,
 			if (!ctrl->ctrl || (ctrl == m_ctrl))
 				continue;
 
-			rc = dsi_ctrl_timing_db_update(ctrl->ctrl, false);
+			rc = dsi_ctrl_timing_db_update(ctrl->ctrl, false, pf_time_in_us);
 			if (rc) {
 				DSI_ERR("[%s] failed to dfps update rc=%d\n",
 					display->name,  rc);
