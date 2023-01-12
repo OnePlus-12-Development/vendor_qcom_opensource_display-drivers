@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 #include <drm/msm_drm_pp.h>
@@ -982,10 +982,8 @@ void sde_setup_ucsc_gcv1(struct sde_hw_pipe *ctx,
 	gc = SDE_REG_READ(&ctx->hw, gc_base);
 	gc &= 0x60707;
 
-	if (*ucsc_gc == UCSC_GC_MODE_DISABLE) {
-		DRM_INFO("UCSC GC is not enabled!\n");
+	if (*ucsc_gc == UCSC_GC_MODE_DISABLE)
 		goto reset_gc;
-	}
 
 	if (ucsc_gc && *ucsc_gc) {
 		gc |= BIT(4);
@@ -1048,9 +1046,8 @@ void sde_setup_ucsc_igcv1(struct sde_hw_pipe *ctx,
 	igc = SDE_REG_READ(&ctx->hw, igc_base);
 	igc &= 0x600FD;
 
-	if (*ucsc_igc == UCSC_IGC_MODE_DISABLE) {
+	if (*ucsc_igc == UCSC_IGC_MODE_DISABLE)
 		goto reset_igc;
-	}
 
 	if (ucsc_igc && *ucsc_igc) {
 		igc |= BIT(1);
