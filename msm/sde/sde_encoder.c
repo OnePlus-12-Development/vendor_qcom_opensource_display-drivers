@@ -1215,40 +1215,32 @@ static void _sde_encoder_get_qsync_fps_callback(struct drm_encoder *drm_enc,
 }
 
 static int _sde_encoder_avr_step_check(struct sde_connector *sde_conn,
-		struct sde_connector_state *sde_conn_state, u32 step)
+		struct sde_connector_state *sde_conn_state)
 {
-	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(sde_conn_state->base.best_encoder);
 	u32 nom_fps = drm_mode_vrefresh(sde_conn_state->msm_mode.base);
-	u32 min_fps, req_fps = 0;
+	u32 min_fps, step_fps = 0;
 	u32 vtotal = sde_conn_state->msm_mode.base->vtotal;
-	bool has_panel_req = sde_enc->disp_info.has_avr_step_req;
 	u32 qsync_mode = sde_connector_get_property(&sde_conn_state->base,
 			CONNECTOR_PROP_QSYNC_MODE);
+	u32 avr_step_state = sde_connector_get_property(&sde_conn_state->base,
+			CONNECTOR_PROP_AVR_STEP_STATE);
 
-	if (has_panel_req) {
-		if (!sde_conn->ops.get_avr_step_req) {
-			SDE_ERROR("unable to retrieve required step rate\n");
-			return -EINVAL;
-		}
+	if ((avr_step_state == AVR_STEP_NONE) || !sde_conn->ops.get_avr_step_fps)
+		return 0;
 
-		req_fps = sde_conn->ops.get_avr_step_req(sde_conn->display, nom_fps);
-		/* when qsync is enabled, the step fps *must* be set to the panel requirement */
-		if (qsync_mode && req_fps != step) {
-			SDE_ERROR("invalid avr_step %u, panel requires %u at nominal %u fps\n",
-					step, req_fps, nom_fps);
-			return -EINVAL;
-		}
+	if (!qsync_mode && avr_step_state) {
+		SDE_ERROR("invalid config: avr-step enabled without qsync\n");
+		return -EINVAL;
 	}
 
-	if (!step)
-		return 0;
+	step_fps = sde_conn->ops.get_avr_step_fps(&sde_conn_state->base);
 
 	_sde_encoder_get_qsync_fps_callback(sde_conn_state->base.best_encoder, &min_fps,
 		&sde_conn_state->base);
-	if (!min_fps || !nom_fps || step % nom_fps || step % min_fps || step < nom_fps ||
-			(vtotal * nom_fps) % step) {
+	if (!min_fps || !nom_fps || step_fps % nom_fps || step_fps % min_fps
+			|| step_fps < nom_fps || (vtotal * nom_fps) % step_fps) {
 		SDE_ERROR("invalid avr_step rate! nom:%u min:%u step:%u vtotal:%u\n", nom_fps,
-				min_fps, step, vtotal);
+				min_fps, step_fps, vtotal);
 		return -EINVAL;
 	}
 
@@ -1259,11 +1251,9 @@ static int _sde_encoder_atomic_check_qsync(struct sde_connector *sde_conn,
 		struct sde_connector_state *sde_conn_state)
 {
 	int rc = 0;
-	u32 avr_step;
 	bool qsync_dirty, has_modeset, ept;
 	struct drm_connector_state *conn_state = &sde_conn_state->base;
-	u32 qsync_mode = sde_connector_get_property(&sde_conn_state->base,
-						CONNECTOR_PROP_QSYNC_MODE);
+	u32 qsync_mode;
 
 	has_modeset = sde_crtc_atomic_check_has_modeset(conn_state->state, conn_state->crtc);
 	qsync_dirty = msm_property_is_dirty(&sde_conn->property_info,
@@ -1279,9 +1269,9 @@ static int _sde_encoder_atomic_check_qsync(struct sde_connector *sde_conn,
 		return -EINVAL;
 	}
 
-	avr_step = sde_connector_get_property(conn_state, CONNECTOR_PROP_AVR_STEP);
-	if (qsync_dirty || (avr_step != sde_conn->avr_step) || (qsync_mode && has_modeset))
-		rc = _sde_encoder_avr_step_check(sde_conn, sde_conn_state, avr_step);
+	qsync_mode = sde_connector_get_property(conn_state, CONNECTOR_PROP_QSYNC_MODE);
+	if (qsync_dirty || (qsync_mode && has_modeset))
+		rc =  _sde_encoder_avr_step_check(sde_conn, sde_conn_state);
 
 	return rc;
 }
@@ -4670,6 +4660,7 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	u32 avr_step_fps, min_fps = 0, qsync_mode;
 	u64 timeout_us = 0, ept;
 	struct drm_connector *drm_conn;
+	struct msm_mode_info *info = &sde_enc->mode_info;
 
 	if (!sde_enc->cur_master || !sde_enc->cur_master->connector)
 		return;
@@ -4679,13 +4670,13 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	if (!ept)
 		return;
 
-	avr_step_fps = sde_connector_get_avr_step(drm_conn);
 	qsync_mode = sde_connector_get_property(drm_conn->state, CONNECTOR_PROP_QSYNC_MODE);
 	if (qsync_mode)
 		_sde_encoder_get_qsync_fps_callback(&sde_enc->base, &min_fps, drm_conn->state);
 	/* use min qsync fps, if feature is enabled; otherwise min default fps */
 	min_fps = min_fps ? min_fps : DEFAULT_MIN_FPS;
 
+	avr_step_fps = info->avr_step_fps;
 	current_ts = ktime_get_ns();
 	/* ept is in ns and avr_step is mulitple of refresh rate */
 	ept_ts = avr_step_fps ? ept - DIV_ROUND_UP(NSEC_PER_SEC, avr_step_fps) + NSEC_PER_MSEC

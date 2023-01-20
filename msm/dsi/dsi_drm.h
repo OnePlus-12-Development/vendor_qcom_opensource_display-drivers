@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -179,4 +180,12 @@ void dsi_conn_set_submode_blob_info(struct drm_connector *conn,
  * Return: Qsync min fps rate or -ve error code.
  */
 int dsi_conn_get_qsync_min_fps(struct drm_connector_state *conn_state);
+
+/**
+ * dsi_conn_get_avr_step_fps() - get avr step fps for given mode
+ * @conn_state:         Pointer to drm_connector_state structure
+ *
+ * Return: AVR step fps rate or -ve error code.
+ */
+int dsi_conn_get_avr_step_fps(struct drm_connector_state *conn_state);
 #endif /* _DSI_DRM_H_ */

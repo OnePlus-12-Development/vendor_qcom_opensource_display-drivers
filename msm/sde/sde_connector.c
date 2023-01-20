@@ -854,7 +854,7 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn;
 	struct sde_connector_state *c_state;
-	u32 qsync_propval = 0, step_val = 0;
+	u32 qsync_propval = 0;
 	bool prop_dirty;
 
 	if (!connector)
@@ -879,15 +879,9 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 	}
 
 	prop_dirty = msm_property_is_dirty(&c_conn->property_info, &c_state->property_state,
-					CONNECTOR_PROP_AVR_STEP);
-	if (prop_dirty) {
-		step_val = sde_connector_get_property(c_conn->base.state, CONNECTOR_PROP_AVR_STEP);
-		if (step_val != c_conn->avr_step) {
-			SDE_DEBUG("updated avr step %d -> %d\n", c_conn->avr_step, step_val);
-			c_conn->qsync_updated = true;
-			c_conn->avr_step = step_val;
-		}
-	}
+				CONNECTOR_PROP_AVR_STEP_STATE);
+	if (prop_dirty)
+		c_conn->qsync_updated = true;
 }
 
 void sde_connector_complete_qsync_commit(struct drm_connector *conn,
@@ -2932,6 +2926,7 @@ static int sde_connector_populate_mode_info(struct drm_connector *conn,
 		}
 
 		sde_kms_info_add_keyint(info, "qsync_min_fps", mode_info.qsync_min_fps);
+		sde_kms_info_add_keyint(info, "avr_step_fps", mode_info.avr_step_fps);
 		sde_kms_info_add_keyint(info, "has_cwb_crop", test_bit(SDE_FEATURE_CWB_CROP,
 								       sde_kms->catalog->features));
 		sde_kms_info_add_keyint(info, "has_dedicated_cwb_support",
@@ -3058,6 +3053,33 @@ exit:
 	return rc;
 }
 
+static void _sde_connector_install_qsync_properties(struct sde_kms *sde_kms,
+		struct sde_connector *c_conn, struct dsi_display *dsi_display,
+		struct msm_display_info *display_info)
+{
+	static const struct drm_prop_enum_list e_avr_step_state[] = {
+		{AVR_STEP_NONE, "avr_step_none"},
+		{AVR_STEP_ENABLE, "avr_step_enable"},
+		{AVR_STEP_DISABLE, "avr_step_disable"},
+	};
+
+	if (test_bit(SDE_FEATURE_QSYNC, sde_kms->catalog->features) && dsi_display &&
+			dsi_display->panel && dsi_display->panel->qsync_caps.qsync_support) {
+		msm_property_install_enum(&c_conn->property_info, "qsync_mode", 0, 0, e_qsync_mode,
+				ARRAY_SIZE(e_qsync_mode), 0, CONNECTOR_PROP_QSYNC_MODE);
+
+		if (test_bit(SDE_FEATURE_EPT, sde_kms->catalog->features))
+			msm_property_install_range(&c_conn->property_info, "EPT", 0x0, 0, U64_MAX,
+					0, CONNECTOR_PROP_EPT);
+
+		if (test_bit(SDE_FEATURE_AVR_STEP, sde_kms->catalog->features) &&
+				(display_info->capabilities & MSM_DISPLAY_CAP_VID_MODE))
+			msm_property_install_enum(&c_conn->property_info, "avr_step_state",
+					0, 0, e_avr_step_state, ARRAY_SIZE(e_avr_step_state), 0,
+					CONNECTOR_PROP_AVR_STEP_STATE);
+	}
+}
+
 static int _sde_connector_install_properties(struct drm_device *dev,
 	struct sde_kms *sde_kms, struct sde_connector *c_conn,
 	int connector_type, void *display,
@@ -3169,21 +3191,7 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 			CONNECTOR_PROP_AUTOREFRESH);
 
 	if (connector_type == DRM_MODE_CONNECTOR_DSI) {
-		if (test_bit(SDE_FEATURE_QSYNC, sde_kms->catalog->features) && dsi_display &&
-		    dsi_display->panel && dsi_display->panel->qsync_caps.qsync_support) {
-			msm_property_install_enum(&c_conn->property_info,
-					"qsync_mode", 0, 0, e_qsync_mode,
-					ARRAY_SIZE(e_qsync_mode), 0,
-					CONNECTOR_PROP_QSYNC_MODE);
-			if (test_bit(SDE_FEATURE_EPT, sde_kms->catalog->features))
-				msm_property_install_range(&c_conn->property_info,
-						"EPT", 0x0, 0, U64_MAX, 0,
-						CONNECTOR_PROP_EPT);
-			if (test_bit(SDE_FEATURE_AVR_STEP, sde_kms->catalog->features))
-				msm_property_install_range(&c_conn->property_info,
-						"avr_step", 0x0, 0, U32_MAX, 0,
-						CONNECTOR_PROP_AVR_STEP);
-		}
+		_sde_connector_install_qsync_properties(sde_kms, c_conn, dsi_display, display_info);
 
 		msm_property_install_enum(&c_conn->property_info, "dsc_mode", 0,
 			0, e_dsc_mode, ARRAY_SIZE(e_dsc_mode), 0, CONNECTOR_PROP_DSC_MODE);

@@ -246,7 +246,7 @@ enum msm_mdp_conn_property {
 	CONNECTOR_PROP_QSYNC_MODE,
 	CONNECTOR_PROP_CMD_FRAME_TRIGGER_MODE,
 	CONNECTOR_PROP_SET_PANEL_MODE,
-	CONNECTOR_PROP_AVR_STEP,
+	CONNECTOR_PROP_AVR_STEP_STATE,
 	CONNECTOR_PROP_EPT,
 	CONNECTOR_PROP_CACHE_STATE,
 	CONNECTOR_PROP_DSC_MODE,
@@ -814,6 +814,7 @@ struct msm_display_wd_jitter_config {
  * @disable_rsc_solver: Dynamically disable RSC solver for the timing mode due to lower bitclk rate.
  * @dyn_clk_list: List of dynamic clock rates for RFI.
  * @qsync_min_fps: qsync min fps rate
+ * @avr_step_fps: AVR step fps rate
  * @wd_jitter:         Info for WD jitter.
  * @vpadding:        panel stacking height
  */
@@ -837,6 +838,7 @@ struct msm_mode_info {
 	bool disable_rsc_solver;
 	struct msm_dyn_clk_list dyn_clk_list;
 	u32 qsync_min_fps;
+	u32 avr_step_fps;
 	struct msm_display_wd_jitter_config wd_jitter;
 	u32 vpadding;
 };
@@ -883,9 +885,9 @@ struct msm_resource_caps_info {
  *				 used instead of panel TE in cmd mode panels
  * @poms_align_vsync:   poms with vsync aligned
  * @roi_caps:           Region of interest capability info
- * @qsync_min_fps	Minimum fps supported by Qsync feature
+ * @qsync_min_fps      Minimum fps supported by Qsync feature
  * @has_qsync_min_fps_list True if dsi-supported-qsync-min-fps-list exits
- * @has_avr_step_req    Panel has defined requirement for AVR steps
+ * @avr_step_fps        AVR step fps supported
  * @te_source		vsync source pin information
  * @dsc_count:		max dsc hw blocks used by display (only available
  *			for dsi display)
@@ -915,7 +917,7 @@ struct msm_display_info {
 
 	uint32_t qsync_min_fps;
 	bool has_qsync_min_fps_list;
-	bool has_avr_step_req;
+	uint32_t avr_step_fps;
 
 	uint32_t te_source;
 

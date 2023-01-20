@@ -421,15 +421,6 @@ void dsi_display_put_mode(struct dsi_display *display,
  */
 int dsi_display_get_default_lms(void *dsi_display, u32 *num_lm);
 
-/**
- * dsi_display_get_avr_step_req_fps() - get avr step rate for given fps
- * @display:            Handle to display.
- * @mode_fps:           Fps value of current mode
- *
- * Return: AVR step rate or -ve error code.
- */
-int dsi_display_get_avr_step_req_fps(void *dsi_display, u32 mode_fps);
-
 /*
  * dsi_conn_get_lm_from_mode() - retrieves LM count from dsi mode priv info
  * @display:            Handle to display.

@@ -373,19 +373,30 @@ static void _sde_encoder_phys_vid_avr_ctrl(struct sde_encoder_phys *phys_enc)
 {
 	struct intf_avr_params avr_params;
 	struct sde_encoder_phys_vid *vid_enc = to_sde_encoder_phys_vid(phys_enc);
-	u32 avr_step_fps = sde_connector_get_avr_step(phys_enc->connector);
+	struct drm_connector *conn = phys_enc->connector;
+	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	struct msm_mode_info *info = &sde_enc->mode_info;
+	u32 avr_step_state;
+
+	if (!conn || !conn->state)
+		return;
+
+	avr_step_state = sde_connector_get_property(conn->state, CONNECTOR_PROP_AVR_STEP_STATE);
+	if (avr_step_state == AVR_STEP_NONE)
+		return;
 
 	memset(&avr_params, 0, sizeof(avr_params));
 	avr_params.avr_mode = sde_connector_get_qsync_mode(phys_enc->connector);
-	if (avr_step_fps)
+
+	if (info->avr_step_fps && (avr_step_state == AVR_STEP_ENABLE))
 		avr_params.avr_step_lines = mult_frac(phys_enc->cached_mode.vtotal,
-				vid_enc->timing_params.vrefresh, avr_step_fps);
+				vid_enc->timing_params.vrefresh, info->avr_step_fps);
 
 	if (vid_enc->base.hw_intf->ops.avr_ctrl)
 		vid_enc->base.hw_intf->ops.avr_ctrl(vid_enc->base.hw_intf, &avr_params);
 
-	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_intf->idx - INTF_0,
-			avr_params.avr_mode, avr_params.avr_step_lines, avr_step_fps);
+	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_intf->idx - INTF_0, avr_params.avr_mode,
+			avr_params.avr_step_lines, info->avr_step_fps, avr_step_state);
 }
 
 static void sde_encoder_phys_vid_setup_timing_engine(

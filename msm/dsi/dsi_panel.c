@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -925,6 +925,12 @@ static int dsi_panel_parse_timing(struct dsi_mode_info *mode,
 		rc = 0;
 	}
 
+	rc = utils->read_u32(utils->data, "qcom,dsi-qsync-mode-avr-step-fps", &mode->avr_step_fps);
+	if (rc) {
+		DSI_DEBUG("avr step fps not defined in timing node\n");
+		rc = 0;
+	}
+
 	DSI_DEBUG("panel vert active:%d front_portch:%d back_porch:%d pulse_width:%d\n",
 		mode->v_active, mode->v_front_porch, mode->v_back_porch,
 		mode->v_sync_width);
@@ -1292,13 +1298,21 @@ static int dsi_panel_parse_avr_caps(struct dsi_panel *panel,
 	struct dsi_parser_utils *utils = &panel->utils;
 	int val, rc = 0;
 
+	rc = of_property_read_u32(of_node, "qcom,dsi-qsync-avr-step-fps", &val);
+	if (rc)
+		DSI_DEBUG("[%s] avr step fps not defined rc:%d\n", panel->name, rc);
+	avr_caps->avr_step_fps = rc ? 0 : val;
+
 	val = utils->count_u32_elems(utils->data, "qcom,dsi-qsync-avr-step-list");
 	if (val <= 0) {
 		DSI_DEBUG("[%s] optional avr step list not defined, val:%d\n", panel->name, val);
-		return rc;
+		return 0;
 	} else if (val > 1 && val != panel->dfps_caps.dfps_list_len) {
 		DSI_ERR("[%s] avr step list size %d not same as dfps list %d\n",
 				panel->name, val, panel->dfps_caps.dfps_list_len);
+		return -EINVAL;
+	} else if ((val > 0) && (avr_caps->avr_step_fps)) {
+		DSI_ERR("[%s] both modes of avr-steps are defined\n", panel->name);
 		return -EINVAL;
 	}
 
