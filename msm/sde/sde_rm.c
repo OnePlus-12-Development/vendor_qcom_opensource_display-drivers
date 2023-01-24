@@ -726,7 +726,7 @@ static int _init_hw_fences(struct sde_rm *rm, bool use_ipcc)
 		struct sde_hw_ctl *ctl = to_sde_hw_ctl(iter.blk->hw);
 
 		if (sde_hw_fence_init(ctl, use_ipcc)) {
-			pr_err("failed to init hw_fence idx:%d\n", ctl->idx);
+			SDE_DEBUG("failed to init hw_fence idx:%d\n", ctl->idx);
 			ret = -EINVAL;
 			break;
 		}

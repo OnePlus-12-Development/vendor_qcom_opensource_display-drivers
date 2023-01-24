@@ -136,7 +136,7 @@ int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc)
 
 		hwfence_data->hw_fence_handle = NULL;
 
-		SDE_ERROR("error cannot register ctl_id:%d hw-fence client:%d\n", ctl_id,
+		SDE_DEBUG("error cannot register ctl_id:%d hw-fence client:%d\n", ctl_id,
 			hwfence_data->hw_fence_client_id);
 		return -EINVAL;
 	}
