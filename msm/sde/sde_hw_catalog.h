@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -619,6 +619,7 @@ enum {
  * @SDE_INTF_AVR_STATUS         INTF block has AVR_STATUS field in AVR_CONTROL register
  * @SDE_INTF_WD_JITTER          INTF block has WD timer jitter support
  * @SDE_INTF_WD_LTJ_CTL         INTF block has WD long term jitter control support
+ * @SDE_INTF_TE_DEASSERT_DETECT INTF block has TE Deassert detect support
  * @SDE_INTF_MAX
  */
 enum {
@@ -636,6 +637,7 @@ enum {
 	SDE_INTF_AVR_STATUS,
 	SDE_INTF_WD_JITTER,
 	SDE_INTF_WD_LTJ_CTL,
+	SDE_INTF_TE_DEASSERT_DETECT,
 	SDE_INTF_MAX
 };
 

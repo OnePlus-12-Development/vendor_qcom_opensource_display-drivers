@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2019, 2021, The Linux Foundation. All rights reserved.
  */
 
@@ -54,8 +54,9 @@
  * @SDE_IRQ_TYPE_INTF_TEAR_RD_PTR:	INTF Tear read pointer
  * @SDE_IRQ_TYPE_INTF_TEAR_WR_PTR:	INTF Tear write pointer
  * @SDE_IRQ_TYPE_INTF_TEAR_AUTO_REF:	INTF Tear auto refresh
- * @SDE_IRQ_TYPE_INTF_TEAR_TEAR_CHECK:	INTF Tear Tear check
- * @SDE_IRQ_TYPE_INTF_TEAR_TE_CHECK:	INTF Tear TE detection
+ * @SDE_IRQ_TYPE_INTF_TEAR_TEAR_DETECT: INTF Tear Tear detection
+ * @SDE_IRQ_TYPE_INTF_TEAR_TE_ASSERT:   INTF Tear TE Assert detection
+ * @SDE_IRQ_TYPE_INTF_TEAR_TE_DEASSERT: INTF Tear TE Deassert detection
  * @SDE_IRQ_TYPE_LTM_STATS_DONE:	LTM stats done interrupt
  * @SDE_IRQ_TYPE_LTM_STATS_WB_PB:	LTM stats WB push back interrupt
  * @SDE_IRQ_TYPE_PROG_LINE:		Programmable Line interrupt for WB
@@ -93,8 +94,9 @@ enum sde_intr_type {
 	SDE_IRQ_TYPE_INTF_TEAR_RD_PTR,
 	SDE_IRQ_TYPE_INTF_TEAR_WR_PTR,
 	SDE_IRQ_TYPE_INTF_TEAR_AUTO_REF,
-	SDE_IRQ_TYPE_INTF_TEAR_TEAR_CHECK,
-	SDE_IRQ_TYPE_INTF_TEAR_TE_CHECK,
+	SDE_IRQ_TYPE_INTF_TEAR_TEAR_DETECT,
+	SDE_IRQ_TYPE_INTF_TEAR_TE_ASSERT,
+	SDE_IRQ_TYPE_INTF_TEAR_TE_DEASSERT,
 	SDE_IRQ_TYPE_LTM_STATS_DONE,
 	SDE_IRQ_TYPE_LTM_STATS_WB_PB,
 	SDE_IRQ_TYPE_WB_PROG_LINE,

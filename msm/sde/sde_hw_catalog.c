@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2505,6 +2505,7 @@ static int sde_intf_parse_dt(struct device_node *np,
 			set_bit(SDE_INTF_TE_32BIT, &intf->features);
 			set_bit(SDE_INTF_TE_SINGLE_UPDATE, &intf->features);
 			set_bit(SDE_INTF_WD_LTJ_CTL, &intf->features);
+			set_bit(SDE_INTF_TE_DEASSERT_DETECT, &intf->features);
 		}
 	}
 
