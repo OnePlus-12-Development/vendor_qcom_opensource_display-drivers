@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -93,7 +93,7 @@ static void drm_mode_to_intf_timing_params(
 	timing->underflow_clr = 0xff;
 	timing->hsync_skew = mode->hskew;
 	timing->v_front_porch_fixed = vid_enc->base.vfp_cached;
-	timing->vrefresh = drm_mode_vrefresh(mode);
+	timing->vrefresh = drm_mode_vrefresh(&phys_enc->cached_mode);
 
 	if (vid_enc->base.comp_type != MSM_DISPLAY_COMPRESSION_NONE) {
 		timing->compression_en = true;
