@@ -1725,6 +1725,15 @@ static int _sde_encoder_phys_cmd_wait_for_wr_ptr(
 
 	ret = sde_encoder_helper_wait_for_irq(phys_enc, INTR_IDX_WRPTR,
 			&wait_info);
+
+	/*
+	 * if hwfencing enabled, try again to wait for up to the extended timeout time in
+	 * increments as long as fence has not been signaled.
+	 */
+	if (ret == -ETIMEDOUT && phys_enc->sde_kms->catalog->hw_fence_rev)
+		ret = sde_encoder_helper_hw_fence_extended_wait(phys_enc, ctl, &wait_info,
+			INTR_IDX_WRPTR);
+
 	if (ret == -ETIMEDOUT) {
 		struct sde_hw_ctl *ctl = phys_enc->hw_ctl;
 
@@ -1754,6 +1763,10 @@ static int _sde_encoder_phys_cmd_wait_for_wr_ptr(
 					lock_flags);
 			}
 		}
+
+		/* if we timeout after the extended wait, reset mixers and do sw override */
+		if (ret && phys_enc->sde_kms->catalog->hw_fence_rev)
+			sde_encoder_helper_hw_fence_sw_override(phys_enc, ctl);
 	}
 
 	cmd_enc->wr_ptr_wait_success = (ret == 0) ? true : false;
