@@ -1241,7 +1241,7 @@ static int _sde_encoder_atomic_check_qsync(struct sde_connector *sde_conn,
 {
 	int rc = 0;
 	u32 avr_step;
-	bool qsync_dirty, has_modeset;
+	bool qsync_dirty, has_modeset, ept;
 	struct drm_connector_state *conn_state = &sde_conn_state->base;
 	u32 qsync_mode = sde_connector_get_property(&sde_conn_state->base,
 						CONNECTOR_PROP_QSYNC_MODE);
@@ -1249,9 +1249,12 @@ static int _sde_encoder_atomic_check_qsync(struct sde_connector *sde_conn,
 	has_modeset = sde_crtc_atomic_check_has_modeset(conn_state->state, conn_state->crtc);
 	qsync_dirty = msm_property_is_dirty(&sde_conn->property_info,
 			&sde_conn_state->property_state, CONNECTOR_PROP_QSYNC_MODE);
+	ept = msm_property_is_dirty(&sde_conn->property_info,
+				&sde_conn_state->property_state, CONNECTOR_PROP_EPT);
 
-	if (has_modeset && qsync_dirty && (msm_is_mode_seamless_poms(&sde_conn_state->msm_mode) ||
-				msm_is_mode_seamless_dyn_clk(&sde_conn_state->msm_mode))) {
+	if (has_modeset && (qsync_dirty || ept) &&
+		(msm_is_mode_seamless_poms(&sde_conn_state->msm_mode) ||
+			msm_is_mode_seamless_dyn_clk(&sde_conn_state->msm_mode))) {
 		SDE_ERROR("invalid qsync update during modeset priv flag:%x\n",
 				sde_conn_state->msm_mode.private_flags);
 		return -EINVAL;
@@ -4642,6 +4645,56 @@ static int _sde_encoder_prepare_for_kickoff_processing(struct drm_encoder *drm_e
 	return ret;
 }
 
+void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
+{
+	ktime_t current_ts, ept_ts;
+	u32 avr_step_fps, min_fps = 0, qsync_mode;
+	u64 timeout_us = 0, ept;
+	struct drm_connector *drm_conn;
+
+	if (!sde_enc->cur_master || !sde_enc->cur_master->connector)
+		return;
+
+	drm_conn = sde_enc->cur_master->connector;
+	ept = sde_connector_get_property(drm_conn->state, CONNECTOR_PROP_EPT);
+	if (!ept)
+		return;
+
+	avr_step_fps = sde_connector_get_avr_step(drm_conn);
+	qsync_mode = sde_connector_get_property(drm_conn->state, CONNECTOR_PROP_QSYNC_MODE);
+	if (qsync_mode)
+		_sde_encoder_get_qsync_fps_callback(&sde_enc->base, &min_fps, drm_conn->state);
+	/* use min qsync fps, if feature is enabled; otherwise min default fps */
+	min_fps = min_fps ? min_fps : DEFAULT_MIN_FPS;
+
+	current_ts = ktime_get_ns();
+	/* ept is in ns and avr_step is mulitple of refresh rate */
+	ept_ts = avr_step_fps ? ept - DIV_ROUND_UP(NSEC_PER_SEC, avr_step_fps) + NSEC_PER_MSEC
+				: ept - NSEC_PER_MSEC;
+
+	/* ept time already elapsed */
+	if (ept_ts <= current_ts) {
+		SDE_DEBUG("enc:%d, ept elapsed; ept:%llu, ept_ts:%llu, current_ts:%llu\n",
+				DRMID(&sde_enc->base), ept, ept_ts, current_ts);
+		return;
+	}
+
+	timeout_us = DIV_ROUND_UP((ept_ts - current_ts), 1000);
+	/* validate timeout is not beyond the min fps */
+	if (timeout_us > DIV_ROUND_UP(USEC_PER_SEC, min_fps)) {
+		SDE_ERROR("enc:%d, invalid timeout_us:%llu; ept:%llu, ept_ts:%llu, cur_ts:%llu\n",
+				DRMID(&sde_enc->base), timeout_us, ept, ept_ts, current_ts);
+		return;
+	}
+
+	SDE_ATRACE_BEGIN("schedule_timeout");
+	usleep_range(timeout_us, timeout_us + 10);
+	SDE_ATRACE_END("schedule_timeout");
+
+	SDE_EVT32(DRMID(&sde_enc->base), qsync_mode, avr_step_fps, min_fps, ktime_to_us(current_ts),
+					ktime_to_us(ept_ts), timeout_us);
+}
+
 int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 		struct sde_encoder_kickoff_params *params)
 {
@@ -4714,6 +4767,8 @@ int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 		ret = rc;
 		goto end;
 	}
+
+	_sde_encoder_delay_kickoff_processing(sde_enc);
 
 	ret = _sde_encoder_prepare_for_kickoff_processing(drm_enc, params, sde_enc, sde_kms,
 			needs_hw_reset, is_cmd_mode);

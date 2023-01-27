@@ -59,6 +59,8 @@
 		((!(phys_enc) || ((idx) < 0) || ((idx) >= INTR_IDX_MAX)) ? \
 		0 : ((phys_enc)->irq[(idx)].irq_idx >= 0))
 
+#define DEFAULT_MIN_FPS	10
+
 /**
  * Encoder functions and data types
  * @intfs:	Interfaces this encoder is using, INTF_MODE_NONE if unused

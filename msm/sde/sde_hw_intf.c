@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1022,6 +1022,11 @@ static void sde_hw_intf_enable_wide_bus(struct sde_hw_intf *intf,
 	SDE_REG_WRITE(c, INTF_CONFIG2, intf_cfg2);
 }
 
+static bool sde_hw_intf_is_te_32bit_supported(struct sde_hw_intf *intf)
+{
+	return (intf->cap->features & BIT(SDE_INTF_TE_32BIT));
+}
+
 static void _setup_intf_ops(struct sde_hw_intf_ops *ops,
 		unsigned long cap)
 {
@@ -1038,6 +1043,7 @@ static void _setup_intf_ops(struct sde_hw_intf_ops *ops,
 	ops->avr_ctrl = sde_hw_intf_avr_ctrl;
 	ops->enable_compressed_input = sde_hw_intf_enable_compressed_input;
 	ops->enable_wide_bus = sde_hw_intf_enable_wide_bus;
+	ops->is_te_32bit_supported = sde_hw_intf_is_te_32bit_supported;
 
 	if (cap & BIT(SDE_INTF_STATUS))
 		ops->get_status = sde_hw_intf_v1_get_status;

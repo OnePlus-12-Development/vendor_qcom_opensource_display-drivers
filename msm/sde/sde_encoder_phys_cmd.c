@@ -1339,7 +1339,12 @@ static void sde_encoder_phys_cmd_tearcheck_config(
 	 * disable sde hw generated TE signal, since hw TE will arrive first.
 	 * Only caveat is if due to error, we hit wrap-around.
 	 */
-	tc_cfg.sync_cfg_height = 0xFFF0;
+	if (phys_enc->hw_intf->ops.is_te_32bit_supported
+			&& phys_enc->hw_intf->ops.is_te_32bit_supported(phys_enc->hw_intf))
+		tc_cfg.sync_cfg_height = 0xFFFFFFF0;
+	else
+		tc_cfg.sync_cfg_height = 0xFFF0;
+
 	tc_cfg.vsync_init_val = mode->vdisplay;
 	tc_cfg.sync_threshold_start = _get_tearcheck_threshold(phys_enc);
 	tc_cfg.sync_threshold_continue = DEFAULT_TEARCHECK_SYNC_THRESH_CONTINUE;

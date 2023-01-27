@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -267,6 +267,11 @@ struct sde_hw_intf_ops {
 	 */
 	void (*override_tear_rd_ptr_val)(struct sde_hw_intf *intf,
 			u32 adjusted_linecnt);
+
+	/**
+	 * Check if intf supports 32-bit registers for TE
+	 */
+	bool (*is_te_32bit_supported)(struct sde_hw_intf *intf);
 };
 
 struct sde_hw_intf {
