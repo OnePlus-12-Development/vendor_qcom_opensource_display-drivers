@@ -155,6 +155,25 @@ void sde_encoder_uidle_enable(struct drm_encoder *drm_enc, bool enable)
 	}
 }
 
+u32 sde_encoder_get_programmed_fetch_time(struct drm_encoder *drm_enc)
+{
+	struct sde_encoder_virt *sde_enc;
+	struct sde_encoder_phys *phys;
+	bool is_vid;
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+
+	if (!sde_enc || !sde_enc->phys_encs[0]) {
+		SDE_ERROR("invalid params\n");
+		return U32_MAX;
+	}
+
+	phys = sde_enc->phys_encs[0];
+	is_vid = sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_VIDEO_MODE);
+
+	return is_vid ? phys->pf_time_in_us : 0;
+}
+
 ktime_t sde_encoder_calc_last_vsync_timestamp(struct drm_encoder *drm_enc)
 {
 	struct sde_encoder_virt *sde_enc;
