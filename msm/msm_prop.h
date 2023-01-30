@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -254,6 +255,30 @@ void msm_property_install_volatile_range(struct msm_property_info *info,
  * @property_idx: Property index
  */
 void msm_property_install_enum(struct msm_property_info *info,
+		const char *name,
+		int flags,
+		int is_bitmask,
+		const struct drm_prop_enum_list *values,
+		int num_values,
+		u32 init_idx,
+		uint32_t property_idx);
+
+/**
+ * msm_property_install_volatile_enum - install standard drm enum/bitmask property
+ *  This function is similar to msm_property_install_enum, but assumes
+ *  that the property is meant for holding user pointers or descriptors
+ *  that may reference volatile data without having an updated value.
+ * @info: Pointer to property info container struct
+ * @name: Property name
+ * @flags: Other property type flags, e.g. DRM_MODE_PROP_IMMUTABLE
+ * @is_bitmask: Set to non-zero to create a bitmask property, rather than an
+ *              enumeration one
+ * @values: Array of allowable enumeration/bitmask values
+ * @num_values: Size of values array
+ * @init_idx: index of the values array entry to initialize the property
+ * @property_idx: Property index
+ */
+void msm_property_install_volatile_enum(struct msm_property_info *info,
 		const char *name,
 		int flags,
 		int is_bitmask,

@@ -3901,7 +3901,7 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_SSPP_UCSC_IGC_V",
 			psde->pipe_sblk->ucsc_igc_blk[0].version >> 16);
-		msm_property_install_enum(&psde->property_info, feature_name,
+		msm_property_install_volatile_enum(&psde->property_info, feature_name,
 				0x0, 0, ucsc_igc, ARRAY_SIZE(ucsc_igc), 0, PLANE_PROP_UCSC_IGC);
 	}
 
@@ -3909,7 +3909,7 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_SSPP_UCSC_GC_V",
 			psde->pipe_sblk->ucsc_gc_blk[0].version >> 16);
-		msm_property_install_enum(&psde->property_info, feature_name,
+		msm_property_install_volatile_enum(&psde->property_info, feature_name,
 		0x0, 0, ucsc_gc, ARRAY_SIZE(ucsc_gc), 0, PLANE_PROP_UCSC_GC);
 	}
 
@@ -3925,7 +3925,7 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_SSPP_UCSC_UNMULT_V",
 			psde->pipe_sblk->ucsc_unmult_blk[0].version >> 16);
-		msm_property_install_range(&psde->property_info, feature_name,
+		msm_property_install_volatile_range(&psde->property_info, feature_name,
 			0x0, 0, 1, 0, PLANE_PROP_UCSC_UNMULT);
 	}
 
@@ -3933,7 +3933,7 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_SSPP_UCSC_ALPHA_DITHER_V",
 			psde->pipe_sblk->ucsc_alpha_dither_blk[0].version >> 16);
-		msm_property_install_range(&psde->property_info, feature_name,
+		msm_property_install_volatile_range(&psde->property_info, feature_name,
 			0x0, 0, 1, 0, PLANE_PROP_UCSC_ALPHA_DITHER);
 	}
 }
