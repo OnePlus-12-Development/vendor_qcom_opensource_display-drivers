@@ -111,6 +111,33 @@ enum sde_enc_rc_states {
 	SDE_ENC_RC_STATE_IDLE
 };
 
+/*
+ * enum sde_sim_qsync_frame - simulated QSYNC frame type
+ * @SDE_SIM_QSYNC_FRAME_NOMINAL: Frame is triggered early and TE must come at nominal frame rate.
+ * @SDE_SIM_QSYNC_FRAME_EARLY_OR_LATE: Frame could be triggered early or late and TE must adjust
+ *                                     accordingly.
+ * @SDE_SIM_QSYNC_FRAME_TIMEOUT: Frame is triggered too late and TE must adjust to the
+ *                               minimum QSYNC FPS.
+ */
+enum sde_sim_qsync_frame {
+	SDE_SIM_QSYNC_FRAME_NOMINAL,
+	SDE_SIM_QSYNC_FRAME_EARLY_OR_LATE,
+	SDE_SIM_QSYNC_FRAME_TIMEOUT
+};
+
+/*
+ * enum sde_sim_qsync_event - events that simulates a QSYNC panel
+ * @SDE_SIM_QSYNC_EVENT_FRAME_DETECTED: Event when DDIC is detecting a frame.
+ * @SDE_SIM_QSYNC_EVENT_TE_TRIGGER: Event when DDIC is triggering TE signal.
+ */
+enum sde_sim_qsync_event {
+	SDE_SIM_QSYNC_EVENT_FRAME_DETECTED,
+	SDE_SIM_QSYNC_EVENT_TE_TRIGGER
+};
+
+/* Frame rate value to trigger the watchdog TE in 200 us */
+#define SDE_SIM_QSYNC_IMMEDIATE_FPS 5000
+
 /**
  * struct sde_encoder_virt - virtual encoder. Container of one or more physical
  *	encoders. Virtual encoder manages one "logical" display. Physical

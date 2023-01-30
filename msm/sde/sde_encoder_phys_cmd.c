@@ -276,6 +276,128 @@ void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc)
 			ktime_to_us(time_into_frame_ns));
 }
 
+static void _sde_encoder_phys_cmd_setup_sim_qsync_frame(struct sde_encoder_phys *phys_enc,
+		struct msm_display_info *disp_info, enum sde_sim_qsync_frame frame)
+{
+	struct sde_encoder_virt *sde_enc;
+	struct sde_connector *sde_conn;
+	struct drm_connector *conn;
+	u32 qsync_min_fps = 0, nominal_fps = 0, frame_rate = 0;
+	u32 nominal_period_us, qsync_min_period_us, time_since_vsync_us;
+	int time_before_nominal_vsync_us, time_before_timeout_vsync_us;
+	bool early_frame = false, late_frame = false, slow_frame = false;
+
+	if (!phys_enc || !phys_enc->hw_intf)
+		return;
+
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	sde_conn = to_sde_connector(phys_enc->connector);
+	conn = phys_enc->connector;
+	nominal_fps = sde_enc->mode_info.frame_rate;
+	qsync_min_fps = sde_enc->mode_info.qsync_min_fps;
+
+	if (!nominal_fps || !qsync_min_fps) {
+		SDE_ERROR("invalid fps values %d, %d\n", nominal_fps, qsync_min_fps);
+		return;
+	}
+
+	spin_lock(phys_enc->enc_spinlock);
+	switch (frame) {
+	case SDE_SIM_QSYNC_FRAME_NOMINAL:
+		frame_rate = nominal_fps;
+		break;
+
+	case SDE_SIM_QSYNC_FRAME_EARLY_OR_LATE:
+		time_since_vsync_us = ktime_to_us(ktime_sub(ktime_get(),
+				phys_enc->last_vsync_timestamp));
+
+		nominal_period_us = mult_frac(USEC_PER_SEC, 1, nominal_fps);
+		time_before_nominal_vsync_us = nominal_period_us - time_since_vsync_us;
+
+		qsync_min_period_us = mult_frac(USEC_PER_SEC, 1, qsync_min_fps);
+		time_before_timeout_vsync_us = qsync_min_period_us - time_since_vsync_us;
+
+		early_frame = (time_before_nominal_vsync_us > 0) ? true : false;
+		late_frame = (time_before_nominal_vsync_us <= 0) ? true : false;
+
+		/*
+		 * In simulation, a slow frame would happen if device enters idle power collapse
+		 * and wakes up after the QSYNC timeout period. In that case the last VSYNC time
+		 * stamp that was recorded when the device was up would not be a valid reference
+		 * to determine if the frame after idle power collapse is early or late and when
+		 * the next VSYNC should come.
+		 *
+		 * Thus, the simplest thing is to trigger the watchdog TE immediately and recover
+		 * in the next frame.
+		 */
+		slow_frame = (time_before_timeout_vsync_us <= 0) ? true : false;
+		if (early_frame)
+			frame_rate = mult_frac(USEC_PER_SEC, 1, time_before_nominal_vsync_us);
+		else if (late_frame || slow_frame)
+			frame_rate = SDE_SIM_QSYNC_IMMEDIATE_FPS;
+
+		SDE_EVT32(DRMID(phys_enc->parent), time_since_vsync_us, nominal_fps, qsync_min_fps,
+				nominal_period_us, qsync_min_period_us,
+				time_before_nominal_vsync_us, time_before_timeout_vsync_us,
+				early_frame, late_frame, slow_frame, frame_rate);
+		break;
+
+	case SDE_SIM_QSYNC_FRAME_TIMEOUT:
+		frame_rate = qsync_min_fps;
+		break;
+
+	default:
+		frame_rate = qsync_min_fps;
+		SDE_ERROR("invalid frame %d\n", frame);
+		break;
+	}
+
+	SDE_EVT32(DRMID(phys_enc->parent), frame, qsync_min_fps, frame_rate);
+	phys_enc->ops.control_te(phys_enc, false);
+	phys_enc->hw_intf->ops.setup_vsync_source(phys_enc->hw_intf, frame_rate);
+	phys_enc->hw_intf->ops.vsync_sel(phys_enc->hw_intf, SDE_VSYNC_SOURCE_WD_TIMER_0);
+	phys_enc->ops.control_te(phys_enc, true);
+	phys_enc->sim_qsync_frame = frame;
+	spin_unlock(phys_enc->enc_spinlock);
+}
+
+static void _sde_encoder_phys_cmd_process_sim_qsync_event(struct sde_encoder_phys *phys_enc,
+		enum sde_sim_qsync_event event)
+{
+	u32 qsync_mode = 0;
+	struct sde_encoder_virt *sde_enc;
+
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	if (!sde_enc->disp_info.is_te_using_watchdog_timer || !sde_enc->mode_info.qsync_min_fps)
+		return;
+
+	qsync_mode = sde_connector_get_qsync_mode(phys_enc->connector);
+	SDE_EVT32_IRQ(DRMID(phys_enc->parent),
+			ktime_to_us(ktime_get()) - ktime_to_us(phys_enc->last_vsync_timestamp),
+			qsync_mode, phys_enc->sim_qsync_frame, event);
+
+	switch (event) {
+	case SDE_SIM_QSYNC_EVENT_FRAME_DETECTED:
+		if (qsync_mode)
+			_sde_encoder_phys_cmd_setup_sim_qsync_frame(phys_enc, &sde_enc->disp_info,
+					SDE_SIM_QSYNC_FRAME_EARLY_OR_LATE);
+		break;
+
+	case SDE_SIM_QSYNC_EVENT_TE_TRIGGER:
+		if (qsync_mode)
+			_sde_encoder_phys_cmd_setup_sim_qsync_frame(phys_enc, &sde_enc->disp_info,
+					SDE_SIM_QSYNC_FRAME_TIMEOUT);
+		else if (phys_enc->sim_qsync_frame != SDE_SIM_QSYNC_FRAME_NOMINAL)
+			_sde_encoder_phys_cmd_setup_sim_qsync_frame(phys_enc, &sde_enc->disp_info,
+					SDE_SIM_QSYNC_FRAME_NOMINAL);
+		break;
+
+	default:
+		SDE_ERROR("invalid event %d\n", event);
+		break;
+	}
+}
+
 static void _sde_encoder_phys_signal_frame_done(struct sde_encoder_phys *phys_enc)
 {
 	struct sde_encoder_phys_cmd *cmd_enc;
@@ -420,6 +542,8 @@ static void sde_encoder_phys_cmd_te_rd_ptr_irq(void *arg, int irq_idx)
 		info[0].intf_idx, info[0].intf_frame_count, info[0].wr_ptr_line_count,
 		info[0].rd_ptr_line_count, info[1].pp_idx, info[1].intf_idx,
 		info[1].intf_frame_count, info[1].wr_ptr_line_count, info[1].rd_ptr_line_count);
+
+	_sde_encoder_phys_cmd_process_sim_qsync_event(phys_enc, SDE_SIM_QSYNC_EVENT_TE_TRIGGER);
 
 	if (phys_enc->parent_ops.handle_vblank_virt)
 		phys_enc->parent_ops.handle_vblank_virt(phys_enc->parent,
@@ -2252,6 +2376,19 @@ static void sde_encoder_phys_cmd_trigger_start(
 	cmd_enc->wr_ptr_wait_success = false;
 }
 
+static void sde_encoder_phys_cmd_handle_post_kickoff(struct sde_encoder_phys *phys_enc)
+{
+	if (!phys_enc) {
+		SDE_ERROR("invalid encoder\n");
+		return;
+	}
+
+	if (sde_encoder_phys_cmd_is_master(phys_enc))
+		_sde_encoder_phys_cmd_process_sim_qsync_event(phys_enc,
+				SDE_SIM_QSYNC_EVENT_FRAME_DETECTED);
+
+}
+
 static void _sde_encoder_phys_cmd_calculate_wd_params(struct sde_encoder_phys *phys_enc)
 {
 	u32 nominal_te_value;
@@ -2364,6 +2501,7 @@ static void sde_encoder_phys_cmd_init_ops(struct sde_encoder_phys_ops *ops)
 	ops->add_to_minidump = sde_encoder_phys_cmd_add_enc_to_minidump;
 	ops->disable_autorefresh = _sde_encoder_phys_disable_autorefresh;
 	ops->idle_pc_cache_display_status = sde_encoder_phys_cmd_store_ltj_values;
+	ops->handle_post_kickoff = sde_encoder_phys_cmd_handle_post_kickoff;
 }
 
 static inline bool sde_encoder_phys_cmd_intf_te_supported(
