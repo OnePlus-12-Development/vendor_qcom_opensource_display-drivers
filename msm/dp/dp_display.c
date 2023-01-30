@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1531,6 +1531,23 @@ static void dp_display_clear_dsc_resources(struct dp_display_private *dp,
 {
 	dp->tot_dsc_blks_in_use -= panel->dsc_blks_in_use;
 	panel->dsc_blks_in_use = 0;
+}
+
+static int dp_display_get_mst_pbn_div(struct dp_display *dp_display)
+{
+	struct dp_display_private *dp;
+	u32 link_rate, lane_count;
+
+	if (!dp_display) {
+		DP_ERR("invalid params\n");
+		return 0;
+	}
+
+	dp = container_of(dp_display, struct dp_display_private, dp_display);
+	link_rate = drm_dp_bw_code_to_link_rate(dp->link->link_params.bw_code);
+	lane_count = dp->link->link_params.lane_count;
+
+	return link_rate * lane_count / 54000;
 }
 
 static int dp_display_stream_pre_disable(struct dp_display_private *dp,
@@ -3686,6 +3703,7 @@ static int dp_display_probe(struct platform_device *pdev)
 	g_dp_display->get_available_dp_resources =
 					dp_display_get_available_dp_resources;
 	g_dp_display->clear_reservation = dp_display_clear_reservation;
+	g_dp_display->get_mst_pbn_div = dp_display_get_mst_pbn_div;
 
 	rc = component_add(&pdev->dev, &dp_display_comp_ops);
 	if (rc) {
