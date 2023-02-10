@@ -1812,7 +1812,7 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_pp->idx - PINGPONG_0,
 			atomic_read(&phys_enc->pending_kickoff_cnt),
 			atomic_read(&cmd_enc->autorefresh.kickoff_cnt),
-			phys_enc->frame_trigger_mode);
+			phys_enc->frame_trigger_mode, SDE_EVTLOG_FUNC_CASE1);
 
 	if (phys_enc->frame_trigger_mode == FRAME_DONE_WAIT_DEFAULT) {
 		/*
@@ -1824,7 +1824,7 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 		if (ret) {
 			atomic_set(&phys_enc->pending_kickoff_cnt, 0);
 			SDE_EVT32(DRMID(phys_enc->parent),
-					phys_enc->hw_pp->idx - PINGPONG_0);
+					phys_enc->hw_pp->idx - PINGPONG_0, SDE_EVTLOG_FUNC_CASE2);
 			SDE_ERROR("failed wait_for_idle: %d\n", ret);
 		}
 	}
@@ -1856,7 +1856,8 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 		else if (phys_enc->hw_pp->ops.update_tearcheck)
 			phys_enc->hw_pp->ops.update_tearcheck(
 					phys_enc->hw_pp, &tc_cfg);
-		SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start, tc_cfg.start_pos);
+		SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start, tc_cfg.start_pos,
+				SDE_EVTLOG_FUNC_CASE3);
 	}
 
 	sde_enc = to_sde_encoder_virt(phys_enc->parent);
