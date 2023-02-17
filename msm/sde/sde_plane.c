@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (C) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -612,6 +612,29 @@ void sde_plane_dump_input_fence(struct drm_plane *plane)
 		if (input_fence)
 			sde_fence_dump(input_fence);
 	}
+}
+
+bool sde_plane_is_sw_fence_signaled(struct drm_plane *plane)
+{
+	struct sde_plane *psde;
+	struct sde_plane_state *pstate;
+	struct dma_fence *fence;
+
+	if (!plane) {
+		SDE_ERROR("invalid plane\n");
+	} else if (!plane->state) {
+		SDE_ERROR_PLANE(to_sde_plane(plane), "invalid state\n");
+	} else {
+		psde = to_sde_plane(plane);
+		pstate = to_sde_plane_state(plane->state);
+
+		if (pstate->input_fence) {
+			fence = (struct dma_fence *)pstate->input_fence;
+			return dma_fence_is_signaled(fence);
+		}
+	}
+
+	return false;
 }
 
 int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms)
@@ -3878,7 +3901,7 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_SSPP_UCSC_IGC_V",
 			psde->pipe_sblk->ucsc_igc_blk[0].version >> 16);
-		msm_property_install_enum(&psde->property_info, feature_name,
+		msm_property_install_volatile_enum(&psde->property_info, feature_name,
 				0x0, 0, ucsc_igc, ARRAY_SIZE(ucsc_igc), 0, PLANE_PROP_UCSC_IGC);
 	}
 
@@ -3886,7 +3909,7 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_SSPP_UCSC_GC_V",
 			psde->pipe_sblk->ucsc_gc_blk[0].version >> 16);
-		msm_property_install_enum(&psde->property_info, feature_name,
+		msm_property_install_volatile_enum(&psde->property_info, feature_name,
 		0x0, 0, ucsc_gc, ARRAY_SIZE(ucsc_gc), 0, PLANE_PROP_UCSC_GC);
 	}
 
@@ -3902,7 +3925,7 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_SSPP_UCSC_UNMULT_V",
 			psde->pipe_sblk->ucsc_unmult_blk[0].version >> 16);
-		msm_property_install_range(&psde->property_info, feature_name,
+		msm_property_install_volatile_range(&psde->property_info, feature_name,
 			0x0, 0, 1, 0, PLANE_PROP_UCSC_UNMULT);
 	}
 
@@ -3910,7 +3933,7 @@ static void _sde_plane_install_colorproc_properties(struct sde_plane *psde,
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_SSPP_UCSC_ALPHA_DITHER_V",
 			psde->pipe_sblk->ucsc_alpha_dither_blk[0].version >> 16);
-		msm_property_install_range(&psde->property_info, feature_name,
+		msm_property_install_volatile_range(&psde->property_info, feature_name,
 			0x0, 0, 1, 0, PLANE_PROP_UCSC_ALPHA_DITHER);
 	}
 }

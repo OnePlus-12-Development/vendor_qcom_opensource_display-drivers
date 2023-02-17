@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -93,7 +93,7 @@ static void drm_mode_to_intf_timing_params(
 	timing->underflow_clr = 0xff;
 	timing->hsync_skew = mode->hskew;
 	timing->v_front_porch_fixed = vid_enc->base.vfp_cached;
-	timing->vrefresh = drm_mode_vrefresh(mode);
+	timing->vrefresh = drm_mode_vrefresh(&phys_enc->cached_mode);
 
 	if (vid_enc->base.comp_type != MSM_DISPLAY_COMPRESSION_NONE) {
 		timing->compression_en = true;
@@ -283,12 +283,16 @@ static void programmable_fetch_config(struct sde_encoder_phys *phys_enc,
 
 	m = phys_enc->sde_kms->catalog;
 
+	phys_enc->pf_time_in_us = 0;
 	vfp_fetch_lines = programmable_fetch_get_num_lines(vid_enc, timing);
 	if (vfp_fetch_lines) {
 		vert_total = get_vertical_total(timing);
 		horiz_total = get_horizontal_total(timing);
 		vfp_fetch_start_vsync_counter =
 			(vert_total - vfp_fetch_lines) * horiz_total + 1;
+
+		phys_enc->pf_time_in_us = DIV_ROUND_UP(1000000 * vfp_fetch_lines,
+				vert_total * timing->vrefresh);
 
 		/**
 		 * Check if we need to throttle the fetch to start
@@ -913,6 +917,14 @@ static int _sde_encoder_phys_vid_wait_for_vblank(
 	ret = sde_encoder_helper_wait_for_irq(phys_enc, INTR_IDX_VSYNC,
 			&wait_info);
 
+	/*
+	 * if hwfencing enabled, try again to wait for up to the extended timeout time in
+	 * increments as long as fence has not been signaled.
+	 */
+	if (ret == -ETIMEDOUT && phys_enc->sde_kms->catalog->hw_fence_rev)
+		ret = sde_encoder_helper_hw_fence_extended_wait(phys_enc, phys_enc->hw_ctl,
+			&wait_info, INTR_IDX_VSYNC);
+
 	if (ret == -ETIMEDOUT) {
 		new_cnt = atomic_add_unless(&phys_enc->pending_kickoff_cnt, -1, 0);
 		timeout = true;
@@ -925,6 +937,10 @@ static int _sde_encoder_phys_vid_wait_for_vblank(
 			flush_register = hw_ctl->ops.get_flush_register(hw_ctl);
 		if (!flush_register)
 			ret = 0;
+
+		/* if we timeout after the extended wait, reset mixers and do sw override */
+		if (ret && phys_enc->sde_kms->catalog->hw_fence_rev)
+			sde_encoder_helper_hw_fence_sw_override(phys_enc, hw_ctl);
 
 		SDE_EVT32(DRMID(phys_enc->parent), new_cnt, flush_register, ret,
 				SDE_EVTLOG_FUNC_CASE1);

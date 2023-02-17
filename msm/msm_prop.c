@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -200,10 +201,26 @@ void msm_property_install_volatile_range(struct msm_property_info *info,
 			min, max, init, property_idx, true);
 }
 
-void msm_property_install_enum(struct msm_property_info *info,
+/**
+ * msm_property_install_enum_helper - install standard drm enum/bitmask property
+ *  This function is added as a helper function called within msm_property_install_enum
+ *  or msm_property_install_volatile_enum depending on whether we want to set the
+ *  enum property as dirty or not dirty.
+ * @info: Pointer to property info container struct
+ * @name: Property name
+ * @flags: Other property type flags, e.g. DRM_MODE_PROP_IMMUTABLE
+ * @is_bitmask: Set to non-zero to create a bitmask property, rather than an
+ *              enumeration one
+ * @values: Array of allowable enumeration/bitmask values
+ * @num_values: Size of values array
+ * @init_idx: index of the values array entry to initialize the property
+ * @property_idx: Property index
+ * @force_dirty: Whether or not to filter 'dirty' status on unchanged values
+ */
+void msm_property_install_enum_helper(struct msm_property_info *info,
 		const char *name, int flags, int is_bitmask,
 		const struct drm_prop_enum_list *values, int num_values,
-		u32 init_idx, uint32_t property_idx)
+		u32 init_idx, uint32_t property_idx, bool force_dirty)
 {
 	struct drm_property **prop;
 
@@ -237,7 +254,7 @@ void msm_property_install_enum(struct msm_property_info *info,
 
 		/* save init value for later */
 		info->property_data[property_idx].default_value = 0;
-		info->property_data[property_idx].force_dirty = false;
+		info->property_data[property_idx].force_dirty = force_dirty;
 
 		/* initialize with the given idx if valid */
 		if (!is_bitmask && init_idx && (init_idx < num_values))
@@ -252,6 +269,24 @@ void msm_property_install_enum(struct msm_property_info *info,
 			++info->install_count;
 		}
 	}
+}
+
+void msm_property_install_volatile_enum(struct msm_property_info *info,
+		const char *name, int flags, int is_bitmask,
+		const struct drm_prop_enum_list *values, int num_values,
+		u32 init_idx, uint32_t property_idx)
+{
+	msm_property_install_enum_helper(info, name, flags, is_bitmask,
+	    values, num_values, init_idx, property_idx, true);
+}
+
+void msm_property_install_enum(struct msm_property_info *info,
+		const char *name, int flags, int is_bitmask,
+		const struct drm_prop_enum_list *values, int num_values,
+		u32 init_idx, uint32_t property_idx)
+{
+	msm_property_install_enum_helper(info, name, flags, is_bitmask,
+		values, num_values, init_idx, property_idx, false);
 }
 
 void msm_property_install_blob(struct msm_property_info *info,

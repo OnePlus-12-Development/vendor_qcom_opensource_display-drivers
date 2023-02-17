@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2468,7 +2468,7 @@ static ssize_t _sde_debugfs_conn_cmd_rx_write(struct file *file,
 
 	mutex_lock(&c_conn->lock);
 	c_conn->rx_len = c_conn->ops.cmd_receive(c_conn->display, buffer + 1,
-			buf_size - 1, c_conn->cmd_rx_buf, buffer[0]);
+			buf_size - 1, c_conn->cmd_rx_buf, buffer[0], NULL);
 	mutex_unlock(&c_conn->lock);
 
 	if (c_conn->rx_len <= 0)
@@ -3175,6 +3175,10 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 					"qsync_mode", 0, 0, e_qsync_mode,
 					ARRAY_SIZE(e_qsync_mode), 0,
 					CONNECTOR_PROP_QSYNC_MODE);
+			if (test_bit(SDE_FEATURE_EPT, sde_kms->catalog->features))
+				msm_property_install_range(&c_conn->property_info,
+						"EPT", 0x0, 0, U64_MAX, 0,
+						CONNECTOR_PROP_EPT);
 			if (test_bit(SDE_FEATURE_AVR_STEP, sde_kms->catalog->features))
 				msm_property_install_range(&c_conn->property_info,
 						"avr_step", 0x0, 0, U32_MAX, 0,

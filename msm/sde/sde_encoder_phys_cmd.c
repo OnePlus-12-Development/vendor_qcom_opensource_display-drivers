@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -202,6 +202,202 @@ static void sde_encoder_override_tearcheck_rd_ptr(struct sde_encoder_phys *phys_
 		info[1].rd_ptr_line_count, info[1].rd_ptr_frame_count, info[1].wr_ptr_line_count);
 }
 
+void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc)
+{
+	struct sde_hw_intf *hw_intf;
+	struct sde_hw_pp_vsync_info info[MAX_CHANNELS_PER_ENC] = {{0}};
+	struct drm_display_mode *mode;
+	struct sde_encoder_phys_cmd *cmd_enc;
+	struct sde_encoder_virt *sde_enc;
+	struct sde_connector *c_conn;
+	ktime_t nominal_period_ns, nominal_line_time_ns, panel_scan_line_ts_ns = 0;
+	ktime_t qsync_period_ns, time_into_frame_ns;
+	u32 qsync_timeout_lines, latency_margin_lines = 0, restored_rd_ptr_lines;
+	u16 panel_scan_line;
+	int rc;
+
+	if (!phys_enc || !phys_enc->connector) {
+		SDE_ERROR("invalid arguments\n");
+		return;
+	}
+
+	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
+	mode = &phys_enc->cached_mode;
+	hw_intf = phys_enc->hw_intf;
+	c_conn = to_sde_connector(phys_enc->connector);
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+
+	nominal_period_ns = mult_frac(1000000000, 1, drm_mode_vrefresh(mode));
+	qsync_period_ns = mult_frac(1000000000, 1, sde_enc->mode_info.qsync_min_fps);
+	nominal_line_time_ns = mult_frac(1, nominal_period_ns, mode->vtotal);
+	qsync_timeout_lines = mode->vtotal + cmd_enc->qsync_threshold_lines + 1;
+
+	/*
+	 * First read panel scan line value using a DCS command.
+	 * If the functionality is not supported or there is an error, defer trigger to
+	 * next TE by setting panel_scan_line to qsync_timeout_lines.
+	 */
+	if (c_conn->ops.get_panel_scan_line) {
+		rc = c_conn->ops.get_panel_scan_line(c_conn->display, &panel_scan_line,
+				&panel_scan_line_ts_ns);
+		if (rc || panel_scan_line >= qsync_timeout_lines) {
+			SDE_DEBUG_CMDENC(cmd_enc, "failed to get panel scan line, rc=%d\n", rc);
+			panel_scan_line = qsync_timeout_lines;
+		}
+	} else {
+		panel_scan_line = qsync_timeout_lines;
+	}
+
+	/* Compensate the latency from DCS scan line response*/
+	spin_lock(phys_enc->enc_spinlock);
+	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
+	time_into_frame_ns = ktime_sub(ktime_get(), phys_enc->last_vsync_timestamp);
+
+	if (panel_scan_line_ts_ns)
+		latency_margin_lines = mult_frac(1, ktime_sub(ktime_get(), panel_scan_line_ts_ns),
+				nominal_line_time_ns);
+
+	restored_rd_ptr_lines = panel_scan_line + latency_margin_lines;
+	if (restored_rd_ptr_lines >= qsync_timeout_lines)
+		restored_rd_ptr_lines = qsync_timeout_lines;
+
+	if (hw_intf && hw_intf->ops.override_tear_rd_ptr_val)
+		hw_intf->ops.override_tear_rd_ptr_val(hw_intf, restored_rd_ptr_lines);
+	spin_unlock(phys_enc->enc_spinlock);
+
+	SDE_EVT32(DRMID(phys_enc->parent), drm_mode_vrefresh(mode),
+			sde_enc->mode_info.qsync_min_fps,
+			mode->vtotal, panel_scan_line, qsync_timeout_lines, latency_margin_lines,
+			restored_rd_ptr_lines, info[0].rd_ptr_line_count - mode->vdisplay,
+			ktime_to_us(time_into_frame_ns));
+	SDE_DEBUG_CMDENC(cmd_enc, "scan_line:%u rest_rd_ptr:%u rd_ptr:%u frame_ns:%u\n",
+			panel_scan_line, restored_rd_ptr_lines,
+			info[0].rd_ptr_line_count - mode->vdisplay,
+			ktime_to_us(time_into_frame_ns));
+}
+
+static void _sde_encoder_phys_cmd_setup_sim_qsync_frame(struct sde_encoder_phys *phys_enc,
+		struct msm_display_info *disp_info, enum sde_sim_qsync_frame frame)
+{
+	struct sde_encoder_virt *sde_enc;
+	struct sde_connector *sde_conn;
+	struct drm_connector *conn;
+	u32 qsync_min_fps = 0, nominal_fps = 0, frame_rate = 0;
+	u32 nominal_period_us, qsync_min_period_us, time_since_vsync_us;
+	int time_before_nominal_vsync_us, time_before_timeout_vsync_us;
+	bool early_frame = false, late_frame = false, slow_frame = false;
+
+	if (!phys_enc || !phys_enc->hw_intf)
+		return;
+
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	sde_conn = to_sde_connector(phys_enc->connector);
+	conn = phys_enc->connector;
+	nominal_fps = sde_enc->mode_info.frame_rate;
+	qsync_min_fps = sde_enc->mode_info.qsync_min_fps;
+
+	if (!nominal_fps || !qsync_min_fps) {
+		SDE_ERROR("invalid fps values %d, %d\n", nominal_fps, qsync_min_fps);
+		return;
+	}
+
+	spin_lock(phys_enc->enc_spinlock);
+	switch (frame) {
+	case SDE_SIM_QSYNC_FRAME_NOMINAL:
+		frame_rate = nominal_fps;
+		break;
+
+	case SDE_SIM_QSYNC_FRAME_EARLY_OR_LATE:
+		time_since_vsync_us = ktime_to_us(ktime_sub(ktime_get(),
+				phys_enc->last_vsync_timestamp));
+
+		nominal_period_us = mult_frac(USEC_PER_SEC, 1, nominal_fps);
+		time_before_nominal_vsync_us = nominal_period_us - time_since_vsync_us;
+
+		qsync_min_period_us = mult_frac(USEC_PER_SEC, 1, qsync_min_fps);
+		time_before_timeout_vsync_us = qsync_min_period_us - time_since_vsync_us;
+
+		early_frame = (time_before_nominal_vsync_us > 0) ? true : false;
+		late_frame = (time_before_nominal_vsync_us <= 0) ? true : false;
+
+		/*
+		 * In simulation, a slow frame would happen if device enters idle power collapse
+		 * and wakes up after the QSYNC timeout period. In that case the last VSYNC time
+		 * stamp that was recorded when the device was up would not be a valid reference
+		 * to determine if the frame after idle power collapse is early or late and when
+		 * the next VSYNC should come.
+		 *
+		 * Thus, the simplest thing is to trigger the watchdog TE immediately and recover
+		 * in the next frame.
+		 */
+		slow_frame = (time_before_timeout_vsync_us <= 0) ? true : false;
+		if (early_frame)
+			frame_rate = mult_frac(USEC_PER_SEC, 1, time_before_nominal_vsync_us);
+		else if (late_frame || slow_frame)
+			frame_rate = SDE_SIM_QSYNC_IMMEDIATE_FPS;
+
+		SDE_EVT32(DRMID(phys_enc->parent), time_since_vsync_us, nominal_fps, qsync_min_fps,
+				nominal_period_us, qsync_min_period_us,
+				time_before_nominal_vsync_us, time_before_timeout_vsync_us,
+				early_frame, late_frame, slow_frame, frame_rate);
+		break;
+
+	case SDE_SIM_QSYNC_FRAME_TIMEOUT:
+		frame_rate = qsync_min_fps;
+		break;
+
+	default:
+		frame_rate = qsync_min_fps;
+		SDE_ERROR("invalid frame %d\n", frame);
+		break;
+	}
+
+	SDE_EVT32(DRMID(phys_enc->parent), frame, qsync_min_fps, frame_rate);
+	phys_enc->ops.control_te(phys_enc, false);
+	phys_enc->hw_intf->ops.setup_vsync_source(phys_enc->hw_intf, frame_rate);
+	phys_enc->hw_intf->ops.vsync_sel(phys_enc->hw_intf, SDE_VSYNC_SOURCE_WD_TIMER_0);
+	phys_enc->ops.control_te(phys_enc, true);
+	phys_enc->sim_qsync_frame = frame;
+	spin_unlock(phys_enc->enc_spinlock);
+}
+
+static void _sde_encoder_phys_cmd_process_sim_qsync_event(struct sde_encoder_phys *phys_enc,
+		enum sde_sim_qsync_event event)
+{
+	u32 qsync_mode = 0;
+	struct sde_encoder_virt *sde_enc;
+
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	if (!sde_enc->disp_info.is_te_using_watchdog_timer || !sde_enc->mode_info.qsync_min_fps)
+		return;
+
+	qsync_mode = sde_connector_get_qsync_mode(phys_enc->connector);
+	SDE_EVT32_IRQ(DRMID(phys_enc->parent),
+			ktime_to_us(ktime_get()) - ktime_to_us(phys_enc->last_vsync_timestamp),
+			qsync_mode, phys_enc->sim_qsync_frame, event);
+
+	switch (event) {
+	case SDE_SIM_QSYNC_EVENT_FRAME_DETECTED:
+		if (qsync_mode)
+			_sde_encoder_phys_cmd_setup_sim_qsync_frame(phys_enc, &sde_enc->disp_info,
+					SDE_SIM_QSYNC_FRAME_EARLY_OR_LATE);
+		break;
+
+	case SDE_SIM_QSYNC_EVENT_TE_TRIGGER:
+		if (qsync_mode)
+			_sde_encoder_phys_cmd_setup_sim_qsync_frame(phys_enc, &sde_enc->disp_info,
+					SDE_SIM_QSYNC_FRAME_TIMEOUT);
+		else if (phys_enc->sim_qsync_frame != SDE_SIM_QSYNC_FRAME_NOMINAL)
+			_sde_encoder_phys_cmd_setup_sim_qsync_frame(phys_enc, &sde_enc->disp_info,
+					SDE_SIM_QSYNC_FRAME_NOMINAL);
+		break;
+
+	default:
+		SDE_ERROR("invalid event %d\n", event);
+		break;
+	}
+}
+
 static void _sde_encoder_phys_signal_frame_done(struct sde_encoder_phys *phys_enc)
 {
 	struct sde_encoder_phys_cmd *cmd_enc;
@@ -347,6 +543,8 @@ static void sde_encoder_phys_cmd_te_rd_ptr_irq(void *arg, int irq_idx)
 		info[0].rd_ptr_line_count, info[1].pp_idx, info[1].intf_idx,
 		info[1].intf_frame_count, info[1].wr_ptr_line_count, info[1].rd_ptr_line_count);
 
+	_sde_encoder_phys_cmd_process_sim_qsync_event(phys_enc, SDE_SIM_QSYNC_EVENT_TE_TRIGGER);
+
 	if (phys_enc->parent_ops.handle_vblank_virt)
 		phys_enc->parent_ops.handle_vblank_virt(phys_enc->parent,
 			phys_enc);
@@ -396,6 +594,63 @@ static void sde_encoder_phys_cmd_wr_ptr_irq(void *arg, int irq_idx)
 	SDE_ATRACE_END("wr_ptr_irq");
 }
 
+static void sde_encoder_phys_cmd_tear_detect_irq(void *arg, int irq_idx)
+{
+	struct sde_encoder_phys *phys_enc = arg;
+	struct sde_encoder_phys_cmd *cmd_enc;
+
+	if (!phys_enc)
+		return;
+
+	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
+	if (!cmd_enc)
+		return;
+
+	SDE_ATRACE_BEGIN("tear_detect_irq");
+
+	SDE_EVT32_IRQ(DRMID(phys_enc->parent));
+
+	SDE_ATRACE_END("tear_detect_irq");
+}
+
+static void sde_encoder_phys_cmd_te_assert_irq(void *arg, int irq_idx)
+{
+	struct sde_encoder_phys *phys_enc = arg;
+	struct sde_encoder_phys_cmd *cmd_enc;
+
+	if (!phys_enc)
+		return;
+
+	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
+	if (!cmd_enc)
+		return;
+
+	SDE_ATRACE_BEGIN("te_assert_irq");
+
+	SDE_EVT32_IRQ(DRMID(phys_enc->parent));
+
+	SDE_ATRACE_END("te_assert_irq");
+}
+
+static void sde_encoder_phys_cmd_te_deassert_irq(void *arg, int irq_idx)
+{
+	struct sde_encoder_phys *phys_enc = arg;
+	struct sde_encoder_phys_cmd *cmd_enc;
+
+	if (!phys_enc)
+		return;
+
+	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
+	if (!cmd_enc)
+		return;
+
+	SDE_ATRACE_BEGIN("te_deassert_irq");
+
+	SDE_EVT32_IRQ(DRMID(phys_enc->parent));
+
+	SDE_ATRACE_END("te_deassert_irq");
+}
+
 static void _sde_encoder_phys_cmd_setup_irq_hw_idx(
 		struct sde_encoder_phys *phys_enc)
 {
@@ -441,6 +696,22 @@ static void _sde_encoder_phys_cmd_setup_irq_hw_idx(
 		irq->hw_idx = phys_enc->hw_intf->idx;
 	else
 		irq->hw_idx = phys_enc->hw_pp->idx;
+
+	irq = &phys_enc->irq[INTF_IDX_TEAR_DETECT];
+	if (phys_enc->has_intf_te)
+		irq->hw_idx = phys_enc->hw_intf->idx;
+	else
+		irq->hw_idx = phys_enc->hw_pp->idx;
+
+	if (phys_enc->has_intf_te) {
+		irq = &phys_enc->irq[INTR_IDX_TE_ASSERT];
+		irq->hw_idx = phys_enc->hw_intf->idx;
+
+		if (test_bit(SDE_INTF_TE_DEASSERT_DETECT, &phys_enc->hw_intf->cap->features)) {
+			irq = &phys_enc->irq[INTR_IDX_TE_DEASSERT];
+			irq->hw_idx = phys_enc->hw_intf->idx;
+		}
+	}
 }
 
 static void sde_encoder_phys_cmd_cont_splash_mode_set(
@@ -926,6 +1197,49 @@ end:
 	return ret;
 }
 
+void sde_encoder_phys_cmd_dynamic_irq_control(struct sde_encoder_phys *phys_enc, bool enable)
+{
+	struct sde_encoder_virt *sde_enc;
+
+	if (!phys_enc)
+		return;
+
+	/**
+	 * pingpong split slaves do not register for IRQs
+	 * check old and new topologies
+	 */
+	if (_sde_encoder_phys_is_ppsplit_slave(phys_enc) ||
+			_sde_encoder_phys_is_disabling_ppsplit_slave(phys_enc))
+		return;
+
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+
+	if (enable) {
+		if (test_bit(SDE_ENC_CMD_TEAR_DETECT, &sde_enc->dynamic_irqs_config))
+			sde_encoder_helper_register_irq(phys_enc, INTF_IDX_TEAR_DETECT);
+
+		if (test_bit(SDE_ENC_CMD_TE_ASSERT, &sde_enc->dynamic_irqs_config) &&
+				phys_enc->has_intf_te)
+			sde_encoder_helper_register_irq(phys_enc, INTR_IDX_TE_ASSERT);
+
+		if (test_bit(SDE_ENC_CMD_TE_DEASSERT, &sde_enc->dynamic_irqs_config) &&
+				test_bit(SDE_INTF_TE_DEASSERT_DETECT,
+				&phys_enc->hw_intf->cap->features) &&
+				phys_enc->has_intf_te)
+			sde_encoder_helper_register_irq(phys_enc, INTR_IDX_TE_DEASSERT);
+	} else {
+		if (SDE_ENC_IRQ_REGISTERED(phys_enc, INTF_IDX_TEAR_DETECT))
+			sde_encoder_helper_unregister_irq(phys_enc, INTF_IDX_TEAR_DETECT);
+
+		if (SDE_ENC_IRQ_REGISTERED(phys_enc, INTR_IDX_TE_ASSERT))
+			sde_encoder_helper_unregister_irq(phys_enc, INTR_IDX_TE_ASSERT);
+
+		if (test_bit(SDE_INTF_TE_DEASSERT_DETECT, &phys_enc->hw_intf->cap->features) &&
+				SDE_ENC_IRQ_REGISTERED(phys_enc, INTR_IDX_TE_DEASSERT))
+			sde_encoder_helper_unregister_irq(phys_enc, INTR_IDX_TE_DEASSERT);
+	}
+}
+
 void sde_encoder_phys_cmd_irq_control(struct sde_encoder_phys *phys_enc,
 		bool enable)
 {
@@ -1149,7 +1463,12 @@ static void sde_encoder_phys_cmd_tearcheck_config(
 	 * disable sde hw generated TE signal, since hw TE will arrive first.
 	 * Only caveat is if due to error, we hit wrap-around.
 	 */
-	tc_cfg.sync_cfg_height = 0xFFF0;
+	if (phys_enc->hw_intf->ops.is_te_32bit_supported
+			&& phys_enc->hw_intf->ops.is_te_32bit_supported(phys_enc->hw_intf))
+		tc_cfg.sync_cfg_height = 0xFFFFFFF0;
+	else
+		tc_cfg.sync_cfg_height = 0xFFF0;
+
 	tc_cfg.vsync_init_val = mode->vdisplay;
 	tc_cfg.sync_threshold_start = _get_tearcheck_threshold(phys_enc);
 	tc_cfg.sync_threshold_continue = DEFAULT_TEARCHECK_SYNC_THRESH_CONTINUE;
@@ -1258,7 +1577,7 @@ static void sde_encoder_phys_cmd_enable_helper(
 	if (sde_enc->idle_pc_restore) {
 		qsync_mode = sde_connector_get_qsync_mode(phys_enc->connector);
 		if (qsync_mode)
-			sde_encoder_override_tearcheck_rd_ptr(phys_enc);
+			sde_enc->restore_te_rd_ptr = true;
 	}
 
 	/*
@@ -1459,6 +1778,7 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 	struct sde_hw_tear_check tc_cfg = {0};
 	struct sde_encoder_phys_cmd *cmd_enc =
 			to_sde_encoder_phys_cmd(phys_enc);
+	struct sde_encoder_virt *sde_enc;
 	int ret = 0;
 	bool recovery_events;
 
@@ -1514,6 +1834,12 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 			phys_enc->hw_pp->ops.update_tearcheck(
 					phys_enc->hw_pp, &tc_cfg);
 		SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start);
+	}
+
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	if (sde_enc->restore_te_rd_ptr) {
+		sde_encoder_restore_tearcheck_rd_ptr(phys_enc);
+		sde_enc->restore_te_rd_ptr = false;
 	}
 
 	SDE_DEBUG_CMDENC(cmd_enc, "pp:%d pending_cnt %d\n",
@@ -1609,6 +1935,15 @@ static int _sde_encoder_phys_cmd_wait_for_wr_ptr(
 
 	ret = sde_encoder_helper_wait_for_irq(phys_enc, INTR_IDX_WRPTR,
 			&wait_info);
+
+	/*
+	 * if hwfencing enabled, try again to wait for up to the extended timeout time in
+	 * increments as long as fence has not been signaled.
+	 */
+	if (ret == -ETIMEDOUT && phys_enc->sde_kms->catalog->hw_fence_rev)
+		ret = sde_encoder_helper_hw_fence_extended_wait(phys_enc, ctl, &wait_info,
+			INTR_IDX_WRPTR);
+
 	if (ret == -ETIMEDOUT) {
 		struct sde_hw_ctl *ctl = phys_enc->hw_ctl;
 
@@ -1638,6 +1973,10 @@ static int _sde_encoder_phys_cmd_wait_for_wr_ptr(
 					lock_flags);
 			}
 		}
+
+		/* if we timeout after the extended wait, reset mixers and do sw override */
+		if (ret && phys_enc->sde_kms->catalog->hw_fence_rev)
+			sde_encoder_helper_hw_fence_sw_override(phys_enc, ctl);
 	}
 
 	cmd_enc->wr_ptr_wait_success = (ret == 0) ? true : false;
@@ -2037,6 +2376,19 @@ static void sde_encoder_phys_cmd_trigger_start(
 	cmd_enc->wr_ptr_wait_success = false;
 }
 
+static void sde_encoder_phys_cmd_handle_post_kickoff(struct sde_encoder_phys *phys_enc)
+{
+	if (!phys_enc) {
+		SDE_ERROR("invalid encoder\n");
+		return;
+	}
+
+	if (sde_encoder_phys_cmd_is_master(phys_enc))
+		_sde_encoder_phys_cmd_process_sim_qsync_event(phys_enc,
+				SDE_SIM_QSYNC_EVENT_FRAME_DETECTED);
+
+}
+
 static void _sde_encoder_phys_cmd_calculate_wd_params(struct sde_encoder_phys *phys_enc)
 {
 	u32 nominal_te_value;
@@ -2135,6 +2487,7 @@ static void sde_encoder_phys_cmd_init_ops(struct sde_encoder_phys_ops *ops)
 	ops->needs_single_flush = sde_encoder_phys_needs_single_flush;
 	ops->hw_reset = sde_encoder_helper_hw_reset;
 	ops->irq_control = sde_encoder_phys_cmd_irq_control;
+	ops->dynamic_irq_control = sde_encoder_phys_cmd_dynamic_irq_control;
 	ops->update_split_role = sde_encoder_phys_cmd_update_split_role;
 	ops->restore = sde_encoder_phys_cmd_enable_helper;
 	ops->control_te = sde_encoder_phys_cmd_connect_te;
@@ -2148,6 +2501,7 @@ static void sde_encoder_phys_cmd_init_ops(struct sde_encoder_phys_ops *ops)
 	ops->add_to_minidump = sde_encoder_phys_cmd_add_enc_to_minidump;
 	ops->disable_autorefresh = _sde_encoder_phys_disable_autorefresh;
 	ops->idle_pc_cache_display_status = sde_encoder_phys_cmd_store_ltj_values;
+	ops->handle_post_kickoff = sde_encoder_phys_cmd_handle_post_kickoff;
 }
 
 static inline bool sde_encoder_phys_cmd_intf_te_supported(
@@ -2159,49 +2513,10 @@ static inline bool sde_encoder_phys_cmd_intf_te_supported(
 	return false;
 }
 
-struct sde_encoder_phys *sde_encoder_phys_cmd_init(
-		struct sde_enc_phys_init_params *p)
+static void _sde_encoder_phys_cmd_init_irqs(struct sde_encoder_phys *phys_enc)
 {
-	struct sde_encoder_phys *phys_enc = NULL;
-	struct sde_encoder_phys_cmd *cmd_enc = NULL;
-	struct sde_hw_mdp *hw_mdp;
 	struct sde_encoder_irq *irq;
-	int i, ret = 0;
-
-	SDE_DEBUG("intf %d\n", p->intf_idx - INTF_0);
-
-	cmd_enc = kzalloc(sizeof(*cmd_enc), GFP_KERNEL);
-	if (!cmd_enc) {
-		ret = -ENOMEM;
-		SDE_ERROR("failed to allocate\n");
-		goto fail;
-	}
-	phys_enc = &cmd_enc->base;
-
-	hw_mdp = sde_rm_get_mdp(&p->sde_kms->rm);
-	if (IS_ERR_OR_NULL(hw_mdp)) {
-		ret = PTR_ERR(hw_mdp);
-		SDE_ERROR("failed to get mdptop\n");
-		goto fail_mdp_init;
-	}
-	phys_enc->hw_mdptop = hw_mdp;
-	phys_enc->intf_idx = p->intf_idx;
-
-	phys_enc->parent = p->parent;
-	phys_enc->parent_ops = p->parent_ops;
-	phys_enc->sde_kms = p->sde_kms;
-	phys_enc->split_role = p->split_role;
-	phys_enc->intf_mode = INTF_MODE_CMD;
-	phys_enc->enc_spinlock = p->enc_spinlock;
-	phys_enc->vblank_ctl_lock = p->vblank_ctl_lock;
-	cmd_enc->stream_sel = 0;
-	phys_enc->enable_state = SDE_ENC_DISABLED;
-	phys_enc->kickoff_timeout_ms = DEFAULT_KICKOFF_TIMEOUT_MS;
-	sde_encoder_phys_cmd_init_ops(&phys_enc->ops);
-	phys_enc->comp_type = p->comp_type;
-
-	phys_enc->has_intf_te = sde_encoder_phys_cmd_intf_te_supported(
-			phys_enc->sde_kms->catalog, phys_enc->intf_idx);
+	int i;
 
 	for (i = 0; i < INTR_IDX_MAX; i++) {
 		irq = &phys_enc->irq[i];
@@ -2260,6 +2575,75 @@ struct sde_encoder_phys *sde_encoder_phys_cmd_init(
 	else
 		irq->intr_type = SDE_IRQ_TYPE_PING_PONG_WR_PTR;
 	irq->cb.func = sde_encoder_phys_cmd_wr_ptr_irq;
+
+	irq = &phys_enc->irq[INTF_IDX_TEAR_DETECT];
+	irq->intr_idx = INTF_IDX_TEAR_DETECT;
+	irq->name = "te_tear_detect";
+	if (phys_enc->has_intf_te)
+		irq->intr_type = SDE_IRQ_TYPE_INTF_TEAR_TEAR_DETECT;
+	else
+		irq->intr_type = SDE_IRQ_TYPE_PING_PONG_TEAR_CHECK;
+	irq->cb.func = sde_encoder_phys_cmd_tear_detect_irq;
+
+	if (phys_enc->has_intf_te) {
+		irq = &phys_enc->irq[INTR_IDX_TE_ASSERT];
+		irq->intr_idx = INTR_IDX_TE_ASSERT;
+		irq->name = "te_assert";
+		irq->intr_type = SDE_IRQ_TYPE_INTF_TEAR_TE_ASSERT;
+		irq->cb.func = sde_encoder_phys_cmd_te_assert_irq;
+
+		irq = &phys_enc->irq[INTR_IDX_TE_DEASSERT];
+		irq->intr_idx = INTR_IDX_TE_DEASSERT;
+		irq->name = "te_deassert";
+		irq->intr_type = SDE_IRQ_TYPE_INTF_TEAR_TE_DEASSERT;
+		irq->cb.func = sde_encoder_phys_cmd_te_deassert_irq;
+	}
+}
+
+struct sde_encoder_phys *sde_encoder_phys_cmd_init(
+		struct sde_enc_phys_init_params *p)
+{
+	struct sde_encoder_phys *phys_enc = NULL;
+	struct sde_encoder_phys_cmd *cmd_enc = NULL;
+	struct sde_hw_mdp *hw_mdp;
+	int i, ret = 0;
+
+	SDE_DEBUG("intf %d\n", p->intf_idx - INTF_0);
+
+	cmd_enc = kzalloc(sizeof(*cmd_enc), GFP_KERNEL);
+	if (!cmd_enc) {
+		ret = -ENOMEM;
+		SDE_ERROR("failed to allocate\n");
+		goto fail;
+	}
+	phys_enc = &cmd_enc->base;
+
+	hw_mdp = sde_rm_get_mdp(&p->sde_kms->rm);
+	if (IS_ERR_OR_NULL(hw_mdp)) {
+		ret = PTR_ERR(hw_mdp);
+		SDE_ERROR("failed to get mdptop\n");
+		goto fail_mdp_init;
+	}
+	phys_enc->hw_mdptop = hw_mdp;
+	phys_enc->intf_idx = p->intf_idx;
+
+	phys_enc->parent = p->parent;
+	phys_enc->parent_ops = p->parent_ops;
+	phys_enc->sde_kms = p->sde_kms;
+	phys_enc->split_role = p->split_role;
+	phys_enc->intf_mode = INTF_MODE_CMD;
+	phys_enc->enc_spinlock = p->enc_spinlock;
+	phys_enc->vblank_ctl_lock = p->vblank_ctl_lock;
+	cmd_enc->stream_sel = 0;
+	phys_enc->enable_state = SDE_ENC_DISABLED;
+	phys_enc->kickoff_timeout_ms = DEFAULT_KICKOFF_TIMEOUT_MS;
+	sde_encoder_phys_cmd_init_ops(&phys_enc->ops);
+	phys_enc->comp_type = p->comp_type;
+
+	phys_enc->has_intf_te = sde_encoder_phys_cmd_intf_te_supported(
+			phys_enc->sde_kms->catalog, phys_enc->intf_idx);
+
+	_sde_encoder_phys_cmd_init_irqs(phys_enc);
 
 	atomic_set(&phys_enc->vblank_refcount, 0);
 	atomic_set(&phys_enc->pending_kickoff_cnt, 0);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2505,6 +2505,7 @@ static int sde_intf_parse_dt(struct device_node *np,
 			set_bit(SDE_INTF_TE_32BIT, &intf->features);
 			set_bit(SDE_INTF_TE_SINGLE_UPDATE, &intf->features);
 			set_bit(SDE_INTF_WD_LTJ_CTL, &intf->features);
+			set_bit(SDE_INTF_TE_DEASSERT_DETECT, &intf->features);
 		}
 	}
 
@@ -5394,6 +5395,7 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		set_bit(SDE_FEATURE_SYS_CACHE_NSE, sde_cfg->features);
 		set_bit(SDE_FEATURE_SYS_CACHE_STALING, sde_cfg->features);
 		set_bit(SDE_FEATURE_WB_ROTATION, sde_cfg->features);
+		set_bit(SDE_FEATURE_EPT, sde_cfg->features);
 		sde_cfg->allowed_dsc_reservation_switch = SDE_DP_DSC_RESERVATION_SWITCH;
 		sde_cfg->autorefresh_disable_seq = AUTOREFRESH_DISABLE_SEQ2;
 		sde_cfg->perf.min_prefill_lines = 40;

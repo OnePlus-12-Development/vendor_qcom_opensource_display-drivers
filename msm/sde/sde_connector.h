@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -287,11 +287,12 @@ struct sde_connector_ops {
 	 * @cmd_buf_len: Command buffer length in bytes
 	 * @recv_buf: rx buffer
 	 * @recv_buf_len: rx buffer length
+	 * @ts: time stamp in nano-seconds of when the command was received
 	 * Returns: number of bytes read, if successful, negative for failure
 	 */
 
 	int (*cmd_receive)(void *display, const char *cmd_buf,
-			   u32 cmd_buf_len, u8 *recv_buf, u32 recv_buf_len);
+			   u32 cmd_buf_len, u8 *recv_buf, u32 recv_buf_len, ktime_t *ts);
 
 	/**
 	 * config_hdr - configure HDR
@@ -437,6 +438,14 @@ struct sde_connector_ops {
 	 * @transfer_time: new transfer time to be updated
 	 */
 	int (*update_transfer_time)(void *display, u32 transfer_time);
+
+	/*
+	 * get_panel_scan_line -  get panel scan line
+	 * @display: Pointer to private display structure
+	 * @scan_line: Pointer to scan_line buffer value
+	 * @scan_line_ts:   scan line time stamp value in nano-seconds
+	 */
+	int (*get_panel_scan_line)(void *display, u16 *scan_line, ktime_t *scan_line_ts);
 
 };
 

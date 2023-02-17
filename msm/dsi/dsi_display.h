@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -12,6 +12,7 @@
 #include <linux/debugfs.h>
 #include <linux/of_device.h>
 #include <linux/firmware.h>
+#include <linux/ktime.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_bridge.h>
 
@@ -710,9 +711,10 @@ int dsi_display_cmd_transfer(struct drm_connector *connector,
  * @cmd_buf_len:        Command buffer length in bytes
  * @recv_buf:           Receive buffer
  * @recv_buf_len:       Receive buffer length in bytes
+ * @ts:                 Command time stamp in nano-seconds.
  */
 int dsi_display_cmd_receive(void *display, const char *cmd_buf,
-			    u32 cmd_buf_len, u8 *recv_buf, u32 recv_buf_len);
+			    u32 cmd_buf_len, u8 *recv_buf, u32 recv_buf_len, ktime_t *ts);
 
 /**
  * dsi_display_soft_reset() - perform a soft reset on DSI controller
@@ -843,5 +845,15 @@ bool dsi_display_mode_match(const struct dsi_display_mode *mode1,
  * Return: error code
  */
 int dsi_display_update_transfer_time(void *display, u32 transfer_time);
+
+/**
+ * dsi_display_get_panel_scan_line() - get panel scan line
+ * @display:     handle to display
+ * @scan_line:   scan line buffer value
+ * @scan_line_ts:   scan line time stamp value in nano-seconds
+ *
+ * Return: error code
+ */
+int dsi_display_get_panel_scan_line(void *display, u16 *scan_line, ktime_t *scan_line_ts);
 
 #endif /* _DSI_DISPLAY_H_ */

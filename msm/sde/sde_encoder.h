@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -55,6 +55,12 @@
 /* below this fps limit, timeouts are adjusted based on fps */
 #define DEFAULT_TIMEOUT_FPS_THRESHOLD            24
 
+#define SDE_ENC_IRQ_REGISTERED(phys_enc, idx) \
+		((!(phys_enc) || ((idx) < 0) || ((idx) >= INTR_IDX_MAX)) ? \
+		0 : ((phys_enc)->irq[(idx)].irq_idx >= 0))
+
+#define DEFAULT_MIN_FPS	10
+
 /**
  * Encoder functions and data types
  * @intfs:	Interfaces this encoder is using, INTF_MODE_NONE if unused
@@ -105,6 +111,33 @@ enum sde_enc_rc_states {
 	SDE_ENC_RC_STATE_IDLE
 };
 
+/*
+ * enum sde_sim_qsync_frame - simulated QSYNC frame type
+ * @SDE_SIM_QSYNC_FRAME_NOMINAL: Frame is triggered early and TE must come at nominal frame rate.
+ * @SDE_SIM_QSYNC_FRAME_EARLY_OR_LATE: Frame could be triggered early or late and TE must adjust
+ *                                     accordingly.
+ * @SDE_SIM_QSYNC_FRAME_TIMEOUT: Frame is triggered too late and TE must adjust to the
+ *                               minimum QSYNC FPS.
+ */
+enum sde_sim_qsync_frame {
+	SDE_SIM_QSYNC_FRAME_NOMINAL,
+	SDE_SIM_QSYNC_FRAME_EARLY_OR_LATE,
+	SDE_SIM_QSYNC_FRAME_TIMEOUT
+};
+
+/*
+ * enum sde_sim_qsync_event - events that simulates a QSYNC panel
+ * @SDE_SIM_QSYNC_EVENT_FRAME_DETECTED: Event when DDIC is detecting a frame.
+ * @SDE_SIM_QSYNC_EVENT_TE_TRIGGER: Event when DDIC is triggering TE signal.
+ */
+enum sde_sim_qsync_event {
+	SDE_SIM_QSYNC_EVENT_FRAME_DETECTED,
+	SDE_SIM_QSYNC_EVENT_TE_TRIGGER
+};
+
+/* Frame rate value to trigger the watchdog TE in 200 us */
+#define SDE_SIM_QSYNC_IMMEDIATE_FPS 5000
+
 /**
  * struct sde_encoder_virt - virtual encoder. Container of one or more physical
  *	encoders. Virtual encoder manages one "logical" display. Physical
@@ -151,6 +184,8 @@ enum sde_enc_rc_states {
  * @misr_frame_count:		misr frame count before start capturing the data
  * @idle_pc_enabled:		indicate if idle power collapse is enabled
  *				currently. This can be controlled by user-mode
+ * @restore_te_rd_ptr:          flag to indicate that te read pointer value must
+ *                              be restored after idle power collapse
  * @rc_lock:			resource control mutex lock to protect
  *				virt encoder over various state changes
  * @rc_state:			resource controller state
@@ -186,6 +221,7 @@ enum sde_enc_rc_states {
  *				encoder due to autorefresh concurrency.
  * @ctl_done_supported          boolean flag to indicate the availability of
  *                              ctl done irq support for the hardware
+ * @dynamic_irqs_config         bitmask config to enable encoder dynamic irqs
  */
 struct sde_encoder_virt {
 	struct drm_encoder base;
@@ -237,6 +273,7 @@ struct sde_encoder_virt {
 	struct input_handler *input_handler;
 	bool vblank_enabled;
 	bool idle_pc_restore;
+	bool restore_te_rd_ptr;
 	enum frame_trigger_mode_type frame_trigger_mode;
 	bool dynamic_hdr_updated;
 
@@ -254,6 +291,8 @@ struct sde_encoder_virt {
 	bool delay_kickoff;
 	bool autorefresh_solver_disable;
 	bool ctl_done_supported;
+
+	unsigned long dynamic_irqs_config;
 };
 
 #define to_sde_encoder_virt(x) container_of(x, struct sde_encoder_virt, base)
@@ -703,6 +742,13 @@ bool sde_encoder_is_line_insertion_supported(struct drm_encoder *drm_enc);
  * @Return: pointer to the hw ctl from the encoder upon success, otherwise null
  */
 struct sde_hw_ctl *sde_encoder_get_hw_ctl(struct sde_connector *c_conn);
+
+/*
+ * sde_encoder_get_programmed_fetch_time - gets the programmable fetch time for video encoders
+ * @drm_enc:    Pointer to drm encoder structure
+ * @Return: programmable fetch time in microseconds
+ */
+u32 sde_encoder_get_programmed_fetch_time(struct drm_encoder *encoder);
 
 void sde_encoder_add_data_to_minidump_va(struct drm_encoder *drm_enc);
 

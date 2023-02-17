@@ -253,6 +253,7 @@ struct dsi_ctrl_interrupts {
  *				which command transfer is successful.
  * @cmd_engine_refcount: Reference count enforcing single instance of cmd engine
  * @pending_cmd_flags: Flags associated with command that is currently being txed or pending.
+ * @cmd_success_ts:             Time stamp of when command transfer is successful in nano-seconds.
  */
 struct dsi_ctrl {
 	struct platform_device *pdev;
@@ -321,6 +322,7 @@ struct dsi_ctrl {
 	u32 cmd_success_frame;
 	u32 cmd_engine_refcount;
 	u32 pending_cmd_flags;
+	ktime_t cmd_success_ts;
 };
 
 /**
@@ -412,13 +414,14 @@ int dsi_ctrl_update_host_config(struct dsi_ctrl *dsi_ctrl,
  * dsi_ctrl_timing_db_update() - update only controller Timing DB
  * @dsi_ctrl:          DSI controller handle.
  * @enable:            Enable/disable Timing DB register
+ * @pf_time_in_us:           Programmable fetch time in micro-seconds
  *
  * Update timing db register value during dfps usecases
  *
  * Return: error code.
  */
 int dsi_ctrl_timing_db_update(struct dsi_ctrl *dsi_ctrl,
-		bool enable);
+		bool enable, u32 pf_time_in_us);
 
 /**
  * dsi_ctrl_async_timing_update() - update only controller timing

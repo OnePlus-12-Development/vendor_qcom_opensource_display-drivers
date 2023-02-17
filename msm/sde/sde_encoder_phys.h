@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -25,6 +25,10 @@
 
 /* wait for at most 2 vsync for lowest refresh rate (24hz) */
 #define DEFAULT_KICKOFF_TIMEOUT_MS		84
+
+/* if default timeout fails wait additional time in 1s increments */
+#define EXTENDED_KICKOFF_TIMEOUT_MS      1000
+#define EXTENDED_KICKOFF_TIMEOUT_ITERS   10
 
 /* wait 1 sec for the emulated targets */
 #define MAX_KICKOFF_TIMEOUT_MS                  100000
@@ -63,6 +67,14 @@ enum sde_enc_enable_state {
 	SDE_ENC_ENABLING,
 	SDE_ENC_ENABLED,
 	SDE_ENC_ERR_NEEDS_HW_RESET
+};
+
+enum sde_enc_irqs {
+	SDE_ENC_CMD_TE_ASSERT,
+	SDE_ENC_CMD_TE_DEASSERT,
+	SDE_ENC_CMD_TEAR_DETECT,
+
+	SDE_ENC_IRQ_MAX
 };
 
 struct sde_encoder_phys;
@@ -182,6 +194,7 @@ struct sde_encoder_phys_ops {
 			u32 *misr_value);
 	void (*hw_reset)(struct sde_encoder_phys *phys_enc);
 	void (*irq_control)(struct sde_encoder_phys *phys, bool enable);
+	void (*dynamic_irq_control)(struct sde_encoder_phys *phys, bool enable);
 	void (*update_split_role)(struct sde_encoder_phys *phys_enc,
 			enum sde_enc_split_role role);
 	void (*control_te)(struct sde_encoder_phys *phys_enc, bool enable);
@@ -218,6 +231,9 @@ struct sde_encoder_phys_ops {
  *                              autorefresh has triggered a double buffer flip
  * @INTR_IDX_WRPTR:    Writepointer start interrupt for cmd mode panel
  * @INTR_IDX_WB_LINEPTR:  Programmable lineptr interrupt for WB
+ * @INTF_IDX_TEAR_DETECT:    Tear detect interrupt
+ * @INTR_IDX_TE_ASSERT:      TE Assert interrupt
+ * @INTR_IDX_TE_DEASSERT:    TE Deassert interrupt
  */
 enum sde_intr_idx {
 	INTR_IDX_VSYNC,
@@ -237,6 +253,9 @@ enum sde_intr_idx {
 	INTR_IDX_PP_CWB2_OVFL,
 	INTR_IDX_WRPTR,
 	INTR_IDX_WB_LINEPTR,
+	INTF_IDX_TEAR_DETECT,
+	INTR_IDX_TE_ASSERT,
+	INTR_IDX_TE_DEASSERT,
 	INTR_IDX_MAX,
 };
 
@@ -316,10 +335,12 @@ struct sde_encoder_irq {
  * @in_clone_mode		Indicates if encoder is in clone mode ref@CWB
  * @vfp_cached:			cached vertical front porch to be used for
  *				programming ROT and MDP fetch start
+ * @pf_time_in_us:		Programmable fetch time in micro-seconds
  * @frame_trigger_mode:		frame trigger mode indication for command
  *				mode display
  * @recovered:			flag set to true when recovered from pp timeout
  * @autorefresh_disable_trans:   flag set to true during autorefresh disable transition
+ * @sim_qsync_frame:            Current simulated qsync frame type
  */
 struct sde_encoder_phys {
 	struct drm_encoder *parent;
@@ -366,9 +387,11 @@ struct sde_encoder_phys {
 	bool cont_splash_enabled;
 	bool in_clone_mode;
 	int vfp_cached;
+	u32 pf_time_in_us;
 	enum frame_trigger_mode_type frame_trigger_mode;
 	bool recovered;
 	bool autorefresh_disable_trans;
+	enum sde_sim_qsync_frame sim_qsync_frame;
 };
 
 static inline int sde_encoder_phys_inc_pending(struct sde_encoder_phys *phys)
@@ -711,6 +734,13 @@ void sde_encoder_helper_split_config(
  */
 int sde_encoder_helper_reset_mixers(struct sde_encoder_phys *phys_enc,
 		struct drm_framebuffer *fb);
+/**
+ * sde_encoder_helper_hw_fence_sw_override - reset mixers and do hw-fence sw override
+ * @phys_enc: Pointer to physical encoder structure
+ * @ctl: Pointer to hw_ctl structure
+ */
+void sde_encoder_helper_hw_fence_sw_override(struct sde_encoder_phys *phys_enc,
+		struct sde_hw_ctl *ctl);
 
 /**
  * sde_encoder_helper_report_irq_timeout - utility to report error that irq has
@@ -758,6 +788,14 @@ int sde_encoder_helper_unregister_irq(struct sde_encoder_phys *phys_enc,
  */
 void sde_encoder_helper_update_intf_cfg(
 		struct sde_encoder_phys *phys_enc);
+
+/**
+ * sde_encoder_restore_tearcheck_rd_ptr - restore interface rd_ptr configuration
+ *	This function reads the panel scan line value using a DCS command
+ *	and overrides the internal interface read pointer configuration.
+ * @phys_enc: Pointer to physical encoder structure
+ */
+void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc);
 
 /**
  * _sde_encoder_phys_is_dual_ctl - check if encoder needs dual ctl path.
@@ -823,6 +861,17 @@ static inline bool sde_encoder_phys_needs_single_flush(
 	return (_sde_encoder_phys_is_ppsplit(phys_enc) ||
 				!_sde_encoder_phys_is_dual_ctl(phys_enc));
 }
+
+/**
+ * sde_encoder_helper_hw_fence_extended_wait - extended kickoff wait for hw-fence enabled case
+ * @phys_enc:	Pointer to physical encoder structure
+ * @ctl:	Pointer to hw ctl structure
+ * @wait_info:	Pointer to wait_info structure
+ * @wait_type:	Enum indicating the irq to wait for
+ * Returns:	-ETIMEDOUT in the case that the extended wait times out, 0 otherwise
+ */
+int sde_encoder_helper_hw_fence_extended_wait(struct sde_encoder_phys *phys_enc,
+	struct sde_hw_ctl *ctl, struct sde_encoder_wait_info *wait_info, int wait_type);
 
 /**
  * sde_encoder_helper_phys_disable - helper function to disable virt encoder
