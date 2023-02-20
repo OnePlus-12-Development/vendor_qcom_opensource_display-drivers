@@ -1185,6 +1185,24 @@ int sde_connector_get_lm_cnt_from_topology(struct drm_connector *conn,
 	 const struct drm_display_mode *drm_mode);
 
 /**
+ * sde_conn_get_max_mode_width - retrieves the maximum width from all modes
+ * conn: Pointer to DRM connector object
+ */
+static inline u32 sde_conn_get_max_mode_width(struct drm_connector *conn)
+{
+	u32 maxw = 0;
+	struct drm_display_mode *mode;
+
+	if (!conn)
+		return maxw;
+
+	list_for_each_entry(mode, &conn->modes, head)
+		maxw = maxw > mode->hdisplay ? maxw : mode->hdisplay;
+
+	return maxw;
+}
+
+/**
  * sde_connector_state_get_topology - get topology from given connector state
  * conn_state: Pointer to the DRM connector state object
  * topology: Pointer to store topology info of the display

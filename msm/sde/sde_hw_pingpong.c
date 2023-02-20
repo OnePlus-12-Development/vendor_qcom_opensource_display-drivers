@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -41,6 +41,9 @@
 
 #define MERGE_3D_MODE 0x004
 #define MERGE_3D_MUX  0x000
+
+#define PPB_FIFO_SIZE_CFG               0x01C
+#define PPB_FIFO_SIZE_MASK              0x0FFF
 
 static struct sde_merge_3d_cfg *_merge_3d_offset(enum sde_merge_3d idx,
 		struct sde_mdss_cfg *m,
@@ -439,6 +442,22 @@ line_count_exit:
 	return line;
 }
 
+static void sde_hw_pp_set_ppb_fifo_size(struct sde_hw_pingpong *pp, u32 pixels)
+{
+	struct sde_hw_blk_reg_map *c;
+	u32 val;
+
+	if (!pp)
+		return;
+
+	c = &pp->hw;
+
+	/* covert to fifo units, 4 pixels can be stored per fifo */
+	val = (pixels / MDP_PPB_FIFO_ENTRY_SIZE) & 0x0FFF;
+
+	SDE_REG_WRITE(c, PPB_FIFO_SIZE_CFG, val);
+}
+
 static void sde_hw_pp_setup_3d_merge_mode(struct sde_hw_pingpong *pp,
 					enum sde_3d_blend_mode cfg)
 {
@@ -473,7 +492,11 @@ static void _setup_pingpong_ops(struct sde_hw_pingpong_ops *ops,
 		ops->get_autorefresh = sde_hw_pp_get_autorefresh_config;
 		ops->poll_timeout_wr_ptr = sde_hw_pp_poll_timeout_wr_ptr;
 		ops->get_line_count = sde_hw_pp_get_line_count;
+	} else if (hw_cap->features & BIT(SDE_PINGPONG_SET_SIZE)) {
+		/* PPB_FIFO_CFG offset conflicts with legacy PP Tear registers */
+		ops->set_ppb_fifo_size = sde_hw_pp_set_ppb_fifo_size;
 	}
+
 	if (hw_cap->features & BIT(SDE_PINGPONG_DSC)) {
 		ops->setup_dsc = sde_hw_pp_setup_dsc;
 		ops->enable_dsc = sde_hw_pp_dsc_enable;

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -131,6 +131,11 @@ struct sde_hw_pingpong_ops {
 	 * get PP features supported by this instance
 	 */
 	unsigned long (*get_hw_caps)(struct sde_hw_pingpong *pp);
+
+	/**
+	 * set_ppb_fifo_size - set ppb latency buffer size to a fixed value
+	 */
+	void (*set_ppb_fifo_size)(struct sde_hw_pingpong *pp, u32 pixels);
 };
 
 struct sde_hw_merge_3d_ops {
