@@ -213,6 +213,7 @@ void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc)
 	ktime_t nominal_period_ns, nominal_line_time_ns, panel_scan_line_ts_ns = 0;
 	ktime_t qsync_period_ns, time_into_frame_ns;
 	u32 qsync_timeout_lines, latency_margin_lines = 0, restored_rd_ptr_lines;
+	unsigned long flags;
 	u16 panel_scan_line;
 	int rc;
 
@@ -249,7 +250,7 @@ void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc)
 	}
 
 	/* Compensate the latency from DCS scan line response*/
-	spin_lock(phys_enc->enc_spinlock);
+	spin_lock_irqsave(phys_enc->enc_spinlock, flags);
 	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
 	time_into_frame_ns = ktime_sub(ktime_get(), phys_enc->last_vsync_timestamp);
 
@@ -263,7 +264,7 @@ void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc)
 
 	if (hw_intf && hw_intf->ops.override_tear_rd_ptr_val)
 		hw_intf->ops.override_tear_rd_ptr_val(hw_intf, restored_rd_ptr_lines);
-	spin_unlock(phys_enc->enc_spinlock);
+	spin_unlock_irqrestore(phys_enc->enc_spinlock, flags);
 
 	SDE_EVT32(DRMID(phys_enc->parent), drm_mode_vrefresh(mode),
 			sde_enc->mode_info.qsync_min_fps,
@@ -282,6 +283,7 @@ static void _sde_encoder_phys_cmd_setup_sim_qsync_frame(struct sde_encoder_phys 
 	struct sde_encoder_virt *sde_enc;
 	struct sde_connector *sde_conn;
 	struct drm_connector *conn;
+	unsigned long flags;
 	u32 qsync_min_fps = 0, nominal_fps = 0, frame_rate = 0;
 	u32 nominal_period_us, qsync_min_period_us, time_since_vsync_us;
 	int time_before_nominal_vsync_us, time_before_timeout_vsync_us;
@@ -301,7 +303,7 @@ static void _sde_encoder_phys_cmd_setup_sim_qsync_frame(struct sde_encoder_phys 
 		return;
 	}
 
-	spin_lock(phys_enc->enc_spinlock);
+	spin_lock_irqsave(phys_enc->enc_spinlock, flags);
 	switch (frame) {
 	case SDE_SIM_QSYNC_FRAME_NOMINAL:
 		frame_rate = nominal_fps;
@@ -358,7 +360,7 @@ static void _sde_encoder_phys_cmd_setup_sim_qsync_frame(struct sde_encoder_phys 
 	phys_enc->hw_intf->ops.vsync_sel(phys_enc->hw_intf, SDE_VSYNC_SOURCE_WD_TIMER_0);
 	phys_enc->ops.control_te(phys_enc, true);
 	phys_enc->sim_qsync_frame = frame;
-	spin_unlock(phys_enc->enc_spinlock);
+	spin_unlock_irqrestore(phys_enc->enc_spinlock, flags);
 }
 
 static void _sde_encoder_phys_cmd_process_sim_qsync_event(struct sde_encoder_phys *phys_enc,
