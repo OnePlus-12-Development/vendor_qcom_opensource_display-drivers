@@ -2943,8 +2943,10 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 		num_3dmux = 1;
 	}
 
-	avail_lm = avail_res->num_lm + avail_res->num_lm_in_use - dp->tot_lm_blks_in_use;
-	if ((num_lm > dp_panel->max_lm) && (num_lm > avail_lm)) {
+	avail_lm = avail_res->num_lm + avail_res->num_lm_in_use - dp->tot_lm_blks_in_use
+			+ dp_panel->max_lm;
+
+	if (num_lm > avail_lm) {
 		DP_DEBUG("mode %sx%d is invalid, not enough lm %d %d\n",
 				mode->name, fps, num_lm, avail_res->num_lm);
 		rc = -EPERM;
@@ -2964,10 +2966,7 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 	DP_DEBUG_V("mode %sx%d is valid, supported DP topology lm:%d dsc:%d 3dmux:%d\n",
 				mode->name, fps, num_lm, num_dsc, num_3dmux);
 
-	dp->tot_lm_blks_in_use -= dp_panel->max_lm;
-	dp_panel->max_lm = num_lm > avail_res->num_lm_in_use ? max(dp_panel->max_lm, num_lm) : 0;
-	dp->tot_lm_blks_in_use += dp_panel->max_lm;
-
+	dp_mode->lm_count = num_lm;
 	rc = 0;
 
 end:
@@ -3027,9 +3026,12 @@ static enum drm_mode_status dp_display_validate_mode(
 		goto end;
 
 	mode_status = MODE_OK;
+
+	dp->tot_lm_blks_in_use -= dp_panel->max_lm;
+	dp_panel->max_lm = max(dp_panel->max_lm, dp_mode.lm_count);
+	dp->tot_lm_blks_in_use += dp_panel->max_lm;
+
 end:
-	if (mode_status != MODE_OK)
-		dp_display_clear_reservation(dp_display, dp_panel);
 	mutex_unlock(&dp->session_lock);
 
 	DP_DEBUG_V("[%s] mode is %s\n", mode->name,
