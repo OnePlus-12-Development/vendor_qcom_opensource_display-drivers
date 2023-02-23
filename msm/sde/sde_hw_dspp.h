@@ -7,6 +7,8 @@
 #ifndef _SDE_HW_DSPP_H
 #define _SDE_HW_DSPP_H
 
+#include <drm/msm_drm_pp.h>
+#include "msm_drv.h"
 
 struct sde_hw_dspp;
 
@@ -249,14 +251,6 @@ struct sde_hw_dspp_ops {
 	int (*setup_rc_pu_roi)(struct sde_hw_dspp *ctx, void *cfg);
 
 	/**
-	 * setup_rc_data -  Program RC mask data
-	 * @ctx: Pointer to dspp context.
-	 * @cfg: Pointer to configuration.
-	 * Return: 0 on success, non-zero otherwise.
-	 */
-	int (*setup_rc_data)(struct sde_hw_dspp *ctx, void *cfg);
-
-	/**
 	 * validate_spr_init_config -  Validate SPR configuration
 	 * @ctx: Pointer to dspp context.
 	 * @cfg: Pointer to configuration.
@@ -335,6 +329,16 @@ struct sde_hw_dspp_ops {
 };
 
 /**
+ * struct sde_hw_rc_state - rounded corner cached state per RC instance
+ * @last_rc_mask_cfg: cached value of most recent programmed mask.
+ * @last_roi_list: cached value of most recent processed list of ROIs.
+ */
+struct sde_hw_rc_state {
+	struct drm_msm_rc_mask_cfg *last_rc_mask_cfg;
+	struct msm_roi_list *last_roi_list;
+};
+
+/**
  * struct sde_hw_dspp - dspp description
  * @base: Hardware block base structure
  * @hw: Block hardware details
@@ -345,6 +349,7 @@ struct sde_hw_dspp_ops {
  * @ops: Pointer to operations possible for this DSPP
  * @ltm_checksum_support: flag to check if checksum present
  * @spr_cfg_18_default: Default SPR cfg 18 HW details. Needed for PU handling
+ * @rc_state: Structure for RC state
  */
 struct sde_hw_dspp {
 	struct sde_hw_blk_reg_map hw;
@@ -361,6 +366,9 @@ struct sde_hw_dspp {
 
 	/* Ops */
 	struct sde_hw_dspp_ops ops;
+
+	/* rc state */
+	struct sde_hw_rc_state rc_state;
 };
 
 /**

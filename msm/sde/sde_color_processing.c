@@ -825,7 +825,7 @@ static int _set_rc_mask_feature(struct sde_hw_dspp *hw_dspp,
 		return -EINVAL;
 	}
 
-	if (!hw_dspp->ops.setup_rc_mask || !hw_dspp->ops.setup_rc_data) {
+	if (!hw_dspp->ops.setup_rc_mask) {
 		DRM_ERROR("invalid rc ops\n");
 		return -EINVAL;
 	}
@@ -837,15 +837,6 @@ static int _set_rc_mask_feature(struct sde_hw_dspp *hw_dspp,
 	if (ret) {
 		DRM_ERROR("failed to setup rc mask, ret %d\n", ret);
 		goto exit;
-	}
-
-	/* rc data should be programmed once if dspp are in multi-pipe mode */
-	if (hw_dspp->cap->sblk->rc.idx % hw_cfg->num_of_mixers == 0) {
-		ret = hw_dspp->ops.setup_rc_data(hw_dspp, hw_cfg);
-		if (ret) {
-			DRM_ERROR("failed to setup rc data, ret %d\n", ret);
-			goto exit;
-		}
 	}
 
 	_update_pu_feature_enable(sde_crtc, SDE_CP_CRTC_DSPP_RC_PU,

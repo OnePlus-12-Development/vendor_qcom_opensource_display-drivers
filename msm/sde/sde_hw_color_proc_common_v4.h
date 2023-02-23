@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2019, 2021 The Linux Foundation. All rights reserved.
  */
 #ifndef _SDE_HW_COLOR_PROC_COMMON_V4_H_
 #define _SDE_HW_COLOR_PROC_COMMON_V4_H_
 
 #include "sde_hw_mdss.h"
+#include "sde_dbg.h"
 
 /*
  * DEMURA fetch planes
@@ -157,6 +158,75 @@ enum {
 
 #define LTM_CONFIG_MERGE_MODE_ONLY (BIT(16) | BIT(17))
 
+/**
+ * Hardware register set
+ */
+#define SDE_HW_RC_REG0 0x00
+#define SDE_HW_RC_REG1 0x04
+#define SDE_HW_RC_REG2 0x08
+#define SDE_HW_RC_REG3 0x0C
+#define SDE_HW_RC_REG4 0x10
+#define SDE_HW_RC_REG5 0x14
+#define SDE_HW_RC_REG6 0x18
+#define SDE_HW_RC_REG7 0x1C
+#define SDE_HW_RC_REG8 0x20
+#define SDE_HW_RC_REG9 0x24
+#define SDE_HW_RC_REG10 0x28
+#define SDE_HW_RC_REG11 0x2C
+#define SDE_HW_RC_REG12 0x30
+#define SDE_HW_RC_REG13 0x34
+
+#define SDE_HW_RC_DATA_REG_SIZE  18
+#define SDE_HW_RC_SKIP_DATA_PROG 0x1
+
+#define SDE_HW_RC_DISABLE_R1 0x01E
+#define SDE_HW_RC_DISABLE_R2 0x1E0
+
+#define SDE_HW_RC_PU_SKIP_OP 0x1
+
+#define RC_IDX(hw_dspp) hw_dspp->cap->sblk->rc.idx
+
+enum rc_param_r {
+	RC_PARAM_R0     = 0x0,
+	RC_PARAM_R1     = 0x1,
+	RC_PARAM_R2     = 0x2,
+	RC_PARAM_R1R2   = (RC_PARAM_R1 | RC_PARAM_R2),
+};
+
+enum rc_param_a {
+	RC_PARAM_A0     = 0x2,
+	RC_PARAM_A1     = 0x4,
+};
+
+enum rc_param_b {
+	RC_PARAM_B0     = 0x0,
+	RC_PARAM_B1     = 0x1,
+	RC_PARAM_B2     = 0x2,
+	RC_PARAM_B1B2   = (RC_PARAM_B1 | RC_PARAM_B2),
+};
+
+enum rc_param_c {
+	RC_PARAM_C0     = (BIT(8)),
+	RC_PARAM_C1     = (BIT(10)),
+	RC_PARAM_C2     = (BIT(10) | BIT(11)),
+	RC_PARAM_C3     = (BIT(8) | BIT(10)),
+	RC_PARAM_C4     = (BIT(8) | BIT(9)),
+	RC_PARAM_C5     = (BIT(8) | BIT(9) | BIT(10) | BIT(11)),
+};
+
+enum rc_merge_mode {
+	RC_MERGE_SINGLE_PIPE = 0x0,
+	RC_MERGE_DUAL_PIPE   = 0x1
+};
+
+struct rc_config_table {
+	enum rc_param_a param_a;
+	enum rc_param_b param_b;
+	enum rc_param_c param_c;
+	enum rc_merge_mode merge_mode;
+	enum rc_merge_mode merge_mode_en;
+};
+
 struct sde_ltm_phase_info {
 	u32 init_h[LTM_MAX];
 	u32 init_v;
@@ -200,6 +270,301 @@ static inline void sde_ltm_get_phase_info(struct sde_hw_cp_cfg *hw_cfg,
 		info->init_h[LTM_3] = info->init_h[LTM_2] +
 			info->inc_h * (hw_cfg->displayh / 2);
 	}
+}
+
+static struct rc_config_table config_table[] =  {
+	/* RC_PARAM_A0 configurations */
+	{
+		.param_a = RC_PARAM_A0,
+		.param_b = RC_PARAM_B0,
+		.param_c = RC_PARAM_C5,
+		.merge_mode = RC_MERGE_SINGLE_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A0,
+		.param_b = RC_PARAM_B1B2,
+		.param_c = RC_PARAM_C3,
+		.merge_mode = RC_MERGE_SINGLE_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A0,
+		.param_b = RC_PARAM_B1,
+		.param_c = RC_PARAM_C0,
+		.merge_mode = RC_MERGE_SINGLE_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A0,
+		.param_b = RC_PARAM_B2,
+		.param_c = RC_PARAM_C1,
+		.merge_mode = RC_MERGE_SINGLE_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A0,
+		.param_b = RC_PARAM_B0,
+		.param_c = RC_PARAM_C5,
+		.merge_mode = RC_MERGE_DUAL_PIPE,
+		.merge_mode_en = RC_MERGE_DUAL_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A0,
+		.param_b = RC_PARAM_B1B2,
+		.param_c = RC_PARAM_C3,
+		.merge_mode = RC_MERGE_DUAL_PIPE,
+		.merge_mode_en = RC_MERGE_DUAL_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A0,
+		.param_b = RC_PARAM_B1,
+		.param_c = RC_PARAM_C0,
+		.merge_mode = RC_MERGE_DUAL_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A0,
+		.param_b = RC_PARAM_B2,
+		.param_c = RC_PARAM_C1,
+		.merge_mode = RC_MERGE_DUAL_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+	},
+
+	/* RC_PARAM_A1 configurations */
+	{
+		.param_a = RC_PARAM_A1,
+		.param_b = RC_PARAM_B0,
+		.param_c = RC_PARAM_C5,
+		.merge_mode = RC_MERGE_SINGLE_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A1,
+		.param_b = RC_PARAM_B1B2,
+		.param_c = RC_PARAM_C5,
+		.merge_mode = RC_MERGE_SINGLE_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A1,
+		.param_b = RC_PARAM_B1,
+		.param_c = RC_PARAM_C4,
+		.merge_mode = RC_MERGE_SINGLE_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A1,
+		.param_b = RC_PARAM_B2,
+		.param_c = RC_PARAM_C2,
+		.merge_mode = RC_MERGE_SINGLE_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A1,
+		.param_b = RC_PARAM_B0,
+		.param_c = RC_PARAM_C5,
+		.merge_mode = RC_MERGE_DUAL_PIPE,
+		.merge_mode_en = RC_MERGE_DUAL_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A1,
+		.param_b = RC_PARAM_B1B2,
+		.param_c = RC_PARAM_C5,
+		.merge_mode = RC_MERGE_DUAL_PIPE,
+		.merge_mode_en = RC_MERGE_DUAL_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A1,
+		.param_b = RC_PARAM_B1,
+		.param_c = RC_PARAM_C4,
+		.merge_mode = RC_MERGE_DUAL_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+	{
+		.param_a = RC_PARAM_A1,
+		.param_b = RC_PARAM_B2,
+		.param_c = RC_PARAM_C2,
+		.merge_mode = RC_MERGE_DUAL_PIPE,
+		.merge_mode_en = RC_MERGE_SINGLE_PIPE,
+
+	},
+};
+
+static inline int _sde_hw_rc_get_enable_bits(
+		enum rc_param_a param_a,
+		enum rc_param_b param_b,
+		enum rc_param_c *param_c,
+		u32 merge_mode,
+		u32 *merge_mode_en)
+{
+	int i = 0;
+
+	if (!param_c || !merge_mode_en) {
+		DRM_ERROR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(config_table); i++) {
+		if (merge_mode == config_table[i].merge_mode &&
+				param_a == config_table[i].param_a &&
+				param_b == config_table[i].param_b) {
+			*param_c = config_table[i].param_c;
+			*merge_mode_en = config_table[i].merge_mode_en;
+			DRM_DEBUG("found param_c:0x%08X, merge_mode_en:%d\n",
+					*param_c, *merge_mode_en);
+			return 0;
+		}
+	}
+	DRM_ERROR("configuration not supported");
+
+	return -EINVAL;
+}
+
+static inline int _sde_hw_rc_get_merge_mode(
+		const struct sde_hw_cp_cfg *hw_cfg,
+		u32 *merge_mode)
+{
+	int rc = 0;
+
+	if (!hw_cfg || !merge_mode) {
+		DRM_ERROR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	if (hw_cfg->num_of_mixers == 1)
+		*merge_mode = RC_MERGE_SINGLE_PIPE;
+	else if (hw_cfg->num_of_mixers == 2)
+		*merge_mode = RC_MERGE_DUAL_PIPE;
+	else {
+		DRM_ERROR("invalid number of mixers:%d\n",
+				hw_cfg->num_of_mixers);
+		return -EINVAL;
+	}
+
+	DRM_DEBUG("number mixers:%u, merge mode:%u\n",
+			hw_cfg->num_of_mixers, *merge_mode);
+
+	return rc;
+}
+
+static inline int _sde_hw_rc_get_ajusted_roi(
+		const struct sde_hw_cp_cfg *hw_cfg,
+		const struct sde_rect *pu_roi,
+		struct sde_rect *rc_roi)
+{
+	int rc = 0;
+
+	if (!hw_cfg || !pu_roi || !rc_roi) {
+		DRM_ERROR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	/*when partial update is disabled, use full screen ROI*/
+	if (pu_roi->w == 0 && pu_roi->h == 0) {
+		rc_roi->x = pu_roi->x;
+		rc_roi->y = pu_roi->y;
+		rc_roi->w = hw_cfg->panel_width;
+		rc_roi->h = hw_cfg->panel_height;
+	} else {
+		memcpy(rc_roi, pu_roi, sizeof(struct sde_rect));
+	}
+
+	SDE_EVT32(hw_cfg->displayh, hw_cfg->displayv, hw_cfg->panel_width, hw_cfg->panel_height);
+	DRM_DEBUG("displayh:%u, displayv:%u, panel_w:%u, panel_h:%u\n", hw_cfg->displayh,
+			hw_cfg->displayv, hw_cfg->panel_width, hw_cfg->panel_height);
+	DRM_DEBUG("pu_roi x:%u, y:%u, w:%u, h:%u\n", pu_roi->x, pu_roi->y,
+			pu_roi->w, pu_roi->h);
+	DRM_DEBUG("rc_roi x:%u, y:%u, w:%u, h:%u\n", rc_roi->x, rc_roi->y,
+			rc_roi->w, rc_roi->h);
+
+	return rc;
+}
+
+static inline int _sde_hw_rc_get_param_rb(
+		const struct drm_msm_rc_mask_cfg *rc_mask_cfg,
+		const struct sde_rect *rc_roi,
+		enum rc_param_r *param_r,
+		enum rc_param_b *param_b)
+{
+	int rc = 0;
+	int half_panel_x = 0, half_panel_w = 0;
+	int cfg_param_01 = 0, cfg_param_02 = 0;
+	int x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+
+	if (!rc_mask_cfg || !rc_roi || !param_r || !param_b) {
+		DRM_ERROR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	if (rc_mask_cfg->cfg_param_03 == RC_PARAM_A1)
+		half_panel_w = rc_mask_cfg->cfg_param_04[0] +
+				rc_mask_cfg->cfg_param_04[1];
+	else if (rc_mask_cfg->cfg_param_03 == RC_PARAM_A0)
+		half_panel_w = rc_mask_cfg->cfg_param_04[0];
+	else {
+		DRM_ERROR("invalid cfg_param_03:%u\n",
+				rc_mask_cfg->cfg_param_03);
+		return -EINVAL;
+	}
+
+	cfg_param_01 = rc_mask_cfg->cfg_param_01;
+	cfg_param_02 = rc_mask_cfg->cfg_param_02;
+	x1 = rc_roi->x;
+	x2 = rc_roi->x + rc_roi->w - 1;
+	y1 = rc_roi->y;
+	y2 = rc_roi->y + rc_roi->h - 1;
+	half_panel_x = half_panel_w - 1;
+
+	DRM_DEBUG("x1:%u y1:%u x2:%u y2:%u\n", x1, y1, x2, y2);
+	DRM_DEBUG("cfg_param_01:%u cfg_param_02:%u half_panel_x:%u",
+			cfg_param_01, cfg_param_02, half_panel_x);
+
+	if (x1 < 0 || x2 < 0 || y1 < 0 || y2 < 0 || half_panel_x < 0 ||
+			x1 >= x2 || y1 >= y2) {
+		DRM_ERROR("invalid coordinates\n");
+		return -EINVAL;
+	}
+
+	if (y1 <= cfg_param_01) {
+		*param_r |= RC_PARAM_R1;
+		if (x1 <= half_panel_x && x2 <= half_panel_x)
+			*param_b |= RC_PARAM_B1;
+		else if (x1 > half_panel_x && x2 > half_panel_x)
+			*param_b |= RC_PARAM_B2;
+		else
+			*param_b |= RC_PARAM_B1B2;
+	}
+
+	if (y2 >= cfg_param_02) {
+		*param_r |= RC_PARAM_R2;
+		if (x1 <= half_panel_x && x2 <= half_panel_x)
+			*param_b |= RC_PARAM_B1;
+		else if (x1 > half_panel_x && x2 > half_panel_x)
+			*param_b |= RC_PARAM_B2;
+		else
+			*param_b |= RC_PARAM_B1B2;
+	}
+
+	DRM_DEBUG("param_r:0x%08X param_b:0x%08X\n", *param_r, *param_b);
+	SDE_EVT32(rc_roi->x, rc_roi->y, rc_roi->w, rc_roi->h);
+	SDE_EVT32(x1, y1, x2, y2, cfg_param_01, cfg_param_02, half_panel_x);
+
+	return rc;
 }
 
 #endif /* _SDE_HW_COLOR_PROC_COMMON_V4_H_ */

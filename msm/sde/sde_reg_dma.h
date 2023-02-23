@@ -60,7 +60,8 @@ enum sde_reg_dma_read_sel {
  * @LTM_INIT: LTM INIT
  * @LTM_ROI: LTM ROI
  * @LTM_VLUT: LTM VLUT
- * @RC_DATA: Rounded corner data
+ * @RC_MASK_CFG: Rounded corner config and mask
+ * @RC_PU_CFG: Rounded corner partial update
  * @DEMURA_CFG: Demura feature
  * @REG_DMA_FEATURES_MAX: invalid selection
  */
@@ -83,7 +84,8 @@ enum sde_reg_dma_features {
 	LTM_INIT,
 	LTM_ROI,
 	LTM_VLUT,
-	RC_DATA,
+	RC_MASK_CFG,
+	RC_PU_CFG,
 	DEMURA_CFG,
 	DEMURA_CFG0_PARAM2,
 	REG_DMA_FEATURES_MAX,

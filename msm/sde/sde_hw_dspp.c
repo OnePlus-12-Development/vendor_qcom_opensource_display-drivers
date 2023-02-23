@@ -308,17 +308,17 @@ static void dspp_rc(struct sde_hw_dspp *c)
 		}
 
 		ret = reg_dmav1_init_dspp_op_v4(SDE_DSPP_RC, c->idx);
-		if (!ret)
-			c->ops.setup_rc_data =
-					sde_hw_rc_setup_data_dma;
-		else
-			c->ops.setup_rc_data =
-					sde_hw_rc_setup_data_ahb;
+		if (!ret) {
+			c->ops.setup_rc_mask = reg_dmav1_setup_rc_mask_configv1;
+			c->ops.setup_rc_pu_roi = reg_dmav1_setup_rc_pu_configv1;
+
+		} else {
+			c->ops.setup_rc_mask = sde_hw_rc_setup_mask;
+			c->ops.setup_rc_pu_roi = sde_hw_rc_setup_pu_roi;
+		}
 
 		c->ops.validate_rc_mask = sde_hw_rc_check_mask;
-		c->ops.setup_rc_mask = sde_hw_rc_setup_mask;
 		c->ops.validate_rc_pu_roi = sde_hw_rc_check_pu_roi;
-		c->ops.setup_rc_pu_roi = sde_hw_rc_setup_pu_roi;
 	}
 }
 

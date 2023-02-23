@@ -14,6 +14,7 @@
 #include "sde_hw_lm.h"
 #include "sde_dbg.h"
 #include "sde_hw_util.h"
+#include "sde_kms.h"
 
 /* Reserve space of 128 words for LUT dma payload set-up */
 #define REG_DMA_HEADERS_BUFFER_SZ (sizeof(u32) * 128)
@@ -69,7 +70,10 @@
 #define MEMCOLOR_MEM_SIZE ((sizeof(struct drm_msm_memcol)) + \
 		REG_DMA_HEADERS_BUFFER_SZ)
 
-#define RC_MEM_SIZE ((RC_DATA_SIZE_MAX * 2 * sizeof(u32)) + \
+#define RC_MASK_CFG_SIZE (sizeof(struct drm_msm_rc_mask_cfg) + \
+		REG_DMA_HEADERS_BUFFER_SZ)
+//TBD: exact size calculations
+#define RC_PU_CFG_SIZE ((64 * sizeof(u32)) + \
 		REG_DMA_HEADERS_BUFFER_SZ)
 
 #define QSEED3_MEM_SIZE (sizeof(struct sde_hw_scaler3_cfg) + \
@@ -158,7 +162,8 @@ static u32 feature_map[SDE_DSPP_MAX] = {
 	[SDE_DSPP_DITHER] = REG_DMA_FEATURES_MAX,
 	[SDE_DSPP_HIST] = REG_DMA_FEATURES_MAX,
 	[SDE_DSPP_AD] = REG_DMA_FEATURES_MAX,
-	[SDE_DSPP_RC] = RC_DATA,
+	/* RC can be mapped to RC_MASK_CFG & RC_PU_CFG */
+	[SDE_DSPP_RC] = RC_MASK_CFG,
 	[SDE_DSPP_DEMURA] = DEMURA_CFG,
 	[SDE_DSPP_DEMURA_CFG0_PARAM2] = DEMURA_CFG0_PARAM2,
 };
@@ -187,7 +192,8 @@ static u32 feature_reg_dma_sz[SDE_DSPP_MAX] = {
 	[SDE_DSPP_HSIC] = HSIC_MEM_SIZE,
 	[SDE_DSPP_SIXZONE] = SIXZONE_MEM_SIZE,
 	[SDE_DSPP_MEMCOLOR] = MEMCOLOR_MEM_SIZE,
-	[SDE_DSPP_RC] = RC_MEM_SIZE,
+	[SDE_DSPP_RC] = RC_MASK_CFG_SIZE,
+	[SDE_DSPP_RC_PU] = RC_PU_CFG_SIZE,
 	[SDE_DSPP_SPR] = SPR_INIT_MEM_SIZE,
 	[SDE_DSPP_DEMURA] = DEMURA_MEM_SIZE,
 	[SDE_DSPP_DEMURA_CFG0_PARAM2] = DEMURA_CFG0_PARAM2_MEM_SIZE,
@@ -281,6 +287,187 @@ static void _perform_sbdma_kickoff(struct sde_hw_dspp *ctx,
 		struct sde_hw_reg_dma_ops *dma_ops,
 		u32 blk, enum sde_reg_dma_features feature);
 
+static inline int _reg_dmav1_rc_write(struct sde_hw_dspp *ctx,
+		u32 reg_offset, u32 val,
+		struct sde_hw_reg_dma_ops *dma_ops,
+		enum sde_reg_dma_features feature)
+{
+	int rc = 0;
+	struct sde_reg_dma_setup_ops_cfg dma_write_cfg;
+	uint32_t abs_offset;
+
+	abs_offset = ctx->hw.blk_off + ctx->cap->sblk->rc.base + reg_offset;
+	REG_DMA_INIT_OPS(dma_write_cfg, MDSS, feature,
+		dspp_buf[feature][ctx->idx]);
+	REG_DMA_SETUP_OPS(dma_write_cfg, abs_offset, &val,
+		sizeof(__u32), REG_SINGLE_WRITE, 0, 0, 0);
+	rc = dma_ops->setup_payload(&dma_write_cfg);
+	if (rc)
+		SDE_ERROR("rc dma write failed ret %d\n", rc);
+	return rc;
+}
+
+static int _reg_dmav1_rc_program_enable_bits(
+		struct sde_hw_dspp *hw_dspp,
+		struct drm_msm_rc_mask_cfg *rc_mask_cfg,
+		enum rc_param_a param_a,
+		enum rc_param_b param_b,
+		enum rc_param_r param_r,
+		int merge_mode,
+		struct sde_rect *rc_roi,
+		struct sde_hw_reg_dma_ops *dma_ops,
+		enum sde_reg_dma_features feature)
+{
+	int rc = 0;
+	u32 val = 0, param_c = 0, rc_merge_mode = 0, ystart = 0;
+	u64 flags = 0, mask_w = 0, mask_h = 0;
+	bool r1_valid = false, r2_valid = false;
+	bool pu_in_r1 = false, pu_in_r2 = false;
+	bool r1_enable = false, r2_enable = false;
+
+	if (!hw_dspp || !rc_mask_cfg || !rc_roi) {
+		SDE_ERROR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	rc = _sde_hw_rc_get_enable_bits(param_a, param_b, &param_c,
+			merge_mode, &rc_merge_mode);
+	if (rc) {
+		SDE_ERROR("invalid enable bits, rc:%d\n", rc);
+		return rc;
+	}
+
+	flags = rc_mask_cfg->flags;
+	mask_w = rc_mask_cfg->width;
+	mask_h = rc_mask_cfg->height;
+	r1_valid = ((flags & SDE_HW_RC_DISABLE_R1) != SDE_HW_RC_DISABLE_R1);
+	r2_valid = ((flags & SDE_HW_RC_DISABLE_R2) != SDE_HW_RC_DISABLE_R2);
+	pu_in_r1 = (param_r == RC_PARAM_R1 || param_r == RC_PARAM_R1R2);
+	pu_in_r2 = (param_r == RC_PARAM_R2 || param_r == RC_PARAM_R1R2);
+	r1_enable = (r1_valid && pu_in_r1);
+	r2_enable = (r2_valid && pu_in_r2);
+
+	if (r1_enable)
+		val |= BIT(0);
+
+	if (r2_enable)
+		val |= BIT(4);
+
+	/*corner case for partial update in R2 region*/
+	if (!r1_enable && r2_enable)
+		ystart = rc_roi->y;
+
+	SDE_DEBUG("idx:%d w:%d h:%d flags:%x, R1:%d, R2:%d, PU R1:%d, PU R2:%d, Y_START:%d\n",
+		RC_IDX(hw_dspp), mask_w, mask_h, flags, r1_valid, r2_valid, pu_in_r1,
+		pu_in_r2, ystart);
+	SDE_EVT32(RC_IDX(hw_dspp), mask_w, mask_h, flags, r1_valid, r2_valid, pu_in_r1, pu_in_r2,
+		ystart);
+
+	val |= param_c;
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG1, val, dma_ops, feature);
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG13, ystart, dma_ops, feature);
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG9, rc_merge_mode, dma_ops, feature);
+
+	return rc;
+}
+
+static int _reg_dmav1_rc_program_roi(struct sde_hw_dspp *hw_dspp,
+		struct drm_msm_rc_mask_cfg *rc_mask_cfg,
+		int merge_mode,
+		struct sde_rect *rc_roi,
+		struct sde_hw_reg_dma_ops *dma_ops,
+		enum sde_reg_dma_features feature)
+{
+	int rc = 0;
+	u32 val2 = 0, val3 = 0, val4 = 0;
+	enum rc_param_r param_r = RC_PARAM_R0;
+	enum rc_param_a param_a = RC_PARAM_A0;
+	enum rc_param_b param_b = RC_PARAM_B0;
+
+	if (!hw_dspp || !rc_mask_cfg || !rc_roi) {
+		SDE_ERROR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	rc = _sde_hw_rc_get_param_rb(rc_mask_cfg, rc_roi, &param_r,
+			&param_b);
+	if (rc) {
+		SDE_ERROR("invalid rc roi, rc:%d\n", rc);
+		return rc;
+	}
+
+	param_a = rc_mask_cfg->cfg_param_03;
+	rc = _reg_dmav1_rc_program_enable_bits(hw_dspp, rc_mask_cfg,
+		param_a, param_b, param_r, merge_mode, rc_roi,
+		dma_ops, feature);
+	if (rc) {
+		SDE_ERROR("failed to program enable bits, rc:%d\n", rc);
+		return rc;
+	}
+
+	val2 = ((rc_mask_cfg->cfg_param_01 & 0x0000FFFF) |
+			((rc_mask_cfg->cfg_param_02 << 16) & 0xFFFF0000));
+	if (param_a == RC_PARAM_A1) {
+		val3 = (rc_mask_cfg->cfg_param_04[0] |
+				(rc_mask_cfg->cfg_param_04[1] << 16));
+		val4 = (rc_mask_cfg->cfg_param_04[2] |
+				(rc_mask_cfg->cfg_param_04[3] << 16));
+	} else if (param_a == RC_PARAM_A0) {
+		val3 = (rc_mask_cfg->cfg_param_04[0]);
+		val4 = (rc_mask_cfg->cfg_param_04[1]);
+	}
+
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG2, val2, dma_ops, feature);
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG3, val3, dma_ops, feature);
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG4, val4, dma_ops, feature);
+
+	return rc;
+}
+
+static int _reg_dmav1_rc_program_data_offset(
+		struct sde_hw_dspp *hw_dspp,
+		struct drm_msm_rc_mask_cfg *rc_mask_cfg,
+		struct sde_hw_reg_dma_ops *dma_ops,
+		enum sde_reg_dma_features feature)
+{
+	int rc = 0;
+	u32 val5 = 0, val6 = 0, val7 = 0, val8 = 0;
+	u32 cfg_param_07;
+
+	if (!hw_dspp || !rc_mask_cfg) {
+		SDE_ERROR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	cfg_param_07 = rc_mask_cfg->cfg_param_07;
+	if (rc_mask_cfg->cfg_param_03 == RC_PARAM_A1) {
+		val5 = ((rc_mask_cfg->cfg_param_05[0] + cfg_param_07) |
+				((rc_mask_cfg->cfg_param_05[1] + cfg_param_07)
+				<< 16));
+		val6 = ((rc_mask_cfg->cfg_param_05[2] + cfg_param_07)|
+				((rc_mask_cfg->cfg_param_05[3] + cfg_param_07)
+				<< 16));
+		val7 = ((rc_mask_cfg->cfg_param_06[0] + cfg_param_07) |
+				((rc_mask_cfg->cfg_param_06[1] + cfg_param_07)
+				<< 16));
+		val8 = ((rc_mask_cfg->cfg_param_06[2] + cfg_param_07) |
+				((rc_mask_cfg->cfg_param_06[3] + cfg_param_07)
+				<< 16));
+	} else if (rc_mask_cfg->cfg_param_03 == RC_PARAM_A0) {
+		val5 = (rc_mask_cfg->cfg_param_05[0] + cfg_param_07);
+		val6 = (rc_mask_cfg->cfg_param_05[1] + cfg_param_07);
+		val7 = (rc_mask_cfg->cfg_param_06[0] + cfg_param_07);
+		val8 = (rc_mask_cfg->cfg_param_06[1] + cfg_param_07);
+	}
+
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG5, val5, dma_ops, feature);
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG6, val6, dma_ops, feature);
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG7, val7, dma_ops, feature);
+	rc = _reg_dmav1_rc_write(hw_dspp, SDE_HW_RC_REG8, val8, dma_ops, feature);
+
+	return rc;
+}
+
 static int reg_dma_buf_init(struct sde_reg_dma_buffer **buf, u32 size)
 {
 	struct sde_hw_reg_dma_ops *dma_ops;
@@ -361,6 +548,16 @@ static int _reg_dma_init_dspp_feature_buf(int feature, enum sde_dspp idx)
 		rc = reg_dma_buf_init(
 			&dspp_buf[MEMC_PROT][idx],
 			feature_reg_dma_sz[feature]);
+	} else if (feature == SDE_DSPP_RC) {
+		rc = reg_dma_buf_init(
+			&dspp_buf[RC_MASK_CFG][idx],
+			feature_reg_dma_sz[feature]);
+		if (rc)
+			return rc;
+
+		rc = reg_dma_buf_init(
+			&dspp_buf[RC_PU_CFG][idx],
+			feature_reg_dma_sz[SDE_DSPP_RC_PU]);
 	} else {
 		rc = reg_dma_buf_init(
 			&dspp_buf[feature_map[feature]][idx],
@@ -1161,87 +1358,297 @@ void reg_dmav1_setup_dspp_igcv31(struct sde_hw_dspp *ctx, void *cfg)
 		DRM_ERROR("failed to kick off ret %d\n", rc);
 }
 
-int reg_dmav1_setup_rc_datav1(struct sde_hw_dspp *ctx, void *cfg)
+int reg_dmav1_setup_rc_pu_configv1(struct sde_hw_dspp *ctx, void *cfg)
 {
-	struct drm_msm_rc_mask_cfg *rc_mask_cfg;
+	int rc = 0;
 	struct sde_hw_reg_dma_ops *dma_ops;
 	struct sde_reg_dma_kickoff_cfg kick_off;
-	struct sde_hw_cp_cfg *hw_cfg = cfg;
 	struct sde_reg_dma_setup_ops_cfg dma_write_cfg;
-	int rc = 0;
-	u32 i = 0;
-	u32 *data = NULL;
-	u32 buf_sz = 0, abs_offset = 0;
-	u32 cfg_param_07;
-	u64 cfg_param_09;
+	struct sde_hw_cp_cfg *hw_cfg = cfg;
+	struct drm_msm_rc_mask_cfg *rc_mask_cfg;
+	struct msm_roi_list *roi_list;
+	struct msm_roi_list empty_roi_list;
+	struct sde_rect rc_roi, merged_roi;
+	enum rc_param_r param_r = RC_PARAM_R0;
+	enum rc_param_a param_a = RC_PARAM_A0;
+	enum rc_param_b param_b = RC_PARAM_B0;
+	u32 merge_mode = 0;
 
-	rc = reg_dma_dspp_check(ctx, cfg, RC_DATA);
+	if (!ctx || !cfg) {
+		SDE_ERROR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	if (hw_cfg->len != sizeof(struct sde_drm_roi_v1)) {
+		SDE_ERROR("invalid payload size\n");
+		return -EINVAL;
+	}
+
+	rc = reg_dma_dspp_check(ctx, cfg, RC_PU_CFG);
 	if (rc) {
-		DRM_ERROR("invalid dma dspp check rc = %d\n", rc);
+		SDE_ERROR("invalid dma dspp check rc = %d\n", rc);
 		return -EINVAL;
 	}
-
-	if (hw_cfg->len != sizeof(struct drm_msm_rc_mask_cfg)) {
-		DRM_ERROR("invalid size of payload len %d exp %zd\n",
-			  hw_cfg->len, sizeof(struct drm_msm_rc_mask_cfg));
-		return -EINVAL;
-	}
-
-	rc_mask_cfg = hw_cfg->payload;
-	buf_sz = rc_mask_cfg->cfg_param_08 * 2 * sizeof(u32);
-	abs_offset = ctx->hw.blk_off + ctx->cap->sblk->rc.base + 0x28;
 
 	dma_ops = sde_reg_dma_get_ops();
-	dma_ops->reset_reg_dma_buf(dspp_buf[RC_DATA][ctx->idx]);
-	REG_DMA_INIT_OPS(dma_write_cfg, MDSS, RC_DATA,
-		dspp_buf[RC_DATA][ctx->idx]);
+	dma_ops->reset_reg_dma_buf(dspp_buf[RC_PU_CFG][ctx->idx]);
+	REG_DMA_INIT_OPS(dma_write_cfg, MDSS, RC_PU_CFG,
+		dspp_buf[RC_PU_CFG][ctx->idx]);
 
 	REG_DMA_SETUP_OPS(dma_write_cfg, 0, NULL, 0, HW_BLK_SELECT, 0, 0, 0);
 	rc = dma_ops->setup_payload(&dma_write_cfg);
 	if (rc) {
-		DRM_ERROR("write decode select failed ret %d\n", rc);
+		SDE_ERROR("write decode select failed ret %d\n", rc);
 		return -ENOMEM;
 	}
 
-	DRM_DEBUG_DRIVER("allocating %u bytes of memory for dma\n", buf_sz);
-	data = kvzalloc(buf_sz, GFP_KERNEL);
-	if (!data) {
-		DRM_ERROR("memory allocation failed ret %d\n", rc);
-		return -ENOMEM;
+	roi_list = hw_cfg->payload;
+	if (!roi_list) {
+		SDE_DEBUG("full frame update\n");
+		memset(&empty_roi_list, 0, sizeof(struct msm_roi_list));
+		roi_list = &empty_roi_list;
 	}
 
-	cfg_param_07 = rc_mask_cfg->cfg_param_07;
-	for (i = 0; i < rc_mask_cfg->cfg_param_08; i++) {
-		cfg_param_09 =  rc_mask_cfg->cfg_param_09[i];
-		DRM_DEBUG_DRIVER("cfg_param_09[%d] = 0x%016llX at %u\n", i,
-				 cfg_param_09,
-				 i + cfg_param_07);
-		data[i * 2] = (i == 0) ? (BIT(30) | (cfg_param_07 << 18)) : 0;
-		data[i * 2] |= (cfg_param_09 & 0x3FFFF);
-		data[i * 2 + 1] = ((cfg_param_09 >> 18) & 0x3FFFF);
+	rc_mask_cfg = ctx->rc_state.last_rc_mask_cfg;
+	SDE_EVT32(RC_IDX(ctx), roi_list, rc_mask_cfg, rc_mask_cfg->cfg_param_03);
+
+	/* early return when there is no mask in memory */
+	if (!rc_mask_cfg || !rc_mask_cfg->cfg_param_03) {
+		SDE_DEBUG("no previous rc mask programmed\n");
+		SDE_EVT32(RC_IDX(ctx));
+		return SDE_HW_RC_PU_SKIP_OP;
 	}
 
-	REG_DMA_SETUP_OPS(dma_write_cfg, abs_offset, data, buf_sz,
-			REG_BLK_WRITE_INC, 0, 0, 0);
-	rc = dma_ops->setup_payload(&dma_write_cfg);
+	sde_kms_rect_merge_rectangles(roi_list, &merged_roi);
+	rc = _sde_hw_rc_get_ajusted_roi(hw_cfg, &merged_roi, &rc_roi);
 	if (rc) {
-		DRM_ERROR("rc dma write failed ret %d\n", rc);
-		goto exit;
+		SDE_ERROR("failed to get adjusted roi, rc:%d\n", rc);
+		return rc;
+	}
+
+	rc = _sde_hw_rc_get_merge_mode(hw_cfg, &merge_mode);
+	if (rc) {
+		SDE_ERROR("invalid merge_mode, rc:%d\n", rc);
+		return rc;
+	}
+
+	rc = _sde_hw_rc_get_param_rb(rc_mask_cfg, &rc_roi, &param_r,
+			&param_b);
+	if (rc) {
+		SDE_ERROR("invalid roi, rc:%d\n", rc);
+		return rc;
+	}
+
+	param_a = rc_mask_cfg->cfg_param_03;
+	rc = _reg_dmav1_rc_program_enable_bits(ctx, rc_mask_cfg,
+		param_a, param_b, param_r, merge_mode, &rc_roi,
+		dma_ops, RC_PU_CFG);
+	if (rc) {
+		SDE_ERROR("failed to program enable bits, rc:%d\n", rc);
+		return rc;
 	}
 
 	/* defer trigger to kickoff phase */
 	REG_DMA_SETUP_KICKOFF(kick_off, hw_cfg->ctl,
-		dspp_buf[RC_DATA][ctx->idx], REG_DMA_WRITE,
-		DMA_CTL_QUEUE0, WRITE_TRIGGER, RC_DATA);
-	LOG_FEATURE_ON;
+		dspp_buf[RC_PU_CFG][ctx->idx], REG_DMA_WRITE,
+		DMA_CTL_QUEUE0, WRITE_TRIGGER, RC_PU_CFG);
 	rc = dma_ops->kick_off(&kick_off);
 	if (rc) {
-		DRM_ERROR("failed to kick off ret %d\n", rc);
+		SDE_ERROR("failed to kick off ret %d\n", rc);
+		return rc;
+	}
+	LOG_FEATURE_ON;
+
+	memcpy(ctx->rc_state.last_roi_list,
+			roi_list, sizeof(struct msm_roi_list));
+
+	return 0;
+}
+
+int reg_dmav1_setup_rc_mask_configv1(struct sde_hw_dspp *ctx, void *cfg)
+{
+	int rc = 0;
+	struct sde_hw_reg_dma_ops *dma_ops;
+	struct sde_reg_dma_kickoff_cfg kick_off;
+	struct sde_reg_dma_setup_ops_cfg dma_write_cfg;
+	struct sde_hw_cp_cfg *hw_cfg = cfg;
+	struct drm_msm_rc_mask_cfg *rc_mask_cfg;
+	struct sde_rect rc_roi, merged_roi;
+	struct msm_roi_list *last_roi_list;
+	u32 merge_mode = 0;
+	u64 mask_w = 0, mask_h = 0, panel_w = 0, panel_h = 0;
+	u32 *data = NULL;
+	u32 cfg_param_07; u64 cfg_param_09;
+	u32 buf_sz = 0, abs_offset = 0;
+	int i = 0;
+
+	if (!ctx || !cfg) {
+		SDE_ERROR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	rc = reg_dma_dspp_check(ctx, cfg, RC_MASK_CFG);
+	if (rc) {
+		SDE_ERROR("invalid dma dspp check rc = %d\n", rc);
+		return -EINVAL;
+	}
+
+	dma_ops = sde_reg_dma_get_ops();
+	dma_ops->reset_reg_dma_buf(dspp_buf[RC_MASK_CFG][ctx->idx]);
+	REG_DMA_INIT_OPS(dma_write_cfg, MDSS, RC_MASK_CFG,
+		dspp_buf[RC_MASK_CFG][ctx->idx]);
+
+	REG_DMA_SETUP_OPS(dma_write_cfg, 0, NULL, 0, HW_BLK_SELECT, 0, 0, 0);
+	rc = dma_ops->setup_payload(&dma_write_cfg);
+	if (rc) {
+		SDE_ERROR("write decode select failed ret %d\n", rc);
+		return -ENOMEM;
+	}
+
+	if ((hw_cfg->len == 0 && hw_cfg->payload == NULL)) {
+		SDE_DEBUG("RC feature disabled\n");
+		rc = _reg_dmav1_rc_write(ctx, SDE_HW_RC_REG1, 0, dma_ops, RC_MASK_CFG);
+		memset(ctx->rc_state.last_rc_mask_cfg, 0,
+				sizeof(struct drm_msm_rc_mask_cfg));
+		memset(ctx->rc_state.last_roi_list, 0,
+				sizeof(struct msm_roi_list));
+		SDE_EVT32(RC_IDX(ctx), ctx->rc_state.last_rc_mask_cfg,
+				ctx->rc_state.last_rc_mask_cfg->cfg_param_03,
+				ctx->rc_state.last_roi_list->num_rects);
+
+		REG_DMA_SETUP_KICKOFF(kick_off, hw_cfg->ctl,
+			dspp_buf[RC_MASK_CFG][ctx->idx], REG_DMA_WRITE,
+			DMA_CTL_QUEUE0, WRITE_TRIGGER, RC_MASK_CFG);
+		rc = dma_ops->kick_off(&kick_off);
+		if (rc) {
+			SDE_ERROR("failed to kick off ret %d\n", rc);
+			return rc;
+		}
+		LOG_FEATURE_OFF;
+		return 0;
+	}
+
+	if (hw_cfg->len != sizeof(struct drm_msm_rc_mask_cfg) ||
+			!hw_cfg->payload) {
+		SDE_ERROR("invalid payload\n");
+		return -EINVAL;
+	}
+
+	rc_mask_cfg = hw_cfg->payload;
+	last_roi_list = ctx->rc_state.last_roi_list;
+
+	mask_w = rc_mask_cfg->width;
+	mask_h = rc_mask_cfg->height;
+	panel_w =  hw_cfg->panel_width;
+	panel_h = hw_cfg->panel_height;
+
+	if ((panel_w != mask_w || panel_h != mask_h)) {
+		SDE_ERROR("RC-%d mask: w %d h %d panel: w %d h %d mismatch\n",
+				RC_IDX(ctx), mask_w, mask_h, panel_w, panel_h);
+		SDE_EVT32(1);
+		rc = _reg_dmav1_rc_write(ctx, SDE_HW_RC_REG1, 0, dma_ops, RC_MASK_CFG);
+
+		REG_DMA_SETUP_KICKOFF(kick_off, hw_cfg->ctl,
+			dspp_buf[RC_MASK_CFG][ctx->idx], REG_DMA_WRITE,
+			DMA_CTL_QUEUE0, WRITE_TRIGGER, RC_MASK_CFG);
+		rc = dma_ops->kick_off(&kick_off);
+		if (rc) {
+			SDE_ERROR("failed to kick off ret %d\n", rc);
+			return -EINVAL;
+		}
+		LOG_FEATURE_OFF;
+		return -EINVAL;
+	}
+
+	if (!last_roi_list || !last_roi_list->num_rects) {
+		SDE_DEBUG("full frame update\n");
+		memset(&merged_roi, 0, sizeof(struct sde_rect));
+	} else {
+		SDE_DEBUG("partial frame update\n");
+		sde_kms_rect_merge_rectangles(last_roi_list, &merged_roi);
+	}
+	SDE_EVT32(RC_IDX(ctx), last_roi_list->num_rects);
+
+	rc = _sde_hw_rc_get_ajusted_roi(hw_cfg, &merged_roi, &rc_roi);
+	if (rc) {
+		SDE_ERROR("failed to get adjusted roi, rc:%d\n", rc);
+		return rc;
+	}
+
+	rc = _sde_hw_rc_get_merge_mode(hw_cfg, &merge_mode);
+	if (rc) {
+		SDE_ERROR("invalid merge_mode, rc:%d\n", rc);
+		return rc;
+	}
+
+	rc = _reg_dmav1_rc_program_roi(ctx, rc_mask_cfg,
+		merge_mode, &rc_roi, dma_ops, RC_MASK_CFG);
+	if (rc) {
+		SDE_ERROR("unable to program rc roi, rc:%d\n", rc);
+		return rc;
+	}
+
+	rc = _reg_dmav1_rc_program_data_offset(ctx, rc_mask_cfg, dma_ops, RC_MASK_CFG);
+	if (rc) {
+		SDE_ERROR("unable to program data offsets, rc:%d\n", rc);
+		return rc;
+	}
+
+	/* rc data should be programmed once if dspp are in multi-pipe mode */
+	if (!(rc_mask_cfg->flags & SDE_HW_RC_SKIP_DATA_PROG) &&
+		(ctx->cap->sblk->rc.idx % hw_cfg->num_of_mixers == 0)) {
+		buf_sz = rc_mask_cfg->cfg_param_08 * 2 * sizeof(u32);
+		abs_offset = ctx->hw.blk_off + ctx->cap->sblk->rc.base + 0x28;
+
+		SDE_DEBUG("allocating %u bytes of memory for dma\n", buf_sz);
+		data = kvzalloc(buf_sz, GFP_KERNEL);
+		if (!data) {
+			SDE_ERROR("memory allocation failed ret %d\n", rc);
+			return -ENOMEM;
+		}
+
+		cfg_param_07 = rc_mask_cfg->cfg_param_07;
+		SDE_DEBUG("cfg_param_07:%u\n", cfg_param_07);
+
+		for (i = 0; i < rc_mask_cfg->cfg_param_08; i++) {
+			cfg_param_09 =  rc_mask_cfg->cfg_param_09[i];
+			SDE_DEBUG("cfg_param_09[%d] = 0x%016llX at %u\n", i,
+					cfg_param_09,
+					i + cfg_param_07);
+			data[i * 2] = (i == 0) ? (BIT(30) | (cfg_param_07 << 18)) : 0;
+			data[i * 2] |= (cfg_param_09 & 0x3FFFF);
+			data[i * 2 + 1] = ((cfg_param_09 >> 18) & 0x3FFFF);
+		}
+
+		REG_DMA_SETUP_OPS(dma_write_cfg, abs_offset, data, buf_sz,
+				REG_BLK_WRITE_INC, 0, 0, 0);
+		rc = dma_ops->setup_payload(&dma_write_cfg);
+		if (rc) {
+			SDE_ERROR("rc dma write failed ret %d\n", rc);
+			goto exit;
+		}
+	} else {
+		SDE_DEBUG("skip data programming\n");
+		SDE_EVT32(RC_IDX(ctx));
+	}
+
+	/* defer trigger to kickoff phase */
+	REG_DMA_SETUP_KICKOFF(kick_off, hw_cfg->ctl,
+		dspp_buf[RC_MASK_CFG][ctx->idx], REG_DMA_WRITE,
+		DMA_CTL_QUEUE0, WRITE_TRIGGER, RC_MASK_CFG);
+	rc = dma_ops->kick_off(&kick_off);
+	if (rc) {
+		SDE_ERROR("failed to kick off ret %d\n", rc);
 		goto exit;
 	}
 
+	LOG_FEATURE_ON;
+	memcpy(ctx->rc_state.last_rc_mask_cfg, rc_mask_cfg,
+			sizeof(struct drm_msm_rc_mask_cfg));
+
 exit:
-	kvfree(data);
+	if (data != NULL)
+		kvfree(data);
 	return rc;
 }
 
