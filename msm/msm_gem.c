@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -360,7 +360,7 @@ dma_addr_t msm_gem_get_dma_addr(struct drm_gem_object *obj)
 		msm_obj->sgt = sgt;
 	}
 
-	return sg_phys(msm_obj->sgt->sgl);
+	return sg_dma_address(msm_obj->sgt->sgl);
 }
 
 static struct msm_gem_vma *add_vma(struct drm_gem_object *obj,
