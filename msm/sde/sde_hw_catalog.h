@@ -594,6 +594,7 @@ enum {
  * @SDE_CTL_UIDLE               CTL supports uidle
  * @SDE_CTL_UNIFIED_DSPP_FLUSH  CTL supports only one flush bit for DSPP
  * @SDE_CTL_HW_FENCE            CTL supports hw fencing
+ * @SDE_CTL_HW_FENCE_TRIGGER_SEL CTL supports SW selection of cmd/vid modes for trigger sel
  * @SDE_CTL_MAX
  */
 enum {
@@ -604,6 +605,7 @@ enum {
 	SDE_CTL_UIDLE,
 	SDE_CTL_UNIFIED_DSPP_FLUSH,
 	SDE_CTL_HW_FENCE,
+	SDE_CTL_HW_FENCE_TRIGGER_SEL,
 	SDE_CTL_MAX
 };
 

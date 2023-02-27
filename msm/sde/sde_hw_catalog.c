@@ -5484,6 +5484,8 @@ static void _sde_hw_fence_caps(struct sde_mdss_cfg *sde_cfg)
 	for (i = 0; i < sde_cfg->ctl_count; i++) {
 		ctl = sde_cfg->ctl + i;
 		set_bit(SDE_CTL_HW_FENCE, &ctl->features);
+		if (SDE_HW_MAJOR(sde_cfg->hw_rev) >= SDE_HW_MAJOR(SDE_HW_VER_A00))
+			set_bit(SDE_CTL_HW_FENCE_TRIGGER_SEL, &ctl->features);
 	}
 }
 

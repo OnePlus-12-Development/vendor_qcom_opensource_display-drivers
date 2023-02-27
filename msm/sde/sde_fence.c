@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -373,7 +373,8 @@ int sde_fence_register_hw_fences_wait(struct sde_hw_ctl *hw_ctl, struct dma_fenc
 	return ret;
 }
 
-static int _arm_output_hw_fence(struct sde_hw_ctl *hw_ctl, u32 line_count, u32 debugfs_hw_fence)
+static int _arm_output_hw_fence(struct sde_hw_ctl *hw_ctl, bool vid_mode, u32 line_count,
+		u32 debugfs_hw_fence)
 {
 	struct sde_hw_fence_data *data;
 	u32 ipcc_out_signal;
@@ -413,14 +414,16 @@ static int _arm_output_hw_fence(struct sde_hw_ctl *hw_ctl, u32 line_count, u32 d
 	if (line_count)
 		hw_ctl->ops.hw_fence_trigger_output_fence(hw_ctl,
 			HW_FENCE_TRIGGER_SEL_PROG_LINE_COUNT);
+	else if (vid_mode && (hw_ctl->caps->features & BIT(SDE_CTL_HW_FENCE_TRIGGER_SEL)))
+		hw_ctl->ops.hw_fence_trigger_output_fence(hw_ctl, HW_FENCE_TRIGGER_SEL_VID_MODE);
 	else
-		hw_ctl->ops.hw_fence_trigger_output_fence(hw_ctl, HW_FENCE_TRIGGER_SEL_CTRL_DONE);
+		hw_ctl->ops.hw_fence_trigger_output_fence(hw_ctl, HW_FENCE_TRIGGER_SEL_CMD_MODE);
 
 	return 0;
 }
 
-static int _sde_fence_arm_output_hw_fence(struct sde_fence_context *ctx, u32 line_count,
-		u32 debugfs_hw_fence)
+static int _sde_fence_arm_output_hw_fence(struct sde_fence_context *ctx, bool vid_mode,
+		u32 line_count, u32 debugfs_hw_fence)
 {
 	struct sde_hw_ctl *hw_ctl = NULL;
 	struct sde_fence *fc, *next;
@@ -457,7 +460,7 @@ static int _sde_fence_arm_output_hw_fence(struct sde_fence_context *ctx, u32 lin
 
 	/* arm dpu to trigger output hw-fence ipcc signal upon completion */
 	if (hw_ctl)
-		_arm_output_hw_fence(hw_ctl, line_count, debugfs_hw_fence);
+		_arm_output_hw_fence(hw_ctl, vid_mode, line_count, debugfs_hw_fence);
 
 	return 0;
 }
@@ -539,7 +542,7 @@ exit:
 
 	/* arm dpu to trigger output hw-fence ipcc signal upon completion in vid-mode */
 	if ((txq_updated && hw_ctl) || line_count)
-		_sde_fence_arm_output_hw_fence(ctx, line_count, debugfs_hw_fence);
+		_sde_fence_arm_output_hw_fence(ctx, vid_mode, line_count, debugfs_hw_fence);
 
 	return ret;
 }
