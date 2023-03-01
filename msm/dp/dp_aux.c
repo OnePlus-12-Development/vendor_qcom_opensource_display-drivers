@@ -229,7 +229,7 @@ static int dp_aux_cmd_fifo_tx(struct dp_aux_private *aux,
 		ret = len;
 	} else {
 		DP_AUX_ERR_RATELIMITED(dp_aux, "aux err: %s\n",
-			dp_aux_get_error(aux->aux_error_num));
+				dp_aux_get_error(aux->aux_error_num));
 		ret = -EINVAL;
 	}
 
@@ -655,10 +655,6 @@ static void dp_aux_init(struct dp_aux *dp_aux, struct dp_aux_cfg *aux_cfg)
 	if (aux->enabled)
 		return;
 
-	dp_aux->ipc_log_context = ipc_log_context_create(DP_AUX_IPC_NUM_PAGES, "drm_dp_aux", 0);
-	if (!dp_aux->ipc_log_context)
-		DP_AUX_WARN(dp_aux, "Error in creating dp_aux_ipc_log context\n");
-
 	dp_aux_reset_phy_config_indices(aux_cfg);
 	aux->catalog->setup(aux->catalog, aux_cfg);
 	aux->catalog->reset(aux->catalog);
@@ -681,11 +677,6 @@ static void dp_aux_deinit(struct dp_aux *dp_aux)
 
 	if (!aux->enabled)
 		return;
-
-	if (dp_aux->ipc_log_context) {
-		ipc_log_context_destroy(dp_aux->ipc_log_context);
-		dp_aux->ipc_log_context = NULL;
-	}
 
 	atomic_set(&aux->aborted, 1);
 	aux->catalog->enable(aux->catalog, false);
@@ -870,7 +861,7 @@ end:
 
 struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog_aux *catalog,
 		struct dp_parser *parser, struct device_node *aux_switch,
-		struct dp_aux_bridge *aux_bridge)
+		struct dp_aux_bridge *aux_bridge, void *ipc_log_context)
 {
 	int rc = 0;
 	struct dp_aux_private *aux;
@@ -908,6 +899,7 @@ struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog_aux *catalog,
 	dp_aux->reconfig = dp_aux_reconfig;
 	dp_aux->abort = dp_aux_abort_transaction;
 	dp_aux->set_sim_mode = dp_aux_set_sim_mode;
+	dp_aux->ipc_log_context = ipc_log_context;
 
 #if IS_ENABLED(CONFIG_QCOM_FSA4480_I2C)
 	dp_aux->switch_configure = dp_aux_configure_fsa_switch;

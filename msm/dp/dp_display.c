@@ -2106,7 +2106,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 	}
 
 	dp->aux = dp_aux_get(dev, &dp->catalog->aux, dp->parser,
-			dp->aux_switch_node, dp->aux_bridge);
+			dp->aux_switch_node, dp->aux_bridge, g_dp_display->dp_aux_ipc_log);
 	if (IS_ERR(dp->aux)) {
 		rc = PTR_ERR(dp->aux);
 		DP_ERR("failed to initialize aux, rc = %d\n", rc);
@@ -3668,7 +3668,11 @@ static int dp_display_probe(struct platform_device *pdev)
 
 	g_dp_display->dp_ipc_log = ipc_log_context_create(DRM_DP_IPC_NUM_PAGES, "drm_dp", 0);
 	if (!g_dp_display->dp_ipc_log)
-		DP_WARN("Error in creating ipc_log_context\n");
+		DP_WARN("Error in creating ipc_log_context for drm_dp\n");
+	g_dp_display->dp_aux_ipc_log = ipc_log_context_create(DRM_DP_IPC_NUM_PAGES, "drm_dp_aux",
+			0);
+	if (!g_dp_display->dp_aux_ipc_log)
+		DP_WARN("Error in creating ipc_log_context for drm_dp_aux\n");
 
 	g_dp_display->enable        = dp_display_enable;
 	g_dp_display->post_enable   = dp_display_post_enable;
@@ -3786,6 +3790,11 @@ static int dp_display_remove(struct platform_device *pdev)
 	if (g_dp_display->dp_ipc_log) {
 		ipc_log_context_destroy(g_dp_display->dp_ipc_log);
 		g_dp_display->dp_ipc_log = NULL;
+	}
+
+	if (g_dp_display->dp_aux_ipc_log) {
+		ipc_log_context_destroy(g_dp_display->dp_aux_ipc_log);
+		g_dp_display->dp_aux_ipc_log = NULL;
 	}
 
 	return 0;
