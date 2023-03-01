@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -41,6 +41,14 @@
 			ipc_log_string(dp_aux->ipc_log_context, "[e][%-4d]"fmt,\
 					current->pid, ##__VA_ARGS__); \
 		DP_ERR_V(fmt, ##__VA_ARGS__); \
+	} while (0)
+
+#define DP_AUX_ERR_RATELIMITED(dp_aux, fmt, ...) \
+	do { \
+		if (dp_aux) \
+			ipc_log_string(dp_aux->ipc_log_context, "[e][%-4d]"fmt,\
+					current->pid, ##__VA_ARGS__); \
+		DP_ERR_RATELIMITED_V(fmt, ##__VA_ARGS__); \
 	} while (0)
 
 enum {
@@ -220,9 +228,8 @@ static int dp_aux_cmd_fifo_tx(struct dp_aux_private *aux,
 	if (aux->aux_error_num == DP_AUX_ERR_NONE) {
 		ret = len;
 	} else {
-		pr_err_ratelimited("aux err: %s\n",
+		DP_AUX_ERR_RATELIMITED(dp_aux, "aux err: %s\n",
 			dp_aux_get_error(aux->aux_error_num));
-
 		ret = -EINVAL;
 	}
 
