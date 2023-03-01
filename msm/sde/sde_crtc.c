@@ -2825,7 +2825,7 @@ static void sde_crtc_frame_event_cb(void *data, u32 event, ktime_t ts)
 	spin_unlock_irqrestore(&sde_crtc->event_spin_lock, flags);
 
 	if (!fevent) {
-		SDE_ERROR("crtc%d event %d overflow\n", DRMID(crtc), event);
+		pr_err_ratelimited("crtc%d event %d overflow\n", DRMID(crtc), event);
 		SDE_EVT32(DRMID(crtc), event);
 		return;
 	}
@@ -3079,7 +3079,7 @@ static void sde_crtc_vblank_cb(void *data, ktime_t ts)
 	priv = sde_kms->dev->dev_private;
 
 	if (!vevent) {
-		SDE_ERROR("crtc%d vblank event overflow\n", DRMID(crtc));
+		pr_err_ratelimited("crtc%d vblank event overflow\n", DRMID(crtc));
 		SDE_EVT32(DRMID(crtc), SDE_EVTLOG_ERROR);
 		return;
 	}
