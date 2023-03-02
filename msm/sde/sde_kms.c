@@ -1383,11 +1383,13 @@ int sde_kms_vm_pre_release(struct sde_kms *sde_kms,
 {
 	struct drm_crtc *crtc;
 	struct drm_encoder *encoder;
+	struct msm_drm_private *priv;
 	int rc = 0;
 
 	crtc = sde_kms_vm_get_vm_crtc(state);
 	if (!crtc)
 		return 0;
+	priv = sde_kms->dev->dev_private;
 
 	/* if vm_req is enabled, once CRTC on the commit is guaranteed */
 	sde_kms_wait_for_frame_transfer_complete(&sde_kms->base, crtc);
@@ -1395,6 +1397,8 @@ int sde_kms_vm_pre_release(struct sde_kms *sde_kms,
 	sde_dbg_set_hw_ownership_status(false);
 
 	sde_kms_cancel_delayed_work(crtc);
+
+	kthread_flush_worker(&priv->event_thread[crtc->index].worker);
 
 	/* disable SDE encoder irq's */
 	drm_for_each_encoder_mask(encoder, crtc->dev,
