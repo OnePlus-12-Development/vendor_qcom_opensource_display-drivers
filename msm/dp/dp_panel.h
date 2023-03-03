@@ -154,6 +154,7 @@ struct dp_panel {
 	bool widebus_en;
 	bool dsc_continuous_pps;
 	bool mst_state;
+	bool pclk_on;
 
 	/* override debug option */
 	bool mst_hide;
