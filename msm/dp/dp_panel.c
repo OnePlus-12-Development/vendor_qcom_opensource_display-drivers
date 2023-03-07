@@ -3126,6 +3126,15 @@ int dp_panel_sink_crc_enable(struct dp_panel *dp_panel, bool enable)
 	return rc;
 }
 
+bool dp_panel_get_panel_on(struct dp_panel *dp_panel)
+{
+	struct dp_panel_private *panel;
+
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+
+	return panel->panel_on;
+}
+
 struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 {
 	int rc = 0;
@@ -3204,6 +3213,7 @@ struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 	dp_panel->get_src_crc = dp_panel_get_src_crc;
 	dp_panel->get_sink_crc = dp_panel_get_sink_crc;
 	dp_panel->sink_crc_enable = dp_panel_sink_crc_enable;
+	dp_panel->get_panel_on = dp_panel_get_panel_on;
 
 	sde_conn = to_sde_connector(dp_panel->connector);
 	sde_conn->drv_panel = dp_panel;

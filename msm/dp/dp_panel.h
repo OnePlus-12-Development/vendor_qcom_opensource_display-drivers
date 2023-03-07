@@ -198,6 +198,7 @@ struct dp_panel {
 	int (*sink_crc_enable)(struct dp_panel *dp_panel, bool enable);
 	int (*get_src_crc)(struct dp_panel *dp_panel, u16 *crc);
 	int (*get_sink_crc)(struct dp_panel *dp_panel, u16 *crc);
+	bool (*get_panel_on)(struct dp_panel *dp_panel);
 };
 
 struct dp_tu_calc_input {
