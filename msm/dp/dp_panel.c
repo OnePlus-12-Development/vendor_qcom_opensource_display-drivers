@@ -1930,8 +1930,8 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 
-	if (dp_panel->mst_state && panel->base)
-		max_supported_bpp = panel->base->max_supported_bpp;
+	if (dp_panel->mst_state)
+		max_supported_bpp = 24;
 
 	if (dsc_en)
 		min_supported_bpp = 24;
