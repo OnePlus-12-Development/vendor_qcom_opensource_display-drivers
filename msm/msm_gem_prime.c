@@ -157,19 +157,22 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 	}
 
 #if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
-	ret = mem_buf_dma_buf_copy_vmperm(dma_buf, &vmid_list, &perms_list, &nelems);
-	if (ret) {
-		DRM_ERROR("get vmid list failure, ret:%d", ret);
-		goto fail_put;
+	/* avoid VMID checks in trusted-vm */
+	if (!kms->funcs->in_trusted_vm || !kms->funcs->in_trusted_vm(kms)) {
+		ret = mem_buf_dma_buf_copy_vmperm(dma_buf, &vmid_list, &perms_list, &nelems);
+		if (ret) {
+			DRM_ERROR("get vmid list failure, ret:%d", ret);
+			goto fail_put;
+		}
+
+		for (i = 0; i < nelems; i++)
+			if (vmid_list[i] == VMID_TVM)
+				is_nested_sec_vmid = true;
+
+		/* mem_buf_dma_buf_copy_vmperm uses kmemdup, do kfree to free up the memory */
+		kfree(vmid_list);
+		kfree(perms_list);
 	}
-
-	for (i = 0; i < nelems; i++)
-		if (vmid_list[i] == VMID_TVM)
-			is_nested_sec_vmid = true;
-
-	/* mem_buf_dma_buf_copy_vmperm uses kmemdup, do kfree to free up the memory */
-	kfree(vmid_list);
-	kfree(perms_list);
 #endif
 
 	/*

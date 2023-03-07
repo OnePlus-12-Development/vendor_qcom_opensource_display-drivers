@@ -3857,6 +3857,20 @@ static int sde_kms_get_dsc_count(const struct msm_kms *kms,
 	return 0;
 }
 
+static bool sde_kms_in_trusted_vm(const struct msm_kms *kms)
+{
+	struct sde_kms *sde_kms;
+
+	if (!kms) {
+		SDE_ERROR("invalid kms\n");
+		return false;
+	}
+
+	sde_kms = to_sde_kms(kms);
+
+	return sde_in_trusted_vm(sde_kms);
+}
+
 static int _sde_kms_null_commit(struct drm_device *dev,
 		struct drm_encoder *enc)
 {
@@ -4295,6 +4309,7 @@ static const struct msm_kms_funcs kms_funcs = {
 	.trigger_null_flush = sde_kms_trigger_null_flush,
 	.get_mixer_count = sde_kms_get_mixer_count,
 	.get_dsc_count = sde_kms_get_dsc_count,
+	.in_trusted_vm = sde_kms_in_trusted_vm,
 };
 
 static int _sde_kms_mmu_destroy(struct sde_kms *sde_kms)
