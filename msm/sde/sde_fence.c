@@ -16,6 +16,9 @@
 #define TIMELINE_VAL_LENGTH		128
 #define SPEC_FENCE_FLAG_FENCE_ARRAY	0x10
 #define SPEC_FENCE_FLAG_ARRAY_BIND	0x11
+#define HW_FENCE_DIR_WRITE_SIZE	0x2
+#define HW_FENCE_DIR_WRITE_MASK	0xFFFFFFFF
+#define HW_FENCE_HFI_MMAP_DPU_BA	0x200000
 
 /**
  * struct sde_fence - release/retire fence structure
@@ -63,18 +66,18 @@ enum sde_hw_fence_clients {
  * This 'hw_fence_data_dpu_client' must be used for HW that does not support dpu-signal.
  */
 struct sde_hw_fence_data hw_fence_data_no_dpu[SDE_HW_FENCE_CLIENT_MAX] = {
-	{SDE_HW_FENCE_CLIENT_CTL_0, HW_FENCE_CLIENT_ID_CTL0, NULL, {0}, 8, 14, {2, 3},   0, 8, 8,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_1, HW_FENCE_CLIENT_ID_CTL1, NULL, {0}, 8, 15, {4, 5},   0, 8, 8,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_2, HW_FENCE_CLIENT_ID_CTL2, NULL, {0}, 8, 16, {6, 7},   0, 8, 8,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_3, HW_FENCE_CLIENT_ID_CTL3, NULL, {0}, 8, 17, {8, 9},   0, 8, 8,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_4, HW_FENCE_CLIENT_ID_CTL4, NULL, {0}, 8, 18, {10, 11}, 0, 8, 8,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_5, HW_FENCE_CLIENT_ID_CTL5, NULL, {0}, 8, 19, {12, 13}, 0, 8, 8,
-		0, 0}
+	{SDE_HW_FENCE_CLIENT_CTL_0, HW_FENCE_CLIENT_ID_CTL0, NULL, {0}, NULL, NULL, 8, 14, {2, 3},
+		0, 8, 8, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_1, HW_FENCE_CLIENT_ID_CTL1, NULL, {0}, NULL, NULL, 8, 15, {4, 5},
+		0, 8, 8, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_2, HW_FENCE_CLIENT_ID_CTL2, NULL, {0}, NULL, NULL, 8, 16, {6, 7},
+		0, 8, 8, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_3, HW_FENCE_CLIENT_ID_CTL3, NULL, {0}, NULL, NULL, 8, 17, {8, 9},
+		0, 8, 8, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_4, HW_FENCE_CLIENT_ID_CTL4, NULL, {0}, NULL, NULL, 8, 18, {10, 11},
+		0, 8, 8, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_5, HW_FENCE_CLIENT_ID_CTL5, NULL, {0}, NULL, NULL, 8, 19, {12, 13},
+		0, 8, 8, 0, 0}
 };
 
 /**
@@ -85,27 +88,32 @@ struct sde_hw_fence_data hw_fence_data_no_dpu[SDE_HW_FENCE_CLIENT_MAX] = {
  * This 'hw_fence_data_dpu_client' must be used for HW that supports dpu-signal
  */
 struct sde_hw_fence_data hw_fence_data_dpu_client[SDE_HW_FENCE_CLIENT_MAX] = {
-	{SDE_HW_FENCE_CLIENT_CTL_0, HW_FENCE_CLIENT_ID_CTL0, NULL, {0}, 8, 0, {0, 6},  0, 8, 25,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_1, HW_FENCE_CLIENT_ID_CTL1, NULL, {0}, 8, 1, {1, 7},  0, 8, 25,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_2, HW_FENCE_CLIENT_ID_CTL2, NULL, {0}, 8, 2, {2, 8},  0, 8, 25,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_3, HW_FENCE_CLIENT_ID_CTL3, NULL, {0}, 8, 3, {3, 9},  0, 8, 25,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_4, HW_FENCE_CLIENT_ID_CTL4, NULL, {0}, 8, 4, {4, 10}, 0, 8, 25,
-		0, 0},
-	{SDE_HW_FENCE_CLIENT_CTL_5, HW_FENCE_CLIENT_ID_CTL5, NULL, {0}, 8, 5, {5, 11}, 0, 8, 25,
-		0, 0}
+	{SDE_HW_FENCE_CLIENT_CTL_0, HW_FENCE_CLIENT_ID_CTL0, NULL, {0}, NULL, NULL, 8, 0, {0, 6},
+		0, 8, 25, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_1, HW_FENCE_CLIENT_ID_CTL1, NULL, {0}, NULL, NULL, 8, 1, {1, 7},
+		0, 8, 25, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_2, HW_FENCE_CLIENT_ID_CTL2, NULL, {0}, NULL, NULL, 8, 2, {2, 8},
+		0, 8, 25, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_3, HW_FENCE_CLIENT_ID_CTL3, NULL, {0}, NULL, NULL, 8, 3, {3, 9},
+		0, 8, 25, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_4, HW_FENCE_CLIENT_ID_CTL4, NULL, {0}, NULL, NULL, 8, 4, {4, 10},
+		0, 8, 25, 0, 0},
+	{SDE_HW_FENCE_CLIENT_CTL_5, HW_FENCE_CLIENT_ID_CTL5, NULL, {0}, NULL, NULL, 8, 5, {5, 11},
+		0, 8, 25, 0, 0}
 };
 
-int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc)
+int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc, struct msm_mmu *mmu)
 {
+	struct msm_hw_fence_hfi_queue_header *hfi_queue_header_va, *hfi_queue_header_pa;
+	struct msm_hw_fence_hfi_queue_table_header *hfi_table_header;
 	struct sde_hw_fence_data *sde_hw_fence_data;
 	struct sde_hw_fence_data *hwfence_data;
-	int ctl_id;
+	phys_addr_t queue_pa;
+	void *queue_va;
+	u32 qhdr0_offset, ctl_hfi_iova;
+	int ctl_id, ret;
 
-	if (!hw_ctl)
+	if (!hw_ctl || !hw_ctl->ops.hw_fence_output_fence_dir_write_init)
 		return -EINVAL;
 
 	ctl_id = hw_ctl->idx - CTL_0;
@@ -141,8 +149,35 @@ int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc)
 		return -EINVAL;
 	}
 
-	SDE_DEBUG("hwfence registered ctl_id:%d hw_fence_client_id:%d handle:0x%p\n",
-		ctl_id, hwfence_data->hw_fence_client_id, hwfence_data->hw_fence_handle);
+	/* one-to-one memory map of ctl-path client queues */
+	ctl_hfi_iova = HW_FENCE_HFI_MMAP_DPU_BA +
+		PAGE_ALIGN(hwfence_data->mem_descriptor.size * ctl_id);
+	ret = mmu->funcs->one_to_one_map(mmu, ctl_hfi_iova,
+		hwfence_data->mem_descriptor.device_addr,
+		hwfence_data->mem_descriptor.size, IOMMU_READ | IOMMU_WRITE);
+	if (ret) {
+		SDE_ERROR("queue one2one memory smmu map failed, ret:%d ctl_id:%d, client:%d\n",
+			ret, ctl_id, hwfence_data->hw_fence_client_id);
+		return ret;
+	}
+
+	/* get queue header offset */
+	queue_va = hwfence_data->mem_descriptor.virtual_addr;
+	hfi_table_header = (struct msm_hw_fence_hfi_queue_table_header *)queue_va;
+	qhdr0_offset = hfi_table_header->qhdr0_offset;
+
+	/* initialize tx_wm pointer */
+	hfi_queue_header_va = (struct msm_hw_fence_hfi_queue_header *)(queue_va + qhdr0_offset);
+	hwfence_data->txq_tx_wm_va = &hfi_queue_header_va->tx_wm;
+
+	/* initialize txq wr_ptr addr pointer */
+	queue_pa = ctl_hfi_iova;
+	hfi_queue_header_pa = (struct msm_hw_fence_hfi_queue_header *)(queue_pa + qhdr0_offset);
+	hwfence_data->txq_wr_ptr_pa = &hfi_queue_header_pa->write_index;
+
+	SDE_DEBUG("hwfence registered ctl:%d client:%d handle:0x%pK tx_wm:0x%x wr_idx:0x%x\n",
+		ctl_id, hwfence_data->hw_fence_client_id, hwfence_data->hw_fence_handle,
+		*hwfence_data->txq_tx_wm_va, *hwfence_data->txq_wr_ptr_pa);
 
 	return 0;
 }
@@ -465,6 +500,14 @@ static int _sde_fence_arm_output_hw_fence(struct sde_fence_context *ctx, bool vi
 	return 0;
 }
 
+void sde_fence_output_hw_fence_dir_write_init(struct sde_hw_ctl *hw_ctl)
+{
+	if (hw_ctl && hw_ctl->ops.hw_fence_output_fence_dir_write_init)
+		hw_ctl->ops.hw_fence_output_fence_dir_write_init(hw_ctl,
+			hw_ctl->hwfence_data.txq_wr_ptr_pa, HW_FENCE_DIR_WRITE_SIZE,
+			HW_FENCE_DIR_WRITE_MASK);
+}
+
 /* update output hw_fences txq */
 int sde_fence_update_hw_fences_txq(struct sde_fence_context *ctx, bool vid_mode, u32 line_count,
 		u32 debugfs_hw_fence)
@@ -516,7 +559,7 @@ int sde_fence_update_hw_fences_txq(struct sde_fence_context *ctx, bool vid_mode,
 
 		/* update hw-fence tx queue */
 		SDE_EVT32(ctl_id, SDE_EVTLOG_H32(fc->hwfence_index),
-			SDE_EVTLOG_L32(fc->hwfence_index));
+			SDE_EVTLOG_L32(fc->hwfence_index), *data->txq_tx_wm_va);
 		ret = msm_hw_fence_update_txq(data->hw_fence_handle, fc->hwfence_index, 0, 0);
 		if (ret) {
 			SDE_ERROR("fail txq update index:%llu fctx:%llu seqno:%llu client:%d\n",
@@ -526,6 +569,12 @@ int sde_fence_update_hw_fences_txq(struct sde_fence_context *ctx, bool vid_mode,
 				fence->seqno, ctl_id, SDE_EVTLOG_ERROR);
 			goto exit;
 		}
+
+		/* update hw-fence tx queue wr_idx data */
+		if (hw_ctl->ops.hw_fence_output_fence_dir_write_data)
+			hw_ctl->ops.hw_fence_output_fence_dir_write_data(hw_ctl,
+				*data->txq_tx_wm_va);
+
 		/* avoid updating txq more than once and avoid repeating the same fence twice */
 		txq_updated = fc->txq_updated_fence = true;
 

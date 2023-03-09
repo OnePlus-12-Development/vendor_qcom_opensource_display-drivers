@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -227,6 +227,22 @@ struct sde_hw_ctl_ops {
 	 * @signal_id : value to write to update the signal_id
 	 */
 	void (*hw_fence_update_output_fence)(struct sde_hw_ctl *ctx, u32 client_id, u32 signal_id);
+
+	/**
+	 * update address, data size, and mask values for output fence direct writes
+	 * @ctx    : ctl path ctx pointer
+	 * @addr   : address value to write
+	 * @size   : size value to write
+	 * @mask   : mask value to write
+	 */
+	void (*hw_fence_output_fence_dir_write_init)(struct sde_hw_ctl *ctx, u32 *addr, u32 size,
+		u32 mask);
+	/**
+	 * update data value for output_fence direct writes
+	 * @ctx     : ctl path ctx pointer
+	 * @data    : data value to write
+	 */
+	void (*hw_fence_output_fence_dir_write_data)(struct sde_hw_ctl *ctx, u32 data);
 
 	/**
 	 * update input hw fence ipcc client_id and signal_id

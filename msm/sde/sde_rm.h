@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -239,15 +239,9 @@ void sde_rm_debugfs_init(struct sde_rm *rm, struct dentry *parent);
  * sde_rm_init - Read hardware catalog and create reservation tracking objects
  *	for all HW blocks.
  * @rm: SDE Resource Manager handle
- * @cat: Pointer to hardware catalog
- * @mmio: mapped register io address of MDP
- * @dev: device handle for event logging purposes
  * @Return: 0 on Success otherwise -ERROR
  */
-int sde_rm_init(struct sde_rm *rm,
-		struct sde_mdss_cfg *cat,
-		void __iomem *mmio,
-		struct drm_device *dev);
+int sde_rm_init(struct sde_rm *rm);
 
 /**
  * sde_rm_destroy - Free all memory allocated by sde_rm_init

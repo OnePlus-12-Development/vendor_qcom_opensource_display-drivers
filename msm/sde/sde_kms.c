@@ -4934,7 +4934,6 @@ static int _sde_kms_hw_init_blocks(struct sde_kms *sde_kms,
 	struct drm_device *dev,
 	struct msm_drm_private *priv)
 {
-	struct sde_rm *rm = NULL;
 	int i, rc = -EINVAL;
 
 	sde_kms->catalog = sde_hw_catalog_init(dev);
@@ -4974,9 +4973,7 @@ static int _sde_kms_hw_init_blocks(struct sde_kms *sde_kms,
 
 	sde_dbg_init_dbg_buses(sde_kms->core_rev);
 
-	rm = &sde_kms->rm;
-	rc = sde_rm_init(rm, sde_kms->catalog, sde_kms->mmio,
-			sde_kms->dev);
+	rc = sde_rm_init(&sde_kms->rm);
 	if (rc) {
 		SDE_ERROR("rm init failed: %d\n", rc);
 		goto power_error;
