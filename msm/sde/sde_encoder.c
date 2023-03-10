@@ -1493,7 +1493,7 @@ static void _sde_encoder_update_ppb_size(struct drm_encoder *drm_enc)
 		} else if (hw_mdp->ops.set_ppb_fifo_size) {
 			maxw = sde_conn_get_max_mode_width(sde_enc->cur_master->connector);
 			if (!maxw) {
-				SDE_ERROR_ENC(sde_enc, "failed to get max horizantal resolution\n");
+				SDE_DEBUG_ENC(sde_enc, "failed to get max horizantal resolution\n");
 				return;
 			}
 
