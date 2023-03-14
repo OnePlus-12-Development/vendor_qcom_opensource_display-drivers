@@ -391,7 +391,7 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 			break;
 
 		if (ctrl->link->phy_params.v_level == ctrl->link->phy_params.max_v_level) {
-			pr_err_ratelimited("max v_level reached\n");
+			DP_ERR_RATELIMITED_V("max v_level reached\n");
 			break;
 		}
 
