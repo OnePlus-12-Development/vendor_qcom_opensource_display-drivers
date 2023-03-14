@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -362,7 +362,9 @@ static void dp_audio_enable(struct dp_audio_private *audio, bool enable)
 		return;
 	}
 	catalog->data = enable;
-	catalog->enable(catalog);
+
+	if (audio->panel->get_panel_on(audio->panel))
+		catalog->enable(catalog);
 
 }
 
