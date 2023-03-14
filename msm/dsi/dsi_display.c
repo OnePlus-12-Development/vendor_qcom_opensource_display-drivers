@@ -7000,6 +7000,7 @@ int dsi_display_restore_bit_clk(struct dsi_display *display, struct dsi_display_
 {
 	int i;
 	u32 clk_rate_hz = 0;
+	u32 front_porch = 0;
 
 	if (!display || !mode || !mode->priv_info) {
 		DSI_ERR("invalid arguments\n");
@@ -7013,12 +7014,29 @@ int dsi_display_restore_bit_clk(struct dsi_display *display, struct dsi_display_
 	clk_rate_hz = display->cached_clk_rate;
 
 	if (mode->priv_info->bit_clk_list.count) {
-		/* use first entry as the default bit clk rate */
+		/* use first entry as the default bit clk rate and front porch*/
 		clk_rate_hz = mode->priv_info->bit_clk_list.rates[0];
+		front_porch = mode->priv_info->bit_clk_list.front_porches[0];
 
 		for (i = 0; i < mode->priv_info->bit_clk_list.count; i++) {
-			if (display->dyn_bit_clk == mode->priv_info->bit_clk_list.rates[i])
+			if (display->dyn_bit_clk == mode->priv_info->bit_clk_list.rates[i]) {
 				clk_rate_hz = display->dyn_bit_clk;
+				front_porch = mode->priv_info->bit_clk_list.front_porches[i];
+			}
+		}
+
+		/* avoid restore front porch if this commit is updating dyn bit clock */
+		if (!display->dyn_bit_clk_pending && display->dyn_bit_clk) {
+			switch (display->panel->dyn_clk_caps.type) {
+			case DSI_DYN_CLK_TYPE_CONST_FPS_ADJUST_HFP:
+				mode->timing.h_front_porch = front_porch;
+				break;
+			case DSI_DYN_CLK_TYPE_CONST_FPS_ADJUST_VFP:
+				mode->timing.v_front_porch = front_porch;
+				break;
+			default:
+				break;
+			}
 		}
 	}
 
