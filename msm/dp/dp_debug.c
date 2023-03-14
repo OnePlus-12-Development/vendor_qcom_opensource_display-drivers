@@ -402,6 +402,9 @@ static ssize_t dp_debug_read_crc(struct file *file, char __user *user_buff, size
 		panel = debug->panel;
 	}
 
+	if (!panel->pclk_on)
+		goto bail;
+
 	panel->get_sink_crc(panel, sink_crc);
 	if (!(sink_crc[0] + sink_crc[1] + sink_crc[2])) {
 		panel->sink_crc_enable(panel, true);
