@@ -8744,3 +8744,9 @@ void sde_crtc_calc_vpadding_param(struct drm_crtc_state *state, u32 crtc_y, uint
 	SDE_DEBUG("crtc:%d padding_y:%d padding_start:%d padding_height:%d\n",
 		  DRMID(cstate->base.crtc), *padding_y, *padding_start, *padding_height);
 }
+
+void sde_crtc_backlight_notify(struct drm_crtc *crtc, u32 bl_val, u32 bl_max)
+{
+	SDE_EVT32(bl_val, bl_max);
+	sde_cp_backlight_notification(crtc, bl_val, bl_max);
+}

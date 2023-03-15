@@ -304,9 +304,11 @@ struct sde_hw_dspp_ops {
 	/**
 	 * setup_demura_backlight_cfg - function to program demura backlight
 	 * @ctx: Pointer to dspp context
-	 * @status: Pointer to configuration.
+	 * @val: value of backlight
+	 * @hw_cfg: Pointer to configuration
 	 */
-	void (*setup_demura_backlight_cfg)(struct sde_hw_dspp *ctx, u64 val);
+	void (*setup_demura_backlight_cfg)(struct sde_hw_dspp *ctx, u64 val,
+					   struct sde_hw_cp_cfg *hw_cfg);
 
 	/**
 	 * demura_read_plane_status - Query demura plane status

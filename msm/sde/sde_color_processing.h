@@ -376,4 +376,12 @@ void sde_cp_set_skip_blend_plane_info(struct drm_crtc *crtc,
  */
 int sde_dspp_spr_read_opr_value(struct sde_hw_dspp *hw_dspp, u32 *opr_value);
 
+/**
+ * sde_cp_backlight_notification(): disable cp features
+ * @crtc: Pointer to drm_crtc.
+ * @bl_val: Backlight value.
+ * @bl_max: Max backlight value.
+ */
+void sde_cp_backlight_notification(struct drm_crtc *crtc, u32 bl_val, u32 bl_max);
+
 #endif /*_SDE_COLOR_PROCESSING_H */

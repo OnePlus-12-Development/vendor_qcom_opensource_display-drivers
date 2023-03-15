@@ -182,8 +182,14 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 		}
 		rc = c_conn->ops.set_backlight(&c_conn->base,
 				c_conn->display, bl_lvl);
-		if (!rc)
+
+		if (!rc) {
 			sde_dimming_bl_notify(c_conn, &display->panel->bl_config);
+			if (c_conn->base.state && c_conn->base.state->crtc) {
+				sde_crtc_backlight_notify(c_conn->base.state->crtc, brightness,
+					display->panel->bl_config.brightness_max_level);
+			}
+		}
 		c_conn->unset_bl_level = 0;
 	}
 
@@ -835,8 +841,16 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 		bl_config->bl_level);
 	rc = c_conn->ops.set_backlight(&c_conn->base,
 			dsi_display, bl_config->bl_level);
-	if (!rc)
+
+	if (!rc) {
 		sde_dimming_bl_notify(c_conn, bl_config);
+		if (c_conn->base.state && c_conn->base.state->crtc) {
+			sde_crtc_backlight_notify(c_conn->base.state->crtc,
+				dsi_display->panel->bl_config.brightness,
+				dsi_display->panel->bl_config.brightness_max_level);
+		}
+	}
+
 	c_conn->unset_bl_level = 0;
 
 	return rc;
