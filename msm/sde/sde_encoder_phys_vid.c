@@ -382,8 +382,6 @@ static void _sde_encoder_phys_vid_avr_ctrl(struct sde_encoder_phys *phys_enc)
 		return;
 
 	avr_step_state = sde_connector_get_property(conn->state, CONNECTOR_PROP_AVR_STEP_STATE);
-	if (avr_step_state == AVR_STEP_NONE)
-		return;
 
 	memset(&avr_params, 0, sizeof(avr_params));
 	avr_params.avr_mode = sde_connector_get_qsync_mode(phys_enc->connector);
