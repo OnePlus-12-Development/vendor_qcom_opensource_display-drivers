@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -716,7 +716,7 @@ static int _sde_rm_hw_blk_create(
 	return 0;
 }
 
-static int _init_hw_fences(struct sde_rm *rm, bool use_ipcc)
+static int _init_hw_fences(struct sde_rm *rm, bool use_ipcc, struct sde_kms *sde_kms)
 {
 	struct sde_rm_hw_iter iter;
 	int ret = 0;
@@ -725,8 +725,17 @@ static int _init_hw_fences(struct sde_rm *rm, bool use_ipcc)
 	while (_sde_rm_get_hw_locked(rm, &iter)) {
 		struct sde_hw_ctl *ctl = to_sde_hw_ctl(iter.blk->hw);
 
-		if (sde_hw_fence_init(ctl, use_ipcc)) {
-			SDE_DEBUG("failed to init hw_fence idx:%d\n", ctl->idx);
+		if (sde_kms->aspace[MSM_SMMU_DOMAIN_UNSECURE] &&
+				sde_kms->aspace[MSM_SMMU_DOMAIN_UNSECURE]->mmu) {
+			if (sde_hw_fence_init(ctl, use_ipcc,
+					sde_kms->aspace[MSM_SMMU_DOMAIN_UNSECURE]->mmu)) {
+				SDE_DEBUG("failed to init hw_fence idx:%d\n", ctl->idx);
+				ret = -EINVAL;
+				break;
+			}
+		} else {
+			SDE_DEBUG("failed to init hw_fence idx:%d, no aspace to map memory\n",
+				ctl->idx);
 			ret = -EINVAL;
 			break;
 		}
@@ -741,7 +750,7 @@ static int _init_hw_fences(struct sde_rm *rm, bool use_ipcc)
 
 static int _sde_rm_hw_blk_create_new(struct sde_rm *rm,
 			struct sde_mdss_cfg *cat,
-			void __iomem *mmio)
+			void __iomem *mmio, struct sde_kms *sde_kms)
 {
 	int i, rc = 0;
 
@@ -825,7 +834,8 @@ static int _sde_rm_hw_blk_create_new(struct sde_rm *rm,
 	}
 
 	if (cat->hw_fence_rev) {
-		if (_init_hw_fences(rm, test_bit(SDE_FEATURE_HW_FENCE_IPCC, cat->features))) {
+		if (_init_hw_fences(rm, test_bit(SDE_FEATURE_HW_FENCE_IPCC, cat->features),
+				sde_kms)) {
 			SDE_INFO("failed to init hw-fences, disabling hw-fences\n");
 			cat->hw_fence_rev = 0;
 		}
@@ -910,11 +920,12 @@ void sde_rm_debugfs_init(struct sde_rm *rm, struct dentry *parent)
 }
 #endif /* CONFIG_DEBUG_FS */
 
-int sde_rm_init(struct sde_rm *rm,
-		struct sde_mdss_cfg *cat,
-		void __iomem *mmio,
-		struct drm_device *dev)
+int sde_rm_init(struct sde_rm *rm)
 {
+	struct sde_kms *sde_kms = container_of(rm, struct sde_kms, rm);
+	struct sde_mdss_cfg *cat = sde_kms->catalog;
+	void __iomem *mmio = sde_kms->mmio;
+	struct drm_device *dev = sde_kms->dev;
 	int i, rc = 0;
 	enum sde_hw_blk_type type;
 
@@ -977,7 +988,7 @@ int sde_rm_init(struct sde_rm *rm,
 		}
 	}
 
-	rc = _sde_rm_hw_blk_create_new(rm, cat, mmio);
+	rc = _sde_rm_hw_blk_create_new(rm, cat, mmio, sde_kms);
 	if (!rc)
 		return 0;
 

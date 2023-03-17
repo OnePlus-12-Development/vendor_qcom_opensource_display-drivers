@@ -68,6 +68,8 @@ enum sde_fence_event {
  * @client_id: client_id enum for the display driver.
  * @hw_fence_client_id: client_id enum for the hw-fence driver.
  * @mem_descriptor: memory descriptor with the hfi for the rx/tx queues mapping.
+ * @txq_tx_wm_va: pointer to store virtual address of tx_wm
+ * @txq_wr_ptr_pa: pointer to store physical address of write_ptr
  * @ipcc_in_client: ipcc client triggering the signal: IN_CLIENT (APPS) -> DPU
  * @ipcc_in_signal: ipcc signal triggered from client to dpu: IN_SIGNAL (APPS) -> DPU
  * @ipcc_out_signal_pp: output signal from dpu to fctl, ping-pongs between two signals
@@ -82,6 +84,8 @@ struct sde_hw_fence_data {
 	enum hw_fence_client_id hw_fence_client_id;
 	void *hw_fence_handle;
 	struct msm_hw_fence_mem_addr mem_descriptor;
+	u32 *txq_tx_wm_va;
+	u32 *txq_wr_ptr_pa;
 	u32 ipcc_in_client;
 	u32 ipcc_in_signal;
 	u32 ipcc_out_signal_pp[MAX_SDE_HFENCE_OUT_SIGNAL_PING_PONG];
@@ -153,10 +157,11 @@ struct sde_fence_context *sde_fence_init(const char *name,
  *
  * @hw_ctl: hw ctl client to init.
  * @use_ipcc: boolean to indicate if hw should use dpu ipcc signals.
+ * @mmu: mmu to map memory for queues
  *
  * Returns: Zero on success, otherwise returns an error code.
  */
-int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc);
+int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc, struct msm_mmu *mmu);
 
 /**
  * sde_fence_hw_fence_deinit - deinitialize hw-fence clients
@@ -176,6 +181,12 @@ void sde_hw_fence_deinit(struct sde_hw_ctl *hw_ctl);
  */
 int sde_fence_register_hw_fences_wait(struct sde_hw_ctl *hw_ctl, struct dma_fence **fences,
 	u32 num_fences);
+
+/**
+ * sde_fence_output_hw_fence_dir_write_init - update addr, mask and size for output fence dir write
+ * @hw_ctl: hw ctl client to init dir write regs for
+ */
+void sde_fence_output_hw_fence_dir_write_init(struct sde_hw_ctl *hw_ctl);
 
 /**
  * sde_fence_update_hw_fences_txq - updates the hw-fence txq with the list of hw-fences to signal

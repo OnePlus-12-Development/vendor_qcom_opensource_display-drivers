@@ -3079,6 +3079,9 @@ static void _sde_encoder_virt_enable_helper(struct drm_encoder *drm_enc)
 				sde_enc->cur_master->hw_ctl,
 				&sde_enc->cur_master->intf_cfg_v1);
 
+	if (sde_enc->cur_master->hw_ctl)
+		sde_fence_output_hw_fence_dir_write_init(sde_enc->cur_master->hw_ctl);
+
 	_sde_encoder_update_vsync_source(sde_enc, &sde_enc->disp_info);
 
 	if (!sde_encoder_in_cont_splash(drm_enc))
