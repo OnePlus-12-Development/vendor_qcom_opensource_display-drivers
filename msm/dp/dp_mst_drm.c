@@ -487,38 +487,54 @@ static void _dp_mst_update_timeslots(struct dp_mst_private *mst,
 {
 	int i;
 	struct dp_mst_bridge *dp_bridge;
-	int pbn, start_slot, num_slots;
 #if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
 	struct drm_dp_mst_topology_state *mst_state;
 	struct drm_dp_mst_atomic_payload *payload;
+	int prev_start = 0;
+	int prev_slots = 0;
 
 	mst_state = to_drm_dp_mst_topology_state(mst->mst_mgr.base.state);
 	payload = drm_atomic_get_mst_payload_state(mst_state, port);
 
-	mst_state->start_slot = 1;
-	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, mst_state, payload);
-	pbn = 0;
-	start_slot = 1;
-	num_slots = 0;
-
 	for (i = 0; i < MAX_DP_MST_DRM_BRIDGES; i++) {
 		dp_bridge = &mst->mst_bridge[i];
 		if (mst_bridge == dp_bridge) {
-			dp_bridge->pbn = payload->pbn;
-			dp_bridge->start_slot = payload->vc_start_slot;
-			dp_bridge->num_slots = payload->time_slots;
-			dp_bridge->vcpi = payload->vcpi;
+			/*
+			 * When a payload was removed make sure to move any payloads after it
+			 * to the left so all payloads are aligned to the left.
+			 */
+			if (payload->vc_start_slot < 0) {
+				// cache the payload
+				prev_start = dp_bridge->start_slot;
+				prev_slots = dp_bridge->num_slots;
+				dp_bridge->pbn = 0;
+				dp_bridge->start_slot = 1;
+				dp_bridge->num_slots = 0;
+				dp_bridge->vcpi = 0;
+			} else { //add payload
+				dp_bridge->pbn = payload->pbn;
+				dp_bridge->start_slot = payload->vc_start_slot;
+				dp_bridge->num_slots = payload->time_slots;
+				dp_bridge->vcpi = payload->vcpi;
+			}
+		} else if ((payload->vc_start_slot < 0) && (dp_bridge->start_slot > prev_start)) {
+			dp_bridge->start_slot -= prev_slots;
 		}
+	}
 
+	// Now commit all the updated payloads
+	for (i = 0; i < MAX_DP_MST_DRM_BRIDGES; i++) {
+		dp_bridge = &mst->mst_bridge[i];
 		mst->dp_display->set_stream_info(mst->dp_display, dp_bridge->dp_panel,
 				dp_bridge->id, dp_bridge->start_slot, dp_bridge->num_slots,
 				dp_bridge->pbn, dp_bridge->vcpi);
-
 		DP_INFO("conn:%d vcpi:%d start_slot:%d num_slots:%d, pbn:%d\n",
 			DP_MST_CONN_ID(dp_bridge), dp_bridge->vcpi, dp_bridge->start_slot,
 			dp_bridge->num_slots, dp_bridge->pbn);
 	}
 #else
+	int pbn, start_slot, num_slots;
+
 	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr);
 
 	for (i = 0; i < MAX_DP_MST_DRM_BRIDGES; i++) {
@@ -579,6 +595,10 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 		to_sde_connector(dp_bridge->connector);
 	struct dp_mst_private *mst = dp_display->dp_mst_prv_info;
 	struct drm_dp_mst_port *port = c_conn->mst_port;
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	struct drm_dp_mst_topology_state *mst_state;
+	struct drm_dp_mst_atomic_payload *payload;
+#endif
 	bool ret;
 	int pbn, slots;
 
@@ -601,7 +621,13 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 	DP_INFO("conn:%d pbn:%d, slots:%d\n", DP_MST_CONN_ID(dp_bridge), pbn, slots);
 
 	ret = false;
-#if (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	mst_state = to_drm_dp_mst_topology_state(mst->mst_mgr.base.state);
+	payload = drm_atomic_get_mst_payload_state(mst_state, port);
+
+	drm_dp_mst_update_slots(mst_state, DP_CAP_ANSI_8B10B);
+	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, mst_state, payload);	
+#else
 	ret = mst->mst_fw_cbs->allocate_vcpi(&mst->mst_mgr, port, pbn, slots);
 	if (!ret) {
 		DP_ERR("mst: failed to allocate vcpi. bridge:%d\n", dp_bridge->id);
@@ -609,8 +635,8 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 	}
 
 	dp_bridge->vcpi = port->vcpi.vcpi;
-#endif
 	dp_bridge->pbn = pbn;
+#endif
 	_dp_mst_update_timeslots(mst, dp_bridge, port);
 }
 
@@ -672,8 +698,9 @@ static void _dp_mst_bridge_pre_disable_part1(struct dp_mst_bridge *dp_bridge)
 	mst->mst_fw_cbs->reset_vcpi_slots(&mst->mst_mgr, mst_state, payload);
 #else
 	mst->mst_fw_cbs->reset_vcpi_slots(&mst->mst_mgr, port);
-	_dp_mst_update_timeslots(mst, dp_bridge, port);
 #endif
+	pr_info("rsdbg: calling update after remove\n");
+	_dp_mst_update_timeslots(mst, dp_bridge, port);
 
 	DP_MST_DEBUG("mst bridge [%d] _pre disable part-1 complete\n",
 			dp_bridge->id);
@@ -705,9 +732,9 @@ static void _dp_mst_bridge_pre_disable_part2(struct dp_mst_bridge *dp_bridge)
 
 	port->vcpi.vcpi = dp_bridge->vcpi;
 	mst->mst_fw_cbs->deallocate_vcpi(&mst->mst_mgr, port);
-#endif
 	dp_bridge->vcpi = 0;
 	dp_bridge->pbn = 0;
+#endif
 
 	DP_MST_DEBUG("mst bridge [%d] _pre disable part-2 complete\n",
 			dp_bridge->id);
