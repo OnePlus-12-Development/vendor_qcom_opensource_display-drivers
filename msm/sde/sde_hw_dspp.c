@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -373,11 +373,15 @@ static void dspp_spr(struct sde_hw_dspp *c)
 static void dspp_demura(struct sde_hw_dspp *c)
 {
 	int ret;
+	c->ops.setup_demura_cfg = NULL;
+	c->ops.setup_demura_backlight_cfg = NULL;
+	c->ops.setup_demura_cfg0_param2 = NULL;
 
 	if (c->cap->sblk->demura.version == SDE_COLOR_PROCESS_VER(0x1, 0x0)) {
 		ret = reg_dmav1_init_dspp_op_v4(SDE_DSPP_DEMURA, c->idx);
-		c->ops.setup_demura_cfg = NULL;
-		c->ops.setup_demura_backlight_cfg = NULL;
+		if (!ret)
+			ret = reg_dmav1_init_dspp_op_v4(SDE_DSPP_DEMURA_CFG0_PARAM2, c->idx);
+
 		if (!ret) {
 			c->ops.setup_demura_cfg = reg_dmav1_setup_demurav1;
 			c->ops.setup_demura_backlight_cfg =
@@ -385,11 +389,12 @@ static void dspp_demura(struct sde_hw_dspp *c)
 			c->ops.demura_read_plane_status =
 					sde_demura_read_plane_status;
 			c->ops.setup_demura_pu_config = sde_demura_pu_cfg;
+			c->ops.setup_demura_cfg0_param2 = reg_dmav1_setup_demura_cfg0_param2;
 		}
 	} else if (c->cap->sblk->demura.version == SDE_COLOR_PROCESS_VER(0x2, 0x0)) {
 		ret = reg_dmav1_init_dspp_op_v4(SDE_DSPP_DEMURA, c->idx);
-		c->ops.setup_demura_cfg = NULL;
-		c->ops.setup_demura_backlight_cfg = NULL;
+		if (!ret)
+			ret = reg_dmav1_init_dspp_op_v4(SDE_DSPP_DEMURA_CFG0_PARAM2, c->idx);
 		if (!ret) {
 			c->ops.setup_demura_cfg = reg_dmav1_setup_demurav2;
 			c->ops.setup_demura_backlight_cfg =
@@ -397,6 +402,7 @@ static void dspp_demura(struct sde_hw_dspp *c)
 			c->ops.demura_read_plane_status =
 					sde_demura_read_plane_status;
 			c->ops.setup_demura_pu_config = sde_demura_pu_cfg;
+			c->ops.setup_demura_cfg0_param2 = reg_dmav1_setup_demura_cfg0_param2;
 		} else {
 			SDE_ERROR("Regdma init dspp op failed for DemuraV2");
 		}

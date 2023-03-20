@@ -6754,7 +6754,7 @@ int dsi_display_get_info(struct drm_connector *connector,
 	info->max_height = 1080;
 	info->qsync_min_fps = display->panel->qsync_caps.qsync_min_fps;
 	info->has_qsync_min_fps_list = (display->panel->qsync_caps.qsync_min_fps_list_len > 0);
-	info->has_avr_step_req = (display->panel->avr_caps.avr_step_fps_list_len > 0);
+	info->avr_step_fps = display->panel->avr_caps.avr_step_fps;
 	info->poms_align_vsync = display->panel->poms_align_vsync;
 
 	switch (display->panel->panel_mode) {
@@ -7040,7 +7040,7 @@ void dsi_display_put_mode(struct dsi_display *display,
 int dsi_display_get_modes_helper(struct dsi_display *display,
 	struct dsi_display_ctrl *ctrl, u32 timing_mode_count,
 	struct dsi_dfps_capabilities dfps_caps, struct dsi_qsync_capabilities *qsync_caps,
-	struct dsi_dyn_clk_caps *dyn_clk_caps)
+	struct dsi_dyn_clk_caps *dyn_clk_caps, struct dsi_avr_capabilities *avr_caps)
 {
 	int dsc_modes = 0, nondsc_modes = 0, rc = 0, i, start, end;
 	u32 num_dfps_rates, mode_idx, sublinks_count, array_idx = 0;
@@ -7143,6 +7143,10 @@ int dsi_display_get_modes_helper(struct dsi_display *display,
 			if (!sub_mode->timing.qsync_min_fps && qsync_caps->qsync_min_fps)
 				sub_mode->timing.qsync_min_fps = qsync_caps->qsync_min_fps;
 
+			/* populate avr step fps, same way as qsync min fps */
+			if (!sub_mode->timing.avr_step_fps && avr_caps->avr_step_fps)
+				sub_mode->timing.avr_step_fps = avr_caps->avr_step_fps;
+
 			/*
 			 * Qsync min fps for the mode will be populated in the timing info
 			 * in dsi_panel_get_mode function.
@@ -7173,6 +7177,12 @@ int dsi_display_get_modes_helper(struct dsi_display *display,
 			if (qsync_caps->qsync_min_fps && qsync_caps->qsync_min_fps_list_len) {
 				sub_mode->timing.qsync_min_fps = qsync_caps->qsync_min_fps_list[i];
 				sub_mode->priv_info->qsync_min_fps = sub_mode->timing.qsync_min_fps;
+			}
+
+			/* Override with avr step fps list in dfps usecases */
+			if (avr_caps->avr_step_fps_list_len) {
+				sub_mode->timing.avr_step_fps = avr_caps->avr_step_fps_list[i];
+				sub_mode->priv_info->avr_step_fps = sub_mode->timing.avr_step_fps;
 			}
 
 			dsi_display_get_dfps_timing(display, sub_mode,
@@ -7215,6 +7225,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 	struct dsi_dyn_clk_caps *dyn_clk_caps;
 	int rc = -EINVAL;
 	struct dsi_qsync_capabilities *qsync_caps;
+	struct dsi_avr_capabilities *avr_caps;
 
 	if (!display || !out_modes) {
 		DSI_ERR("Invalid params\n");
@@ -7247,6 +7258,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 
 	qsync_caps = &(display->panel->qsync_caps);
 	dyn_clk_caps = &(display->panel->dyn_clk_caps);
+	avr_caps = &(display->panel->avr_caps);
 
 	timing_mode_count = display->panel->num_timing_nodes;
 
@@ -7256,7 +7268,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 		display->cmdline_timing = NO_OVERRIDE;
 
 	rc = dsi_display_get_modes_helper(display, ctrl, timing_mode_count,
-			dfps_caps, qsync_caps, dyn_clk_caps);
+			dfps_caps, qsync_caps, dyn_clk_caps, avr_caps);
 	if (rc)
 		goto error;
 
@@ -7351,31 +7363,6 @@ int dsi_display_get_default_lms(void *dsi_display, u32 *num_lm)
 	mutex_unlock(&display->display_lock);
 
 	return rc;
-}
-
-int dsi_display_get_avr_step_req_fps(void *display_dsi, u32 mode_fps)
-{
-	struct dsi_display *display = (struct dsi_display *)display_dsi;
-	struct dsi_panel *panel;
-	u32 i, step = 0;
-
-	if (!display || !display->panel)
-		return -EINVAL;
-
-	panel = display->panel;
-
-	/* support a single fixed rate, or rate corresponding to dfps list entry */
-	if (panel->avr_caps.avr_step_fps_list_len == 1) {
-		step = panel->avr_caps.avr_step_fps_list[0];
-	} else if (panel->avr_caps.avr_step_fps_list_len > 1) {
-		for (i = 0; i < panel->dfps_caps.dfps_list_len; i++) {
-			if (panel->dfps_caps.dfps_list[i] == mode_fps)
-				step = panel->avr_caps.avr_step_fps_list[i];
-		}
-	}
-
-	DSI_DEBUG("mode_fps %u, avr_step fps %u\n", mode_fps, step);
-	return step;
 }
 
 int dsi_display_update_transfer_time(void *display, u32 transfer_time)

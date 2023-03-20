@@ -213,6 +213,7 @@ void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc)
 	ktime_t nominal_period_ns, nominal_line_time_ns, panel_scan_line_ts_ns = 0;
 	ktime_t qsync_period_ns, time_into_frame_ns;
 	u32 qsync_timeout_lines, latency_margin_lines = 0, restored_rd_ptr_lines;
+	unsigned long flags;
 	u16 panel_scan_line;
 	int rc;
 
@@ -249,7 +250,7 @@ void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc)
 	}
 
 	/* Compensate the latency from DCS scan line response*/
-	spin_lock(phys_enc->enc_spinlock);
+	spin_lock_irqsave(phys_enc->enc_spinlock, flags);
 	sde_encoder_helper_get_pp_line_count(phys_enc->parent, info);
 	time_into_frame_ns = ktime_sub(ktime_get(), phys_enc->last_vsync_timestamp);
 
@@ -263,7 +264,7 @@ void sde_encoder_restore_tearcheck_rd_ptr(struct sde_encoder_phys *phys_enc)
 
 	if (hw_intf && hw_intf->ops.override_tear_rd_ptr_val)
 		hw_intf->ops.override_tear_rd_ptr_val(hw_intf, restored_rd_ptr_lines);
-	spin_unlock(phys_enc->enc_spinlock);
+	spin_unlock_irqrestore(phys_enc->enc_spinlock, flags);
 
 	SDE_EVT32(DRMID(phys_enc->parent), drm_mode_vrefresh(mode),
 			sde_enc->mode_info.qsync_min_fps,
@@ -282,6 +283,7 @@ static void _sde_encoder_phys_cmd_setup_sim_qsync_frame(struct sde_encoder_phys 
 	struct sde_encoder_virt *sde_enc;
 	struct sde_connector *sde_conn;
 	struct drm_connector *conn;
+	unsigned long flags;
 	u32 qsync_min_fps = 0, nominal_fps = 0, frame_rate = 0;
 	u32 nominal_period_us, qsync_min_period_us, time_since_vsync_us;
 	int time_before_nominal_vsync_us, time_before_timeout_vsync_us;
@@ -301,7 +303,7 @@ static void _sde_encoder_phys_cmd_setup_sim_qsync_frame(struct sde_encoder_phys 
 		return;
 	}
 
-	spin_lock(phys_enc->enc_spinlock);
+	spin_lock_irqsave(phys_enc->enc_spinlock, flags);
 	switch (frame) {
 	case SDE_SIM_QSYNC_FRAME_NOMINAL:
 		frame_rate = nominal_fps;
@@ -358,7 +360,7 @@ static void _sde_encoder_phys_cmd_setup_sim_qsync_frame(struct sde_encoder_phys 
 	phys_enc->hw_intf->ops.vsync_sel(phys_enc->hw_intf, SDE_VSYNC_SOURCE_WD_TIMER_0);
 	phys_enc->ops.control_te(phys_enc, true);
 	phys_enc->sim_qsync_frame = frame;
-	spin_unlock(phys_enc->enc_spinlock);
+	spin_unlock_irqrestore(phys_enc->enc_spinlock, flags);
 }
 
 static void _sde_encoder_phys_cmd_process_sim_qsync_event(struct sde_encoder_phys *phys_enc,
@@ -1296,99 +1298,127 @@ void sde_encoder_phys_cmd_irq_control(struct sde_encoder_phys *phys_enc,
 	}
 }
 
-static int _get_tearcheck_threshold(struct sde_encoder_phys *phys_enc)
+static void _get_tearcheck_cfg(struct sde_encoder_phys *phys_enc,
+		u32 *t_lines, u32 *c_height, u32 *s_pos)
 {
 	struct drm_connector *conn = phys_enc->connector;
-	u32 qsync_mode;
-	struct drm_display_mode *mode;
-	u32 threshold_lines, adjusted_threshold_lines;
-	struct sde_encoder_phys_cmd *cmd_enc =
-			to_sde_encoder_phys_cmd(phys_enc);
-	struct sde_encoder_virt *sde_enc;
-	struct msm_mode_info *info;
+	struct sde_encoder_phys_cmd *cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
+	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	struct msm_mode_info *info = &sde_enc->mode_info;
+	struct drm_display_mode *mode = &phys_enc->cached_mode;
+	enum sde_rm_qsync_modes qsync_mode;
+	ktime_t qsync_time_ns, default_time_ns, default_line_time_ns, ept_time_ns;
+	ktime_t extra_time_ns = 0, ept_extra_time_ns = 0, qsync_l_bound_ns, qsync_u_bound_ns;
+	u32 threshold_lines, ept_threshold_lines = 0, yres;
+	u32 default_fps, qsync_min_fps = 0, ept_fps = 0;
+	u32 adjusted_threshold_lines, cfg_height, start_pos;
 
-	if (!conn || !conn->state)
-		return 0;
+	*t_lines = *c_height = *s_pos = 0;
+	if (!conn || !conn->state || !phys_enc->sde_kms)
+		return;
 
-	sde_enc = to_sde_encoder_virt(phys_enc->parent);
-	info = &sde_enc->mode_info;
-	mode = &phys_enc->cached_mode;
+	/*
+	 * By setting sync_cfg_height to near max register value, we essentially
+	 * disable sde hw generated TE signal, since hw TE will arrive first.
+	 * Only caveat is if due to error, we hit wrap-around.
+	 */
+	if (phys_enc->hw_intf->ops.is_te_32bit_supported
+			&& phys_enc->hw_intf->ops.is_te_32bit_supported(phys_enc->hw_intf))
+		cfg_height = 0xFFFFFFF0;
+	else
+		cfg_height = 0xFFF0;
+
+	adjusted_threshold_lines = DEFAULT_TEARCHECK_SYNC_THRESH_START;
+	start_pos = mode->vdisplay;
+
+	yres = mode->vtotal;
+	default_fps = drm_mode_vrefresh(mode);
+
 	qsync_mode = sde_connector_get_qsync_mode(conn);
-	threshold_lines = adjusted_threshold_lines = DEFAULT_TEARCHECK_SYNC_THRESH_START;
+	if (qsync_mode != SDE_RM_QSYNC_CONTINUOUS_MODE)
+		goto exit;
 
-	if (mode && (qsync_mode == SDE_RM_QSYNC_CONTINUOUS_MODE)) {
-		u32 qsync_min_fps = 0;
-		ktime_t qsync_time_ns;
-		ktime_t qsync_l_bound_ns, qsync_u_bound_ns;
-		u32 default_fps = drm_mode_vrefresh(mode);
-		ktime_t default_time_ns;
-		ktime_t default_line_time_ns;
-		ktime_t extra_time_ns;
-		u32 yres = mode->vtotal;
+	if (phys_enc->parent_ops.get_qsync_fps)
+		phys_enc->parent_ops.get_qsync_fps(phys_enc->parent, &qsync_min_fps, conn->state);
 
-		if (phys_enc->parent_ops.get_qsync_fps)
-			phys_enc->parent_ops.get_qsync_fps(phys_enc->parent, &qsync_min_fps,
-					conn->state);
-
-		if (!qsync_min_fps || !default_fps || !yres) {
-			SDE_ERROR_CMDENC(cmd_enc,
-				"wrong qsync params %d %d %d\n",
+	if (!qsync_min_fps || !default_fps || !yres) {
+		SDE_ERROR_CMDENC(cmd_enc, "wrong qsync params %d %d %d\n",
 				qsync_min_fps, default_fps, yres);
-			goto exit;
-		}
-
-		if (qsync_min_fps >= default_fps) {
-			SDE_ERROR_CMDENC(cmd_enc,
-				"qsync fps:%d must be less than default:%d\n",
+		goto exit;
+	} else if (qsync_min_fps >= default_fps) {
+		SDE_ERROR_CMDENC(cmd_enc, "qsync fps:%d must be less than default:%d\n",
 				qsync_min_fps, default_fps);
-			goto exit;
-		}
-
-		/*
-		 * Calculate safe qsync trigger window by compensating
-		 * the qsync timeout period by panel jitter value.
-		 *
-		 * qsync_safe_window_period = qsync_timeout_period * (1 - jitter) - nominal_period
-		 * nominal_line_time = nominal_period / vtotal
-		 * qsync_safe_window_lines = qsync_safe_window_period / nominal_line_time
-		 */
-		qsync_time_ns = mult_frac(1000000000, 1, qsync_min_fps);
-		default_time_ns = mult_frac(1000000000, 1, default_fps);
-
-		sde_encoder_helper_get_jitter_bounds_ns(qsync_min_fps, info->jitter_numer,
-				info->jitter_denom, &qsync_l_bound_ns, &qsync_u_bound_ns);
-		if (!qsync_l_bound_ns || !qsync_u_bound_ns)
-			qsync_l_bound_ns = qsync_u_bound_ns = qsync_time_ns;
-
-		extra_time_ns = qsync_l_bound_ns - default_time_ns;
-		default_line_time_ns = mult_frac(1, default_time_ns, yres);
-		threshold_lines = mult_frac(1, extra_time_ns, default_line_time_ns);
-
-		/* some DDICs express the timeout value in lines/4, round down to compensate */
-		adjusted_threshold_lines = round_down(threshold_lines, 4);
-		/* remove 2 lines to cover for latency */
-		if (adjusted_threshold_lines - 2 > DEFAULT_TEARCHECK_SYNC_THRESH_START)
-			adjusted_threshold_lines -= 2;
-
-		SDE_DEBUG_CMDENC(cmd_enc,
-			"qsync mode:%u min_fps:%u time:%lld low:%lld up:%lld jitter:%u/%u\n",
-			qsync_mode, qsync_min_fps, qsync_time_ns, qsync_l_bound_ns,
-			qsync_u_bound_ns, info->jitter_numer, info->jitter_denom);
-		SDE_DEBUG_CMDENC(cmd_enc,
-			"default fps:%u time:%lld yres:%u line_time:%lld\n",
-			default_fps, default_time_ns, yres, default_line_time_ns);
-		SDE_DEBUG_CMDENC(cmd_enc,
-			"extra_time:%lld  threshold_lines:%u adjusted_threshold_lines:%u\n",
-			extra_time_ns, threshold_lines, adjusted_threshold_lines);
-
-		SDE_EVT32(qsync_mode, qsync_min_fps, default_fps, info->jitter_numer,
-				info->jitter_denom, yres, extra_time_ns, default_line_time_ns,
-				adjusted_threshold_lines);
+		goto exit;
 	}
 
-exit:
+	/*
+	 * Calculate safe qsync trigger window by compensating
+	 * the qsync timeout period by panel jitter value.
+	 *
+	 * qsync_safe_window_period = qsync_timeout_period * (1 - jitter) - nominal_period
+	 * nominal_line_time = nominal_period / vtotal
+	 * qsync_safe_window_lines = qsync_safe_window_period / nominal_line_time
+	 */
+	qsync_time_ns = mult_frac(NSEC_PER_SEC, 1, qsync_min_fps);
+	default_time_ns = mult_frac(NSEC_PER_SEC, 1, default_fps);
 
-	return adjusted_threshold_lines;
+	sde_encoder_helper_get_jitter_bounds_ns(qsync_min_fps, info->jitter_numer,
+			info->jitter_denom, &qsync_l_bound_ns, &qsync_u_bound_ns);
+	if (!qsync_l_bound_ns || !qsync_u_bound_ns)
+		qsync_l_bound_ns = qsync_u_bound_ns = qsync_time_ns;
+
+	extra_time_ns = qsync_l_bound_ns - default_time_ns;
+	default_line_time_ns = mult_frac(1, default_time_ns, yres);
+	threshold_lines = mult_frac(1, extra_time_ns, default_line_time_ns);
+
+	/* some DDICs express the timeout value in lines/4, round down to compensate */
+	adjusted_threshold_lines = round_down(threshold_lines, 4);
+	/* remove 2 lines to cover for latency */
+	if (adjusted_threshold_lines - 2 > DEFAULT_TEARCHECK_SYNC_THRESH_START)
+		adjusted_threshold_lines -= 2;
+
+	/* override cfg_height & start_pos only if EPT_FPS feature is enabled */
+	if (test_bit(SDE_FEATURE_EPT_FPS, phys_enc->sde_kms->catalog->features)) {
+		cfg_height -= (start_pos + threshold_lines);
+
+		ept_fps = sde_connector_get_property(conn->state, CONNECTOR_PROP_EPT_FPS);
+		if (!ept_fps) {
+			goto end;
+		} else if (ept_fps > default_fps) {
+			SDE_ERROR_CMDENC(cmd_enc, "EPT fps:%d must be less than default:%d\n",
+				ept_fps, default_fps);
+			goto end;
+		}
+
+		/* override start_pos, only when ept_fps is valid */
+		ept_time_ns = mult_frac(NSEC_PER_SEC, 1, ept_fps);
+		ept_extra_time_ns = ept_time_ns - default_time_ns;
+		ept_threshold_lines = mult_frac(1, ept_extra_time_ns, default_line_time_ns);
+		start_pos += ept_threshold_lines;
+	}
+
+end:
+	SDE_DEBUG_CMDENC(cmd_enc,
+			"qsync mode:%u min_fps:%u ts:%llu jitter_ns:%llu/%llu jitter:%u/%u\n",
+			qsync_mode, qsync_min_fps, qsync_time_ns, qsync_l_bound_ns,
+			qsync_u_bound_ns, info->jitter_numer, info->jitter_denom);
+	SDE_DEBUG_CMDENC(cmd_enc, "default fps:%u ts:%llu yres:%u line_time:%llu extra_time:%llu\n",
+			default_fps, default_time_ns, yres, default_line_time_ns, extra_time_ns);
+	SDE_DEBUG_CMDENC(cmd_enc, "ept_fps:%d ts:%llu ept_extra_time:%llu ept_threshold_lines:%u\n",
+			ept_fps, ept_time_ns, ept_extra_time_ns, ept_threshold_lines);
+	SDE_DEBUG_CMDENC(cmd_enc, "threshold_lines:%u cfg_height:%u start_pos:%u\n",
+			adjusted_threshold_lines, cfg_height, start_pos);
+
+	SDE_EVT32(qsync_mode, qsync_min_fps, default_fps, info->jitter_numer,
+			info->jitter_denom, yres, extra_time_ns, default_line_time_ns,
+			adjusted_threshold_lines, start_pos, cfg_height, ept_fps);
+
+exit:
+	*t_lines = adjusted_threshold_lines;
+	*c_height = cfg_height;
+	*s_pos = start_pos;
+
+	return;
 }
 
 static void sde_encoder_phys_cmd_tearcheck_config(
@@ -1399,7 +1429,7 @@ static void sde_encoder_phys_cmd_tearcheck_config(
 	struct sde_hw_tear_check tc_cfg = { 0 };
 	struct drm_display_mode *mode;
 	bool tc_enable = true;
-	u32 vsync_hz;
+	u32 vsync_hz, threshold, cfg_height, start_pos;
 	int vrefresh;
 	struct msm_drm_private *priv;
 	struct sde_kms *sde_kms;
@@ -1458,21 +1488,13 @@ static void sde_encoder_phys_cmd_tearcheck_config(
 	/* enable external TE after kickoff to avoid premature autorefresh */
 	tc_cfg.hw_vsync_mode = 0;
 
-	/*
-	 * By setting sync_cfg_height to near max register value, we essentially
-	 * disable sde hw generated TE signal, since hw TE will arrive first.
-	 * Only caveat is if due to error, we hit wrap-around.
-	 */
-	if (phys_enc->hw_intf->ops.is_te_32bit_supported
-			&& phys_enc->hw_intf->ops.is_te_32bit_supported(phys_enc->hw_intf))
-		tc_cfg.sync_cfg_height = 0xFFFFFFF0;
-	else
-		tc_cfg.sync_cfg_height = 0xFFF0;
+	_get_tearcheck_cfg(phys_enc, &threshold, &cfg_height, &start_pos);
+	tc_cfg.sync_threshold_start = threshold;
+	tc_cfg.sync_cfg_height = cfg_height;
+	tc_cfg.start_pos = start_pos;
 
 	tc_cfg.vsync_init_val = mode->vdisplay;
-	tc_cfg.sync_threshold_start = _get_tearcheck_threshold(phys_enc);
 	tc_cfg.sync_threshold_continue = DEFAULT_TEARCHECK_SYNC_THRESH_CONTINUE;
-	tc_cfg.start_pos = mode->vdisplay;
 	tc_cfg.rd_ptr_irq = mode->vdisplay + 1;
 	tc_cfg.wr_ptr_irq = 1;
 	cmd_enc->qsync_threshold_lines = tc_cfg.sync_threshold_start;
@@ -1792,7 +1814,7 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_pp->idx - PINGPONG_0,
 			atomic_read(&phys_enc->pending_kickoff_cnt),
 			atomic_read(&cmd_enc->autorefresh.kickoff_cnt),
-			phys_enc->frame_trigger_mode);
+			phys_enc->frame_trigger_mode, SDE_EVTLOG_FUNC_CASE1);
 
 	if (phys_enc->frame_trigger_mode == FRAME_DONE_WAIT_DEFAULT) {
 		/*
@@ -1804,7 +1826,7 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 		if (ret) {
 			atomic_set(&phys_enc->pending_kickoff_cnt, 0);
 			SDE_EVT32(DRMID(phys_enc->parent),
-					phys_enc->hw_pp->idx - PINGPONG_0);
+					phys_enc->hw_pp->idx - PINGPONG_0, SDE_EVTLOG_FUNC_CASE2);
 			SDE_ERROR("failed wait_for_idle: %d\n", ret);
 		}
 	}
@@ -1823,8 +1845,11 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 	}
 
 	if (sde_connector_is_qsync_updated(phys_enc->connector)) {
-		tc_cfg.sync_threshold_start = _get_tearcheck_threshold(
-				phys_enc);
+		u32 threshold, cfg_height, start_pos;
+
+		_get_tearcheck_cfg(phys_enc, &threshold, &cfg_height, &start_pos);
+		tc_cfg.sync_threshold_start = threshold;
+		tc_cfg.start_pos = start_pos;
 		cmd_enc->qsync_threshold_lines = tc_cfg.sync_threshold_start;
 		if (phys_enc->has_intf_te &&
 				phys_enc->hw_intf->ops.update_tearcheck)
@@ -1833,7 +1858,8 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 		else if (phys_enc->hw_pp->ops.update_tearcheck)
 			phys_enc->hw_pp->ops.update_tearcheck(
 					phys_enc->hw_pp, &tc_cfg);
-		SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start);
+		SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start, tc_cfg.start_pos,
+				SDE_EVTLOG_FUNC_CASE3);
 	}
 
 	sde_enc = to_sde_encoder_virt(phys_enc->parent);

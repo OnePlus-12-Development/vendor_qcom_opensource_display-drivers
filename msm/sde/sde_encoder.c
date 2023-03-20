@@ -1215,40 +1215,32 @@ static void _sde_encoder_get_qsync_fps_callback(struct drm_encoder *drm_enc,
 }
 
 static int _sde_encoder_avr_step_check(struct sde_connector *sde_conn,
-		struct sde_connector_state *sde_conn_state, u32 step)
+		struct sde_connector_state *sde_conn_state)
 {
-	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(sde_conn_state->base.best_encoder);
 	u32 nom_fps = drm_mode_vrefresh(sde_conn_state->msm_mode.base);
-	u32 min_fps, req_fps = 0;
+	u32 min_fps, step_fps = 0;
 	u32 vtotal = sde_conn_state->msm_mode.base->vtotal;
-	bool has_panel_req = sde_enc->disp_info.has_avr_step_req;
 	u32 qsync_mode = sde_connector_get_property(&sde_conn_state->base,
 			CONNECTOR_PROP_QSYNC_MODE);
+	u32 avr_step_state = sde_connector_get_property(&sde_conn_state->base,
+			CONNECTOR_PROP_AVR_STEP_STATE);
 
-	if (has_panel_req) {
-		if (!sde_conn->ops.get_avr_step_req) {
-			SDE_ERROR("unable to retrieve required step rate\n");
-			return -EINVAL;
-		}
+	if ((avr_step_state == AVR_STEP_NONE) || !sde_conn->ops.get_avr_step_fps)
+		return 0;
 
-		req_fps = sde_conn->ops.get_avr_step_req(sde_conn->display, nom_fps);
-		/* when qsync is enabled, the step fps *must* be set to the panel requirement */
-		if (qsync_mode && req_fps != step) {
-			SDE_ERROR("invalid avr_step %u, panel requires %u at nominal %u fps\n",
-					step, req_fps, nom_fps);
-			return -EINVAL;
-		}
+	if (!qsync_mode && avr_step_state) {
+		SDE_ERROR("invalid config: avr-step enabled without qsync\n");
+		return -EINVAL;
 	}
 
-	if (!step)
-		return 0;
+	step_fps = sde_conn->ops.get_avr_step_fps(&sde_conn_state->base);
 
 	_sde_encoder_get_qsync_fps_callback(sde_conn_state->base.best_encoder, &min_fps,
 		&sde_conn_state->base);
-	if (!min_fps || !nom_fps || step % nom_fps || step % min_fps || step < nom_fps ||
-			(vtotal * nom_fps) % step) {
+	if (!min_fps || !nom_fps || step_fps % nom_fps || step_fps % min_fps
+			|| step_fps < nom_fps || (vtotal * nom_fps) % step_fps) {
 		SDE_ERROR("invalid avr_step rate! nom:%u min:%u step:%u vtotal:%u\n", nom_fps,
-				min_fps, step, vtotal);
+				min_fps, step_fps, vtotal);
 		return -EINVAL;
 	}
 
@@ -1259,11 +1251,9 @@ static int _sde_encoder_atomic_check_qsync(struct sde_connector *sde_conn,
 		struct sde_connector_state *sde_conn_state)
 {
 	int rc = 0;
-	u32 avr_step;
 	bool qsync_dirty, has_modeset, ept;
 	struct drm_connector_state *conn_state = &sde_conn_state->base;
-	u32 qsync_mode = sde_connector_get_property(&sde_conn_state->base,
-						CONNECTOR_PROP_QSYNC_MODE);
+	u32 qsync_mode;
 
 	has_modeset = sde_crtc_atomic_check_has_modeset(conn_state->state, conn_state->crtc);
 	qsync_dirty = msm_property_is_dirty(&sde_conn->property_info,
@@ -1279,9 +1269,9 @@ static int _sde_encoder_atomic_check_qsync(struct sde_connector *sde_conn,
 		return -EINVAL;
 	}
 
-	avr_step = sde_connector_get_property(conn_state, CONNECTOR_PROP_AVR_STEP);
-	if (qsync_dirty || (avr_step != sde_conn->avr_step) || (qsync_mode && has_modeset))
-		rc = _sde_encoder_avr_step_check(sde_conn, sde_conn_state, avr_step);
+	qsync_mode = sde_connector_get_property(conn_state, CONNECTOR_PROP_QSYNC_MODE);
+	if (qsync_dirty || (qsync_mode && has_modeset))
+		rc =  _sde_encoder_avr_step_check(sde_conn, sde_conn_state);
 
 	return rc;
 }
@@ -1439,6 +1429,85 @@ static int _sde_encoder_update_roi(struct drm_encoder *drm_enc)
 	memcpy(&sde_enc->cur_conn_roi, &roi, sizeof(sde_enc->cur_conn_roi));
 
 	return 0;
+}
+
+static void _sde_encoder_update_ppb_size(struct drm_encoder *drm_enc)
+{
+	struct sde_kms *sde_kms;
+	struct sde_hw_mdp *hw_mdp;
+	struct drm_display_mode *mode;
+	struct sde_encoder_virt *sde_enc;
+	u32 maxw, pixels_per_pp, num_lm_or_pp, latency_lines;
+	int i;
+
+	if (!drm_enc) {
+		SDE_ERROR("invalid encoder parameter\n");
+		return;
+	}
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	if (!sde_enc->cur_master || !sde_enc->cur_master->connector) {
+		SDE_ERROR_ENC(sde_enc, "invalid master or conn\n");
+		return;
+	}
+
+	/* program only for realtime displays */
+	if (sde_enc->disp_info.intf_type == DRM_MODE_CONNECTOR_VIRTUAL)
+		return;
+
+	sde_kms = sde_encoder_get_kms(&sde_enc->base);
+	if (!sde_kms) {
+		SDE_ERROR_ENC(sde_enc, "invalid sde_kms\n");
+		return;
+	}
+
+	/* check if hw support is available, early return if not available */
+	if (sde_kms->catalog->ppb_sz_program == SDE_PPB_SIZE_THRU_NONE)
+		return;
+
+	hw_mdp = sde_kms->hw_mdp;
+	if (!hw_mdp) {
+		SDE_ERROR_ENC(sde_enc, "invalid mdp top\n");
+		return;
+	}
+
+	mode = &drm_enc->crtc->state->adjusted_mode;
+	num_lm_or_pp = sde_enc->cur_channel_cnt;
+	latency_lines = sde_kms->catalog->ppb_buf_max_lines;
+
+	for (i = 0; i < num_lm_or_pp; i++) {
+		struct sde_hw_pingpong *hw_pp = sde_enc->hw_pp[i];
+		if (!hw_pp) {
+			SDE_ERROR_ENC(sde_enc, "invalid hw_pp i:%d pp_cnt:%d\n", i, num_lm_or_pp);
+			return;
+		}
+
+		if (hw_pp->ops.set_ppb_fifo_size) {
+			pixels_per_pp = mult_frac(mode->hdisplay, latency_lines, num_lm_or_pp);
+			hw_pp->ops.set_ppb_fifo_size(hw_pp, pixels_per_pp);
+
+			SDE_EVT32(DRMID(drm_enc), i, hw_pp->idx, mode->hdisplay, pixels_per_pp,
+					sde_kms->catalog->ppb_sz_program, SDE_EVTLOG_FUNC_CASE1);
+			SDE_DEBUG_ENC(sde_enc, "hw-pp i:%d pp_cnt:%d pixels_per_pp:%d\n",
+					i, num_lm_or_pp, pixels_per_pp);
+		} else if (hw_mdp->ops.set_ppb_fifo_size) {
+			maxw = sde_conn_get_max_mode_width(sde_enc->cur_master->connector);
+			if (!maxw) {
+				SDE_DEBUG_ENC(sde_enc, "failed to get max horizantal resolution\n");
+				return;
+			}
+
+			pixels_per_pp = mult_frac(maxw, latency_lines, num_lm_or_pp);
+			hw_mdp->ops.set_ppb_fifo_size(hw_mdp, hw_pp->idx, pixels_per_pp);
+
+			SDE_EVT32(DRMID(drm_enc), i, hw_pp->idx, maxw, pixels_per_pp,
+					sde_kms->catalog->ppb_sz_program, SDE_EVTLOG_FUNC_CASE2);
+			SDE_DEBUG_ENC(sde_enc, "hw-pp i:%d pp_cnt:%d pixels_per_pp:%d\n",
+					i, num_lm_or_pp, pixels_per_pp);
+		} else {
+			SDE_ERROR_ENC(sde_enc, "invalid - ppb fifo size support is partial\n");
+		}
+	}
 }
 
 void sde_encoder_helper_vsync_config(struct sde_encoder_phys *phys_enc, u32 vsync_source)
@@ -2559,12 +2628,14 @@ static void _sde_encoder_virt_populate_hw_res(struct drm_encoder *drm_enc)
 	struct sde_rm_hw_request request_hw;
 	int i, j;
 
+	sde_enc->cur_channel_cnt = 0;
 	sde_rm_init_hw_iter(&pp_iter, drm_enc->base.id, SDE_HW_BLK_PINGPONG);
 	for (i = 0; i < MAX_CHANNELS_PER_ENC; i++) {
 		sde_enc->hw_pp[i] = NULL;
 		if (!sde_rm_get_hw(&sde_kms->rm, &pp_iter))
 			break;
 		sde_enc->hw_pp[i] = to_sde_hw_pingpong(pp_iter.hw);
+		sde_enc->cur_channel_cnt++;
 	}
 
 	for (i = 0; i < sde_enc->num_phys_encs; i++) {
@@ -3009,6 +3080,9 @@ static void _sde_encoder_virt_enable_helper(struct drm_encoder *drm_enc)
 				&sde_enc->cur_master->intf_cfg_v1);
 
 	_sde_encoder_update_vsync_source(sde_enc, &sde_enc->disp_info);
+
+	if (!sde_encoder_in_cont_splash(drm_enc))
+		_sde_encoder_update_ppb_size(drm_enc);
 
 	memset(&sde_enc->prv_conn_roi, 0, sizeof(sde_enc->prv_conn_roi));
 	memset(&sde_enc->cur_conn_roi, 0, sizeof(sde_enc->cur_conn_roi));
@@ -4669,9 +4743,12 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	ktime_t current_ts, ept_ts;
 	u32 avr_step_fps, min_fps = 0, qsync_mode;
 	u64 timeout_us = 0, ept;
+	bool is_cmd_mode;
 	struct drm_connector *drm_conn;
+	struct msm_mode_info *info = &sde_enc->mode_info;
+	struct sde_kms *sde_kms = sde_encoder_get_kms(&sde_enc->base);
 
-	if (!sde_enc->cur_master || !sde_enc->cur_master->connector)
+	if (!sde_enc->cur_master || !sde_enc->cur_master->connector || !sde_kms)
 		return;
 
 	drm_conn = sde_enc->cur_master->connector;
@@ -4679,13 +4756,22 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	if (!ept)
 		return;
 
-	avr_step_fps = sde_connector_get_avr_step(drm_conn);
 	qsync_mode = sde_connector_get_property(drm_conn->state, CONNECTOR_PROP_QSYNC_MODE);
 	if (qsync_mode)
 		_sde_encoder_get_qsync_fps_callback(&sde_enc->base, &min_fps, drm_conn->state);
 	/* use min qsync fps, if feature is enabled; otherwise min default fps */
 	min_fps = min_fps ? min_fps : DEFAULT_MIN_FPS;
+	is_cmd_mode = sde_encoder_check_curr_mode(&sde_enc->base, MSM_DISPLAY_CMD_MODE);
 
+	/* for cmd mode with qsync - EPT_FPS will be used to delay the processing */
+	if (test_bit(SDE_FEATURE_EPT_FPS, sde_kms->catalog->features)
+			&& is_cmd_mode && qsync_mode) {
+		SDE_DEBUG("enc:%d, ept:%llu not applicable for cmd mode with qsync enabled",
+				DRMID(&sde_enc->base), ept);
+		return;
+	}
+
+	avr_step_fps = info->avr_step_fps;
 	current_ts = ktime_get_ns();
 	/* ept is in ns and avr_step is mulitple of refresh rate */
 	ept_ts = avr_step_fps ? ept - DIV_ROUND_UP(NSEC_PER_SEC, avr_step_fps) + NSEC_PER_MSEC

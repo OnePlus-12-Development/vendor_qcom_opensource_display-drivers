@@ -78,6 +78,7 @@ struct dp_display_mode {
 	 * The output format can be read from drm_mode.
 	 */
 	enum dp_output_format output_format;
+	u32 lm_count;
 };
 
 struct dp_panel;
@@ -153,6 +154,7 @@ struct dp_panel {
 	bool widebus_en;
 	bool dsc_continuous_pps;
 	bool mst_state;
+	bool pclk_on;
 
 	/* override debug option */
 	bool mst_hide;
@@ -197,6 +199,7 @@ struct dp_panel {
 	int (*sink_crc_enable)(struct dp_panel *dp_panel, bool enable);
 	int (*get_src_crc)(struct dp_panel *dp_panel, u16 *crc);
 	int (*get_sink_crc)(struct dp_panel *dp_panel, u16 *crc);
+	bool (*get_panel_on)(struct dp_panel *dp_panel);
 };
 
 struct dp_tu_calc_input {

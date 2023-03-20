@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -117,6 +117,8 @@
 
 #define HW_FENCE_IPCC_FENCE_PROTOCOL_ID 4
 #define HW_FENCE_DPU_FENCE_PROTOCOL_ID 3
+
+static int ppb_offset_map[PINGPONG_MAX] = {1, 0, 3, 2, 5, 4, 7, 7, 6, 6, -1, -1};
 
 static void sde_hw_setup_split_pipe(struct sde_hw_mdp *mdp,
 		struct split_pipe_cfg *cfg)
@@ -767,6 +769,38 @@ static void sde_hw_setup_hw_fences_config(struct sde_hw_mdp *mdp, u32 protocol_i
 	SDE_REG_WRITE(&c, offset, val);
 }
 
+void sde_hw_top_set_ppb_fifo_size(struct sde_hw_mdp *mdp, u32 pp, u32 sz)
+{
+	struct sde_hw_blk_reg_map c;
+	u32 offset, val, pp_index;
+
+	if (!mdp) {
+		SDE_ERROR("invalid mdp instance\n");
+		return;
+	}
+
+	if (pp >= PINGPONG_MAX || ppb_offset_map[pp - PINGPONG_0] < 0) {
+		SDE_ERROR("invalid pingpong index:%d max:%d\n", pp, PINGPONG_MAX);
+		return;
+	}
+
+	pp_index = pp - PINGPONG_0;
+
+	c = mdp->hw;
+	offset = PPB_FIFO_SIZE + ((ppb_offset_map[pp_index] / 2) * 0x4);
+
+	spin_lock(&mdp->slock);
+	/* read, modify & update *respective 16 bit fields */
+	val = SDE_REG_READ(&c, offset);
+
+	/* divide by 4 as each fifo entry can store 4 pixels */
+	sz = (sz / MDP_PPB_FIFO_ENTRY_SIZE) & 0xFFFF;
+	sz = ppb_offset_map[pp_index] % 2 ? (sz << 16) : sz;
+	val = (ppb_offset_map[pp_index] % 2) ? (val & 0xFFFF) : (val & 0xFFFF0000);
+	SDE_REG_WRITE(&c, offset, val | sz);
+	spin_unlock(&mdp->slock);
+}
+
 static void _setup_mdp_ops(struct sde_hw_mdp_ops *ops, unsigned long cap, u32 hw_fence_rev)
 {
 	ops->setup_split_pipe = sde_hw_setup_split_pipe;
@@ -793,6 +827,9 @@ static void _setup_mdp_ops(struct sde_hw_mdp_ops *ops, unsigned long cap, u32 hw
 		ops->hw_fence_input_timestamp_ctrl = sde_hw_hw_fence_timestamp_ctrl;
 		ops->hw_fence_input_status = sde_hw_input_hw_fence_status;
 	}
+
+	if (cap & BIT(SDE_MDP_TOP_PPB_SET_SIZE))
+		ops->set_ppb_fifo_size = sde_hw_top_set_ppb_fifo_size;
 }
 
 static const struct sde_mdp_cfg *_top_offset(enum sde_mdp mdp,
@@ -838,6 +875,8 @@ struct sde_hw_mdp *sde_hw_mdptop_init(enum sde_mdp idx,
 		kfree(mdp);
 		return ERR_PTR(-EINVAL);
 	}
+
+	spin_lock_init(&mdp->slock);
 
 	/*
 	 * Assign ops

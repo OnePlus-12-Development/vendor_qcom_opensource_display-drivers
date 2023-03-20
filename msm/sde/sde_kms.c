@@ -1383,11 +1383,13 @@ int sde_kms_vm_pre_release(struct sde_kms *sde_kms,
 {
 	struct drm_crtc *crtc;
 	struct drm_encoder *encoder;
+	struct msm_drm_private *priv;
 	int rc = 0;
 
 	crtc = sde_kms_vm_get_vm_crtc(state);
 	if (!crtc)
 		return 0;
+	priv = sde_kms->dev->dev_private;
 
 	/* if vm_req is enabled, once CRTC on the commit is guaranteed */
 	sde_kms_wait_for_frame_transfer_complete(&sde_kms->base, crtc);
@@ -1395,6 +1397,8 @@ int sde_kms_vm_pre_release(struct sde_kms *sde_kms,
 	sde_dbg_set_hw_ownership_status(false);
 
 	sde_kms_cancel_delayed_work(crtc);
+
+	kthread_flush_worker(&priv->event_thread[crtc->index].worker);
 
 	/* disable SDE encoder irq's */
 	drm_for_each_encoder_mask(encoder, crtc->dev,
@@ -1829,7 +1833,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.set_allowed_mode_switch = dsi_conn_set_allowed_mode_switch,
 		.set_dyn_bit_clk = dsi_conn_set_dyn_bit_clk,
 		.get_qsync_min_fps = dsi_conn_get_qsync_min_fps,
-		.get_avr_step_req = dsi_display_get_avr_step_req_fps,
+		.get_avr_step_fps = dsi_conn_get_avr_step_fps,
 		.prepare_commit = dsi_conn_prepare_commit,
 		.set_submode_info = dsi_conn_set_submode_blob_info,
 		.get_num_lm_from_mode = dsi_conn_get_lm_from_mode,
@@ -3853,6 +3857,20 @@ static int sde_kms_get_dsc_count(const struct msm_kms *kms,
 	return 0;
 }
 
+static bool sde_kms_in_trusted_vm(const struct msm_kms *kms)
+{
+	struct sde_kms *sde_kms;
+
+	if (!kms) {
+		SDE_ERROR("invalid kms\n");
+		return false;
+	}
+
+	sde_kms = to_sde_kms(kms);
+
+	return sde_in_trusted_vm(sde_kms);
+}
+
 static int _sde_kms_null_commit(struct drm_device *dev,
 		struct drm_encoder *enc)
 {
@@ -4291,6 +4309,7 @@ static const struct msm_kms_funcs kms_funcs = {
 	.trigger_null_flush = sde_kms_trigger_null_flush,
 	.get_mixer_count = sde_kms_get_mixer_count,
 	.get_dsc_count = sde_kms_get_dsc_count,
+	.in_trusted_vm = sde_kms_in_trusted_vm,
 };
 
 static int _sde_kms_mmu_destroy(struct sde_kms *sde_kms)

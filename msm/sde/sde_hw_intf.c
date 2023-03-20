@@ -863,6 +863,7 @@ static void sde_hw_intf_update_te(struct sde_hw_intf *intf,
 	cfg &= ~0xFFFF;
 	cfg |= te->sync_threshold_start;
 	SDE_REG_WRITE(c, INTF_TEAR_SYNC_THRESH, cfg);
+	SDE_REG_WRITE(c, INTF_TEAR_START_POS, te->start_pos);
 }
 
 static int sde_hw_intf_connect_external_te(struct sde_hw_intf *intf,

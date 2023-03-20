@@ -391,7 +391,7 @@ static int dp_ctrl_link_training_1(struct dp_ctrl_private *ctrl)
 			break;
 
 		if (ctrl->link->phy_params.v_level == ctrl->link->phy_params.max_v_level) {
-			pr_err_ratelimited("max v_level reached\n");
+			DP_ERR_RATELIMITED_V("max v_level reached\n");
 			break;
 		}
 
@@ -1286,6 +1286,7 @@ static int dp_ctrl_stream_on(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 		return rc;
 	}
 
+	panel->pclk_on = true;
 	rc = panel->hw_cfg(panel, true);
 	if (rc)
 		return rc;
@@ -1376,6 +1377,7 @@ static void dp_ctrl_stream_off(struct dp_ctrl *dp_ctrl, struct dp_panel *panel)
 
 	panel->hw_cfg(panel, false);
 
+	panel->pclk_on = false;
 	dp_ctrl_disable_stream_clocks(ctrl, panel);
 	ctrl->stream_count--;
 }

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _SDE_HWIO_H
@@ -33,6 +34,7 @@
 #define PPB0_CONFIG                     0x334
 #define PPB1_CNTL                       0x338
 #define PPB1_CONFIG                     0x33C
+#define PPB_FIFO_SIZE                   0x350
 #define PPB2_CNTL                       0x370
 #define PPB3_CNTL                       0x374
 #define HW_EVENTS_CTL                   0x37C

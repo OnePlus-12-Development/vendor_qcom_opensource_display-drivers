@@ -408,12 +408,11 @@ struct sde_connector_ops {
 	int (*get_qsync_min_fps)(struct drm_connector_state *conn_state);
 
 	/**
-	 * get_avr_step_req - Get the required avr_step for given fps rate
-	 * @display: Pointer to private display structure
-	 * @mode_fps: Fps value in dfps list
+	 * get_avr_step_fps - Get the required avr_step for given fps rate
+	 * @conn_state: Pointer to drm_connector_state structure
 	 * Returns: AVR step fps value on success
 	 */
-	int (*get_avr_step_req)(void *display, u32 mode_fps);
+	int (*get_avr_step_fps)(struct drm_connector_state *conn_state);
 
 	/**
 	 * set_submode_info - populate given sub mode blob
@@ -447,6 +446,18 @@ struct sde_connector_ops {
 	 */
 	int (*get_panel_scan_line)(void *display, u16 *scan_line, ktime_t *scan_line_ts);
 
+};
+
+/**
+ * enum sde_connector_avr_step_state: states of avr step fps
+ * @AVR_STEP_NONE: no-op
+ * @AVR_STEP_ENABLE: enable AVR step
+ * #AVR_STEP_DISABLE: disable AVR step
+ */
+enum sde_connector_avr_step_state {
+	AVR_STEP_NONE,
+	AVR_STEP_ENABLE,
+	AVR_STEP_DISABLE,
 };
 
 /**
@@ -556,7 +567,7 @@ struct sde_misr_sign {
  * @dimming_bl_notify_enabled: Flag to indicate if dimming bl notify is enabled or not
  * @qsync_mode: Cached Qsync mode, 0=disabled, 1=continuous mode
  * @qsync_updated: Qsync settings were updated
- * @avr_step: fps rate for fixed steps in AVR mode; 0 means step is disabled
+ * @ept_fps: ept fps is updated, 0 means ept_fps is disabled
  * @colorspace_updated: Colorspace property was updated
  * @last_cmd_tx_sts: status of the last command transfer
  * @hdr_capable: external hdr support present
@@ -631,7 +642,7 @@ struct sde_connector {
 	u8 hdr_plus_app_ver;
 	u32 qsync_mode;
 	bool qsync_updated;
-	u32 avr_step;
+	u32 ept_fps;
 
 	bool colorspace_updated;
 
@@ -686,13 +697,6 @@ struct sde_connector {
  */
 #define sde_connector_get_qsync_mode(C) \
 	((C) ? to_sde_connector((C))->qsync_mode : 0)
-
-/**
- * sde_connector_get_avr_step - get sde connector's avr_step
- * @C: Pointer to drm connector structure
- * Returns: Current cached avr_step value for given connector
- */
-#define sde_connector_get_avr_step(C) ((C) ? to_sde_connector((C))->avr_step : 0)
 
 /**
  * sde_connector_get_propinfo - get sde connector's property info pointer
@@ -1179,6 +1183,24 @@ int sde_connector_state_get_mode_info(struct drm_connector_state *conn_state,
  */
 int sde_connector_get_lm_cnt_from_topology(struct drm_connector *conn,
 	 const struct drm_display_mode *drm_mode);
+
+/**
+ * sde_conn_get_max_mode_width - retrieves the maximum width from all modes
+ * conn: Pointer to DRM connector object
+ */
+static inline u32 sde_conn_get_max_mode_width(struct drm_connector *conn)
+{
+	u32 maxw = 0;
+	struct drm_display_mode *mode;
+
+	if (!conn)
+		return maxw;
+
+	list_for_each_entry(mode, &conn->modes, head)
+		maxw = maxw > mode->hdisplay ? maxw : mode->hdisplay;
+
+	return maxw;
+}
 
 /**
  * sde_connector_state_get_topology - get topology from given connector state

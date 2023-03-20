@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -230,6 +230,14 @@ struct sde_hw_mdp_ops {
 	 * @enable:    indicates if timestamps should be cleared
 	 */
 	void (*hw_fence_input_timestamp_ctrl)(struct sde_hw_mdp *mdp, bool enable, bool clear);
+
+	/**
+	 * set_ppb_fifo_size - set ppb latency buffer size to a fixed value
+	 * @mdp:      mdp top context driver
+	 * @pp:       indicates pingpong block id
+	 * @sz:       indicates size of the ppb in terms of pixels
+	 */
+	void (*set_ppb_fifo_size)(struct sde_hw_mdp *mdp, u32 pp, u32 sz);
 };
 
 struct sde_hw_mdp {
@@ -238,6 +246,8 @@ struct sde_hw_mdp {
 	/* top */
 	enum sde_mdp idx;
 	const struct sde_mdp_cfg *caps;
+
+	spinlock_t slock;
 
 	/* ops */
 	struct sde_hw_mdp_ops ops;

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -326,6 +326,12 @@ struct sde_hw_dspp_ops {
 	 * @cfg: Pointer to configuration
 	 */
 	void (*setup_demura_pu_config)(struct sde_hw_dspp *ctx, void *cfg);
+	/**
+	 * setup_demura_cfg0_param2 - function to configure demura cfg0_param2 params
+	 * @ctx: Pointer to dspp context
+	 * @cfg: Pointer to configuration
+	 */
+	void (*setup_demura_cfg0_param2)(struct sde_hw_dspp *ctx, void *cfg);
 };
 
 /**

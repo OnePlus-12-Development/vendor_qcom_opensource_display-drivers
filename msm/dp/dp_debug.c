@@ -402,8 +402,19 @@ static ssize_t dp_debug_read_crc(struct file *file, char __user *user_buff, size
 		panel = debug->panel;
 	}
 
-	panel->get_src_crc(panel, src_crc);
+	if (!panel->pclk_on)
+		goto bail;
+
 	panel->get_sink_crc(panel, sink_crc);
+	if (!(sink_crc[0] + sink_crc[1] + sink_crc[2])) {
+		panel->sink_crc_enable(panel, true);
+		mutex_unlock(&debug->lock);
+		msleep(30);
+		mutex_lock(&debug->lock);
+		panel->get_sink_crc(panel, sink_crc);
+	}
+
+	panel->get_src_crc(panel, src_crc);
 
 	len += scnprintf(buf + len, buf_size - len, "FRAME_CRC:\nSource vs Sink\n");
 

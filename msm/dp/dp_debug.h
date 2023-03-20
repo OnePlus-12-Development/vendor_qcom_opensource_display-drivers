@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -71,6 +71,10 @@
 
 #define DP_ERR_V(fmt, ...)                                    \
 		pr_err("[drm:%s][msm-dp-err][%-4d]"fmt, __func__,   \
+				current->pid, ##__VA_ARGS__)
+
+#define DP_ERR_RATELIMITED_V(fmt, ...)                                    \
+		pr_err_ratelimited("[drm:%s][msm-dp-err][%-4d]"fmt, __func__, \
 				current->pid, ##__VA_ARGS__)
 
 #define DEFAULT_DISCONNECT_DELAY_MS 0

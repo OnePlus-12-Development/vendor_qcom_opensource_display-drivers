@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  */
 
@@ -16,8 +16,9 @@
 #define CHAR_BIT 8 /* define this if limits.h not available */
 #endif
 
-#define HW_FENCE_TRIGGER_SEL_CTRL_DONE       0x0
+#define HW_FENCE_TRIGGER_SEL_CMD_MODE        0x0
 #define HW_FENCE_TRIGGER_SEL_PROG_LINE_COUNT 0x1
+#define HW_FENCE_TRIGGER_SEL_VID_MODE        0x2
 
 #define SDE_INPUT_HW_FENCE_TIMESTAMP         BIT(0)
 #define SDE_OUTPUT_HW_FENCE_TIMESTAMP        BIT(1)
