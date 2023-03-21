@@ -93,6 +93,12 @@ struct dp_catalog_ctrl {
 	u32 isr5;
 	u32 isr6;
 
+	u8 *swing_hbr2_3;
+	u8 *pre_emp_hbr2_3;
+	u8 *swing_hbr_rbr;
+	u8 *pre_emp_hbr_rbr;
+	bool valid_lt_params;
+
 	void (*state_ctrl)(struct dp_catalog_ctrl *ctrl, u32 state);
 	void (*config_ctrl)(struct dp_catalog_ctrl *ctrl, u8 ln_cnt);
 	void (*lane_mapping)(struct dp_catalog_ctrl *ctrl, bool flipped,
