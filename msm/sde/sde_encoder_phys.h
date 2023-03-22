@@ -336,6 +336,12 @@ struct sde_encoder_irq {
  * @vfp_cached:			cached vertical front porch to be used for
  *				programming ROT and MDP fetch start
  * @pf_time_in_us:		Programmable fetch time in micro-seconds
+ * @sde_hw_fence_error_status:	Hw fence error handing flag controled by userspace
+ *				that if handing fence error in driver
+ * @sde_hw_fence_error_value:	hw fence error value from cb function
+ * @sde_hw_fence_handle:	Hw fence driver client handle, this handle was returned
+ *				during the call 'msm_hw_fence_register' to register the
+ *				client
  * @frame_trigger_mode:		frame trigger mode indication for command
  *				mode display
  * @recovered:			flag set to true when recovered from pp timeout
@@ -388,6 +394,9 @@ struct sde_encoder_phys {
 	bool in_clone_mode;
 	int vfp_cached;
 	u32 pf_time_in_us;
+	bool sde_hw_fence_error_status;
+	int sde_hw_fence_error_value;
+	u64 sde_hw_fence_handle;
 	enum frame_trigger_mode_type frame_trigger_mode;
 	bool recovered;
 	bool autorefresh_disable_trans;
@@ -398,6 +407,13 @@ static inline int sde_encoder_phys_inc_pending(struct sde_encoder_phys *phys)
 {
 	return atomic_inc_return(&phys->pending_kickoff_cnt);
 }
+
+/**
+ * sde_encoder_hw_fence_signal - hw fence related fence error handing
+ * @phys_enc: Pointer to physical encoder structure
+ * return: 0 on success; error code otherwise
+ */
+static inline int sde_encoder_hw_fence_signal(struct sde_encoder_phys *phys_enc);
 
 /**
  * struct sde_encoder_phys_vid - sub-class of sde_encoder_phys to handle video

@@ -4769,6 +4769,7 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 	idle_pc_state = sde_crtc_get_property(cstate, CRTC_PROP_IDLE_PC_STATE);
 
 	sde_crtc->kickoff_in_progress = true;
+	sde_crtc->handle_fence_error_bw_update = false;
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
 		if (encoder->crtc != crtc)
 			continue;

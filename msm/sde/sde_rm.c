@@ -727,7 +727,7 @@ static int _init_hw_fences(struct sde_rm *rm, bool use_ipcc, struct sde_kms *sde
 
 		if (sde_kms->aspace[MSM_SMMU_DOMAIN_UNSECURE] &&
 				sde_kms->aspace[MSM_SMMU_DOMAIN_UNSECURE]->mmu) {
-			if (sde_hw_fence_init(ctl, use_ipcc,
+			if (sde_hw_fence_init(ctl, sde_kms, use_ipcc,
 					sde_kms->aspace[MSM_SMMU_DOMAIN_UNSECURE]->mmu)) {
 				SDE_DEBUG("failed to init hw_fence idx:%d\n", ctl->idx);
 				ret = -EINVAL;

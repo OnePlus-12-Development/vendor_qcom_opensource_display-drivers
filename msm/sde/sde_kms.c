@@ -1721,6 +1721,8 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 			break;
 		}
 
+		sde_encoder_hw_fence_error_handle(encoder);
+
 		sde_crtc_complete_flip(crtc, NULL);
 
 		if (cwb_disabling)

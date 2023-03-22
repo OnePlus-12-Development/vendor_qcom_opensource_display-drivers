@@ -51,6 +51,16 @@ struct sde_fence_context {
 };
 
 /**
+ * struct sde_hw_fence_error_cb_data - struct passed back in fence error callback
+ * @ctl_idx: control path index
+ * @sde_kms: handle to sde_kms
+ */
+struct sde_hw_fence_error_cb_data {
+	int ctl_idx;
+	struct sde_kms *sde_kms;
+};
+
+/**
  * enum sde_fence_event - sde fence event as hint fence operation
  * @SDE_FENCE_SIGNAL: Signal the fence cleanly with current timeline
  * @SDE_FENCE_RESET_TIMELINE: Reset timeline of the fence context
@@ -78,6 +88,7 @@ enum sde_fence_event {
  * @ipcc_this_client: ipcc dpu client id (For Waipio: APPS, For Kailua: DPU HW)
  * @dma_context: per client dma context used to create join fences
  * @hw_fence_array_seqno: per-client seq number counter for join fences
+ * @sde_hw_fence_error_cb_data: data needed for hw fence cb function.
  */
 struct sde_hw_fence_data {
 	int client_id;
@@ -94,6 +105,7 @@ struct sde_hw_fence_data {
 	u32 ipcc_this_client;
 	u64 dma_context;
 	u32 hw_fence_array_seqno;
+	struct sde_hw_fence_error_cb_data sde_hw_fence_error_cb_data;
 };
 
 #if IS_ENABLED(CONFIG_SYNC_FILE)
@@ -156,12 +168,14 @@ struct sde_fence_context *sde_fence_init(const char *name,
  * sde_fence_hw_fence_init - initialize hw-fence clients
  *
  * @hw_ctl: hw ctl client to init.
+ * @sde_kms: used for hw fence error cb register.
  * @use_ipcc: boolean to indicate if hw should use dpu ipcc signals.
  * @mmu: mmu to map memory for queues
  *
  * Returns: Zero on success, otherwise returns an error code.
  */
-int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc, struct msm_mmu *mmu);
+int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, struct sde_kms *sde_kms, bool use_dpu_ipcc,
+	struct msm_mmu *mmu);
 
 /**
  * sde_fence_hw_fence_deinit - deinitialize hw-fence clients

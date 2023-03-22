@@ -12,6 +12,7 @@
 #include "msm_drv.h"
 #include "sde_kms.h"
 #include "sde_fence.h"
+#include "sde_encoder.h"
 
 #define TIMELINE_VAL_LENGTH		128
 #define SPEC_FENCE_FLAG_FENCE_ARRAY	0x10
@@ -102,12 +103,39 @@ struct sde_hw_fence_data hw_fence_data_dpu_client[SDE_HW_FENCE_CLIENT_MAX] = {
 		0, 8, 25, 0, 0}
 };
 
-int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc, struct msm_mmu *mmu)
+void msm_hw_fence_error_cb(u32 handle, int error, void *cb_data)
+{
+	struct msm_hw_fence_cb_data *msm_hw_fence_cb_data;
+	struct sde_hw_fence_error_cb_data *sde_hw_fence_error_data;
+
+	SDE_EVT32(handle, error, SDE_EVTLOG_FUNC_ENTRY);
+
+	msm_hw_fence_cb_data = (struct msm_hw_fence_cb_data *)cb_data;
+	if (!msm_hw_fence_cb_data) {
+		SDE_ERROR("msm hw fence cb data is NULL.\n");
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE1, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	sde_hw_fence_error_data = (struct sde_hw_fence_error_cb_data *)(msm_hw_fence_cb_data->data);
+	if (!sde_hw_fence_error_data) {
+		SDE_ERROR("sde hw fence cb data is NULL.\n");
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE2, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	sde_encoder_handle_hw_fence_error(sde_hw_fence_error_data->ctl_idx,
+		sde_hw_fence_error_data->sde_kms, handle, error);
+}
+
+int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, struct sde_kms *sde_kms, bool use_dpu_ipcc,
+		struct msm_mmu *mmu)
 {
 	struct msm_hw_fence_hfi_queue_header *hfi_queue_header_va, *hfi_queue_header_pa;
 	struct msm_hw_fence_hfi_queue_table_header *hfi_table_header;
 	struct sde_hw_fence_data *sde_hw_fence_data;
 	struct sde_hw_fence_data *hwfence_data;
+	struct sde_hw_fence_error_cb_data *sde_hw_fence_error_cb_data;
 	phys_addr_t queue_pa;
 	void *queue_va;
 	u32 qhdr0_offset, ctl_hfi_iova;
@@ -147,6 +175,17 @@ int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc, struct msm_m
 		SDE_DEBUG("error cannot register ctl_id:%d hw-fence client:%d\n", ctl_id,
 			hwfence_data->hw_fence_client_id);
 		return -EINVAL;
+	}
+
+	sde_hw_fence_error_cb_data = &(hwfence_data->sde_hw_fence_error_cb_data);
+	sde_hw_fence_error_cb_data->ctl_idx = hw_ctl->idx;
+	sde_hw_fence_error_cb_data->sde_kms = sde_kms;
+
+	ret = msm_hw_fence_register_error_cb(hwfence_data->hw_fence_handle,
+		msm_hw_fence_error_cb, (void *)sde_hw_fence_error_cb_data);
+	if (ret) {
+		SDE_EVT32(hw_ctl->idx, SDE_EVTLOG_ERROR);
+		SDE_DEBUG("hw fence cb register failed. ret = %d\n", ret);
 	}
 
 	/* one-to-one memory map of ctl-path client queues */

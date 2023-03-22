@@ -2021,6 +2021,76 @@ static void sde_encoder_misr_configure(struct drm_encoder *drm_enc,
 	sde_enc->misr_reconfigure = false;
 }
 
+static int sde_encoder_hw_fence_signal(struct sde_encoder_phys *phys_enc)
+{
+	struct sde_hw_ctl *hw_ctl;
+	struct sde_hw_fence_data *hwfence_data;
+	int pending_kickoff_cnt = -1;
+	int rc = 0;
+
+	if (!phys_enc || !phys_enc->parent || !phys_enc->hw_ctl) {
+		SDE_DEBUG("invalid parameters\n");
+		SDE_EVT32(SDE_EVTLOG_ERROR);
+		return -EINVAL;
+	}
+
+	hw_ctl = phys_enc->hw_ctl;
+	hwfence_data = &hw_ctl->hwfence_data;
+
+	pending_kickoff_cnt = atomic_read(&phys_enc->pending_kickoff_cnt);
+
+	/* out of order hw fence error signal is needed for video panel. */
+	if (sde_encoder_check_curr_mode(phys_enc->parent, MSM_DISPLAY_VIDEO_MODE)) {
+		/* out of order hw fence error signal */
+		msm_hw_fence_update_txq_error(hwfence_data->hw_fence_handle,
+			phys_enc->sde_hw_fence_handle, 1, MSM_HW_FENCE_UPDATE_ERROR_WITH_MOVE);
+	/* wait for frame done to avoid out of order signalling for cmd mode. */
+	} else if (pending_kickoff_cnt) {
+		SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_FUNC_CASE1);
+		rc = sde_encoder_wait_for_event(phys_enc->parent, MSM_ENC_TX_COMPLETE);
+		if (rc && rc != -EWOULDBLOCK) {
+			SDE_DEBUG("wait for frame done failed %d\n", rc);
+			SDE_EVT32(DRMID(phys_enc->parent), rc, pending_kickoff_cnt,
+				SDE_EVTLOG_ERROR);
+		}
+	}
+
+	/* HW o/p fence override register */
+	if (hw_ctl->ops.trigger_output_fence_override) {
+		hw_ctl->ops.trigger_output_fence_override(hw_ctl);
+		SDE_DEBUG("trigger_output_fence_override executed.\n");
+		SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_FUNC_CASE2);
+	}
+
+	return rc;
+}
+
+int sde_encoder_hw_fence_error_handle(struct drm_encoder *drm_enc)
+{
+	struct sde_encoder_virt *sde_enc;
+	struct sde_encoder_phys *phys_enc;
+	int rc = 0;
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	if (!sde_enc || !sde_enc->phys_encs[0] ||
+		!sde_enc->phys_encs[0]->sde_hw_fence_error_status)
+		return 0;
+
+	SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_ENTRY);
+
+	phys_enc = sde_enc->phys_encs[0];
+
+	rc = sde_encoder_hw_fence_signal(phys_enc);
+	if (rc) {
+		SDE_DEBUG("sde_encoder_hw_fence_signal error, rc = %d.\n", rc);
+		SDE_EVT32(DRMID(drm_enc), rc, SDE_EVTLOG_ERROR);
+	}
+
+	phys_enc->sde_hw_fence_error_status = false;
+	SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_EXIT);
+	return rc;
+}
+
 static void sde_encoder_input_event_handler(struct input_handle *handle,
 	unsigned int type, unsigned int code, int value)
 {
@@ -4548,6 +4618,70 @@ void sde_encoder_early_wakeup(struct drm_encoder *drm_enc)
 	kthread_queue_work(&disp_thread->worker,
 				&sde_enc->early_wakeup_work);
 	SDE_ATRACE_END("queue_early_wakeup_work");
+}
+
+void sde_encoder_handle_hw_fence_error(int ctl_idx, struct sde_kms *sde_kms, u32 handle, int error)
+{
+	struct drm_encoder *drm_enc;
+	struct sde_encoder_virt *sde_enc;
+	struct sde_encoder_phys *cur_master;
+	struct sde_crtc *sde_crtc;
+	struct sde_crtc_state *sde_crtc_state;
+	bool encoder_detected = false;
+	bool handle_fence_error;
+
+	SDE_EVT32(ctl_idx, handle, error, SDE_EVTLOG_FUNC_ENTRY);
+
+	if (!sde_kms || !sde_kms->dev) {
+		SDE_ERROR("Invalid sde_kms or sde_kms->dev\n");
+		return;
+	}
+
+	drm_for_each_encoder(drm_enc, sde_kms->dev) {
+		sde_enc = to_sde_encoder_virt(drm_enc);
+
+		if (sde_enc && sde_enc->phys_encs[0] && sde_enc->phys_encs[0]->hw_ctl &&
+			sde_enc->phys_encs[0]->hw_ctl->idx == ctl_idx) {
+			encoder_detected = true;
+			cur_master = sde_enc->phys_encs[0];
+			SDE_EVT32(ctl_idx, SDE_EVTLOG_FUNC_CASE1);
+			break;
+		}
+	}
+
+	if (!encoder_detected) {
+		SDE_DEBUG("failed to get the sde_encoder_phys.\n");
+		SDE_EVT32(ctl_idx, SDE_EVTLOG_FUNC_CASE2, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	if (!cur_master->parent || !cur_master->parent->crtc || !cur_master->parent->crtc->state) {
+		SDE_DEBUG("unexpected null pointer in cur_master.\n");
+		SDE_EVT32(ctl_idx, SDE_EVTLOG_FUNC_CASE3, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	sde_crtc = to_sde_crtc(cur_master->parent->crtc);
+	sde_crtc_state = to_sde_crtc_state(cur_master->parent->crtc->state);
+	handle_fence_error = sde_crtc_get_property(sde_crtc_state, CRTC_PROP_HANDLE_FENCE_ERROR);
+	if (!handle_fence_error) {
+		SDE_DEBUG("userspace not enabled handle fence error in kernel.\n");
+		SDE_EVT32(ctl_idx, SDE_EVTLOG_FUNC_CASE4);
+		return;
+	}
+
+	cur_master->sde_hw_fence_handle = handle;
+
+	if (error) {
+		sde_crtc->handle_fence_error_bw_update = true;
+		cur_master->sde_hw_fence_error_status = true;
+		cur_master->sde_hw_fence_error_value = error;
+	}
+
+	atomic_add_unless(&cur_master->pending_retire_fence_cnt, -1, 0);
+	wake_up_all(&cur_master->pending_kickoff_wq);
+
+	SDE_EVT32(ctl_idx, error, SDE_EVTLOG_FUNC_EXIT);
 }
 
 int sde_encoder_poll_line_counts(struct drm_encoder *drm_enc)
