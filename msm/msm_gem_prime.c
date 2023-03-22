@@ -117,7 +117,8 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 	struct device *attach_dev = NULL;
 	struct msm_drm_private *priv;
 	struct msm_kms *kms;
-	bool lazy_unmap = true, is_vmid_tvm = false, is_vmid_cp_pixel = false;
+	bool lazy_unmap = true;
+	bool is_vmid_tvm = false, is_vmid_cp_pixel = false, is_vmid_cam_preview = false;
 	int *vmid_list, *perms_list;
 	int nelems = 0, i, ret;
 	unsigned long dma_map_attrs = 0;
@@ -173,6 +174,9 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 			is_vmid_tvm = false;
 			dma_map_attrs = 0;
 			break;
+		} else if (vmid_list[i] == VMID_CP_CAMERA_PREVIEW) {
+			is_vmid_cam_preview = true;
+			break;
 		}
 	}
 
@@ -186,7 +190,7 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 	 */
 	if (is_vmid_cp_pixel) {
 		attach_dev = kms->funcs->get_address_space_device(kms, MSM_SMMU_DOMAIN_SECURE);
-	} else if (!iommu_present(&platform_bus_type) || is_vmid_tvm) {
+	} else if (!iommu_present(&platform_bus_type) || is_vmid_tvm || is_vmid_cam_preview) {
 		attach_dev = dev->dev;
 		lazy_unmap = false;
 	} else {
