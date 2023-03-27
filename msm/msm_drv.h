@@ -198,6 +198,7 @@ enum msm_mdp_crtc_property {
 	CRTC_PROP_VM_REQ_STATE,
 	CRTC_PROP_NOISE_LAYER_V1,
 	CRTC_PROP_FRAME_DATA_BUF,
+	CRTC_PROP_HANDLE_FENCE_ERROR,
 
 	/* total # of properties */
 	CRTC_PROP_COUNT

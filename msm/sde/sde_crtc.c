@@ -6594,6 +6594,11 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 		{SDE_DRM_SEC_ONLY, "sec_only"},
 	};
 
+	static const struct drm_prop_enum_list e_fence_error_handle_flag[] = {
+		{FENCE_ERROR_HANDLE_DISABLE, "fence_error_handle_disable"},
+		{FENCE_ERROR_HANDLE_ENABLE, "fence_error_handle_enable"},
+	};
+
 	static const struct drm_prop_enum_list e_cwb_data_points[] = {
 		{CAPTURE_MIXER_OUT, "capture_mixer_out"},
 		{CAPTURE_DSPP_OUT, "capture_pp_out"},
@@ -6681,6 +6686,11 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 				"capture_mode", 0, 0, e_cwb_data_points,
 				ARRAY_SIZE(e_cwb_data_points), 0,
 				CRTC_PROP_CAPTURE_OUTPUT);
+
+	msm_property_install_enum(&sde_crtc->property_info,
+		"fence_error_handle_flag", 0, 0, e_fence_error_handle_flag,
+		ARRAY_SIZE(e_fence_error_handle_flag), 0,
+		CRTC_PROP_HANDLE_FENCE_ERROR);
 
 	msm_property_install_volatile_range(&sde_crtc->property_info,
 		"sde_drm_roi_v1", 0x0, 0, ~0, 0, CRTC_PROP_ROI_V1);

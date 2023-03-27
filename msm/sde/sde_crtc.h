@@ -65,6 +65,16 @@ enum sde_crtc_output_capture_point {
 };
 
 /**
+ * enum fence_error_handle_flag: the flag to enable/disable fence error handling in kernel
+ * @FENCE_ERROR_HANDLE_DISABLE : disable fence error handling in kernel
+ * @FENCE_ERROR_HANDLE_ENABLE : enable fence error handling in kernel
+ */
+enum fence_error_handle_flag {
+	FENCE_ERROR_HANDLE_DISABLE,
+	FENCE_ERROR_HANDLE_ENABLE,
+};
+
+/**
  * enum sde_crtc_idle_pc_state: states of idle power collapse
  * @IDLE_PC_NONE: no-op
  * @IDLE_PC_ENABLE: enable idle power-collapse
