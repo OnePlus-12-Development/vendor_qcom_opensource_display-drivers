@@ -1098,6 +1098,8 @@ static int _sde_encoder_atomic_check_reserve(struct drm_encoder *drm_enc,
 
 		sub_mode.dsc_mode = sde_connector_get_property(conn_state,
 				CONNECTOR_PROP_DSC_MODE);
+		sub_mode.pixel_format_mode = sde_connector_get_property(conn_state,
+				CONNECTOR_PROP_BPP_MODE);
 		ret = sde_connector_get_mode_info(&sde_conn->base,
 				adj_mode, &sub_mode, &sde_conn_state->mode_info);
 		if (ret) {
@@ -3348,8 +3350,8 @@ static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 	bpc = dsc->config.bits_per_component;
 	bpp = dsc->config.bits_per_pixel;
 
-	/* disable dither for 10 bpp or 10bpc dsc config */
-	if (bpp == 10 || bpc == 10) {
+	/* disable dither for 10 bpp or 10bpc dsc config or 30bpp without dsc */
+	if (bpp == 10 || bpc == 10 || sde_enc->mode_info.bpp == 30) {
 		phys->hw_pp->ops.setup_dither(phys->hw_pp, NULL, 0);
 		return;
 	}

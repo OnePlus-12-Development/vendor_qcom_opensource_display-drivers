@@ -947,6 +947,7 @@ static int dsi_panel_parse_pixel_format(struct dsi_host_common_cfg *host,
 	u32 bpp = 0;
 	enum dsi_pixel_format fmt;
 	const char *packing;
+	bool bpp_switch_enabled;
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bpp", &bpp);
 	if (rc) {
@@ -991,6 +992,10 @@ static int dsi_panel_parse_pixel_format(struct dsi_host_common_cfg *host,
 	}
 
 	host->dst_format = fmt;
+
+	bpp_switch_enabled = utils->read_bool(utils->data, "qcom,mdss-dsi-bpp-switch");
+	host->bpp_switch_enabled = bpp_switch_enabled;
+
 	return rc;
 }
 
@@ -3294,6 +3299,37 @@ static bool dsi_panel_parse_panel_mode_caps(struct dsi_display_mode *mode,
 	return true;
 };
 
+static int dsi_panel_parse_bpp_mode_caps(struct dsi_display_mode *mode,
+				struct dsi_parser_utils *utils)
+{
+	int rc = 0;
+	u32 bpp = 0;
+
+	if (!mode || !mode->priv_info) {
+		DSI_ERR("invalid arguments\n");
+		return -EINVAL;
+	}
+
+	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-bpp-mode", &bpp);
+	if (rc) {
+		DSI_DEBUG("bpp mode not defined in timing node, setting default 24bpp\n");
+		mode->pixel_format_caps = DSI_PIXEL_FORMAT_RGB888;
+		return 0;
+	}
+
+	switch(bpp) {
+	case 30:
+		mode->pixel_format_caps = DSI_PIXEL_FORMAT_RGB101010;
+		break;
+	case 24:
+	default:
+		mode->pixel_format_caps = DSI_PIXEL_FORMAT_RGB888;
+		break;
+	}
+
+	return rc;
+};
+
 static int dsi_panel_parse_dms_info(struct dsi_panel *panel)
 {
 	int dms_enabled;
@@ -4084,7 +4120,7 @@ void dsi_panel_calc_dsi_transfer_time(struct dsi_host_common_cfg *config,
 					* timing->v_active));
 		/* calculate the actual bitclk needed to transfer the frame */
 		min_bitclk_hz = (total_active_pixels * (timing->refresh_rate) *
-				(config->bpp));
+				(mode->bpp));
 		do_div(min_bitclk_hz, config->num_data_lanes);
 	}
 
@@ -4161,7 +4197,7 @@ void dsi_panel_calc_dsi_transfer_time(struct dsi_host_common_cfg *config,
 	do_div(pclk_rate_hz, timing->dsi_transfer_time_us);
 
 	pixel_clk_khz = pclk_rate_hz * config->num_data_lanes;
-	do_div(pixel_clk_khz, config->bpp);
+	do_div(pixel_clk_khz, mode->bpp);
 	display_mode->pixel_clk_khz = pixel_clk_khz;
 
 	display_mode->pixel_clk_khz =  display_mode->pixel_clk_khz / 1000;
@@ -4229,6 +4265,17 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 		} else {
 			mode->panel_mode_caps = panel->panel_mode;
 		}
+
+		if (panel->host_config.bpp_switch_enabled) {
+			rc = dsi_panel_parse_bpp_mode_caps(mode, utils);
+			if (rc) {
+				DSI_ERR("failed to parse bpp mode caps, rc=%d\n", rc);
+				goto parse_fail;
+			}
+		} else {
+			mode->pixel_format_caps = panel->host_config.dst_format;
+		}
+		mode->bpp = dsi_pixel_format_to_bpp(mode->pixel_format_caps);
 
 		rc = utils->read_u32(utils->data, "cell-index", &mode->mode_idx);
 		if (rc)

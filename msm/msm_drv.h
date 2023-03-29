@@ -255,6 +255,7 @@ enum msm_mdp_conn_property {
 	CONNECTOR_PROP_WB_USAGE_TYPE,
 	CONNECTOR_PROP_WB_ROT_TYPE,
 	CONNECTOR_PROP_WB_ROT_BYTES_PER_CLK,
+	CONNECTOR_PROP_BPP_MODE,
 
 	/* total # of properties */
 	CONNECTOR_PROP_COUNT
@@ -349,6 +350,18 @@ enum panel_op_mode {
 };
 
 /**
+ * enum msm_display_pixel_format - display dsi pixel format
+ * @MSM_DISPLAY_PIXEL_FORMAT_NONE: none
+ * @MSM_DISPLAY_PIXEL_FORMAT_RGB888: 24BPP
+ * @MSM_DISPLAY_PIXEL_FORMAT_RGB101010: 30BPP
+ */
+enum msm_display_pixel_format {
+	MSM_DISPLAY_PIXEL_FORMAT_NONE,
+	MSM_DISPLAY_PIXEL_FORMAT_RGB888,
+	MSM_DISPLAY_PIXEL_FORMAT_RGB101010,
+};
+
+/**
  * enum msm_display_dsc_mode - panel dsc mode
  * @MSM_DISPLAY_DSC_MODE_NONE: No operation
  * @MSM_DISPLAY_DSC_MODE_ENABLED: DSC is enabled
@@ -375,9 +388,11 @@ struct msm_display_mode {
 /**
  * struct msm_sub_mode - msm display sub mode
  * @dsc_enabled: boolean used to indicate if dsc should be enabled
+ * @pixel_format_mode: used to indicate pixel format mode
  */
 struct msm_sub_mode {
 	enum msm_display_dsc_mode dsc_mode;
+	enum msm_display_pixel_format pixel_format_mode;
 };
 
 /**
@@ -806,6 +821,8 @@ struct msm_display_wd_jitter_config {
  * @roi_caps:        panel roi capabilities
  * @wide_bus_en:	wide-bus mode cfg for interface module
  * @panel_mode_caps   panel mode capabilities
+ * @pixel_format_caps      pixel format capabilities.
+ * @bpp                    bits per pixel.
  * @mdp_transfer_time_us   Specifies the mdp transfer time for command mode
  *                         panels in microseconds.
  * @mdp_transfer_time_us_min   Specifies the minimum possible mdp transfer time
@@ -833,6 +850,8 @@ struct msm_mode_info {
 	struct msm_roi_caps roi_caps;
 	bool wide_bus_en;
 	u32 panel_mode_caps;
+	u32 pixel_format_caps;
+	u32 bpp;
 	u32 mdp_transfer_time_us;
 	u32 mdp_transfer_time_us_min;
 	u32 mdp_transfer_time_us_max;

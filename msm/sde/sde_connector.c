@@ -86,6 +86,11 @@ static const struct drm_prop_enum_list e_panel_mode[] = {
 	{MSM_DISPLAY_CMD_MODE, "command_mode"},
 	{MSM_DISPLAY_MODE_MAX, "none"},
 };
+static const struct drm_prop_enum_list e_bpp_mode[] = {
+	{MSM_DISPLAY_PIXEL_FORMAT_NONE, "none"},
+	{MSM_DISPLAY_PIXEL_FORMAT_RGB888, "dsi_24bpp"},
+	{MSM_DISPLAY_PIXEL_FORMAT_RGB101010, "dsi_30bpp"},
+};
 
 static void sde_dimming_bl_notify(struct sde_connector *conn, struct dsi_backlight_config *config)
 {
@@ -3244,6 +3249,9 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 			ARRAY_SIZE(e_panel_mode),
 			(dsi_display->panel->panel_mode == DSI_OP_VIDEO_MODE) ? 0 : 1,
 			CONNECTOR_PROP_SET_PANEL_MODE);
+
+		msm_property_install_enum(&c_conn->property_info, "bpp_mode", 0,
+			0, e_bpp_mode, ARRAY_SIZE(e_bpp_mode), 0, CONNECTOR_PROP_BPP_MODE);
 
 		if (test_bit(SDE_FEATURE_DEMURA, sde_kms->catalog->features)) {
 			msm_property_install_blob(&c_conn->property_info,
