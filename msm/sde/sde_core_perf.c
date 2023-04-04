@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1442,6 +1442,8 @@ int sde_core_perf_debugfs_init(struct sde_core_perf *perf,
 			&sde_kms->catalog->uidle_cfg.fal1_max_threshold);
 	debugfs_create_bool("uidle_enable", 0600, perf->debugfs_root,
 			&sde_kms->catalog->uidle_cfg.debugfs_ctrl);
+	debugfs_create_bool("uidle_status", 0400, perf->debugfs_root,
+			&sde_kms->perf.uidle_enabled);
 
 	return 0;
 }
