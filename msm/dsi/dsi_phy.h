@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DSI_PHY_H_
@@ -76,6 +77,7 @@ enum phy_ulps_return_type {
  * @regulator_min_datarate_bps: Minimum per lane data rate to turn on regulator
  * @regulator_required: True if phy regulator is required
  * @dfps_trigger_mdpintf_flush: mdp intf flush controls dfps trigger.
+ * @dsi_phy_shared:	True if phy is shared between dual displays.
  */
 struct msm_dsi_phy {
 	struct platform_device *pdev;
@@ -104,6 +106,7 @@ struct msm_dsi_phy {
 	u32 regulator_min_datarate_bps;
 	bool regulator_required;
 	bool dfps_trigger_mdpintf_flush;
+	bool dsi_phy_shared;
 };
 
 /**
