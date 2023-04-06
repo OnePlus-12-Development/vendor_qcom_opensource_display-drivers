@@ -19,6 +19,7 @@
 #include "sde_core_irq.h"
 #include "dsi_panel.h"
 #include "sde_hw_color_proc_common_v4.h"
+#include "sde_vm.h"
 
 struct sde_cp_node {
 	u32 property_id;
@@ -3922,6 +3923,14 @@ static void _sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 		SDE_ERROR("invalid arg(s)\n");
 		return;
 	}
+
+	sde_vm_lock(kms);
+	if (!sde_vm_owns_hw(kms)) {
+		SDE_DEBUG("op not supported due to HW unavailability\n");
+		sde_vm_unlock(kms);
+		return;
+	}
+	sde_vm_unlock(kms);
 
 	/* disable histogram irq */
 	spin_lock_irqsave(&crtc->spin_lock, flags);
