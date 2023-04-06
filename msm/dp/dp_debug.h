@@ -69,6 +69,10 @@
 		pr_warn("[drm:%s][msm-dp-warn][%-4d]"fmt, __func__,  \
 				current->pid, ##__VA_ARGS__)
 
+#define DP_WARN_RATELIMITED_V(fmt, ...)                                    \
+		pr_warn_ratelimited("[drm:%s][msm-dp-warn][%-4d]"fmt, __func__,  \
+				current->pid, ##__VA_ARGS__)
+
 #define DP_ERR_V(fmt, ...)                                    \
 		pr_err("[drm:%s][msm-dp-err][%-4d]"fmt, __func__,   \
 				current->pid, ##__VA_ARGS__)
