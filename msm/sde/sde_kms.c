@@ -1712,6 +1712,10 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 			SDE_EVT32(DRMID(crtc), DRMID(encoder), cwb_disabling,
 					ret, SDE_EVTLOG_ERROR);
 			sde_crtc_request_frame_reset(crtc, encoder);
+
+			/* call ensure virt_reset for cwb encoder before exiting the loop */
+			if (cwb_disabling)
+				sde_encoder_virt_reset(encoder);
 			break;
 		}
 
