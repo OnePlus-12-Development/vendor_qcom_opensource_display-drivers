@@ -442,7 +442,8 @@ static void _sde_encoder_phys_signal_frame_done(struct sde_encoder_phys *phys_en
 	 * sw must trigger the override to force the signal here
 	 */
 	if (phys_enc->autorefresh_disable_trans) {
-		if (ctl->ops.trigger_output_fence_override)
+		if (phys_enc->sde_kms && phys_enc->sde_kms->catalog->hw_fence_rev &&
+				ctl->ops.trigger_output_fence_override)
 			ctl->ops.trigger_output_fence_override(ctl);
 		phys_enc->autorefresh_disable_trans = false;
 	}
