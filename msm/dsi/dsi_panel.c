@@ -3255,15 +3255,21 @@ static int dsi_panel_parse_partial_update_caps(struct dsi_display_mode *mode,
 
 	roi_caps->enabled = roi_caps->num_roi > 0;
 
-	DSI_DEBUG("partial update num_rois=%d enabled=%d\n", roi_caps->num_roi,
-			roi_caps->enabled);
-
 	if (roi_caps->enabled)
 		rc = dsi_panel_parse_roi_alignment(utils,
 				&roi_caps->align);
 
 	if (rc)
 		memset(roi_caps, 0, sizeof(*roi_caps));
+	else if (mode->priv_info->dsc_enabled &&
+			((roi_caps->align.min_width % mode->priv_info->dsc.config.slice_width) ||
+			(roi_caps->align.min_height % mode->priv_info->dsc.config.slice_height))) {
+		memset(roi_caps, 0, sizeof(*roi_caps));
+		DSI_ERR("panel roi can't match DSC slice settings,disable partial update\n");
+	}
+
+	DSI_DEBUG("partial update num_rois=%d enabled=%d\n", roi_caps->num_roi,
+			roi_caps->enabled);
 
 	return rc;
 }
