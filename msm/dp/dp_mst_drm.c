@@ -626,7 +626,7 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 	payload = drm_atomic_get_mst_payload_state(mst_state, port);
 
 	drm_dp_mst_update_slots(mst_state, DP_CAP_ANSI_8B10B);
-	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, mst_state, payload);	
+	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, mst_state, payload);
 #else
 	ret = mst->mst_fw_cbs->allocate_vcpi(&mst->mst_mgr, port, pbn, slots);
 	if (!ret) {
@@ -1157,8 +1157,7 @@ static int dp_mst_connector_get_modes(struct drm_connector *connector,
 			&mst->mst_mgr, c_conn->mst_port);
 
 	if (!edid) {
-		DP_MST_DEBUG("get edid failed. id: %d\n",
-				connector->base.id);
+		DP_ERR("get edid failed. id: %d\n", connector->base.id);
 		goto end;
 	}
 
@@ -1172,7 +1171,6 @@ duplicate_edid:
 	mutex_unlock(&mst->edid_lock);
 
 	if (IS_ERR(edid)) {
-		rc = PTR_ERR(edid);
 		DP_MST_DEBUG("edid duplication failed. id: %d\n",
 				connector->base.id);
 		goto end;
@@ -1182,8 +1180,13 @@ duplicate_edid:
 			connector, edid);
 
 end:
-	DP_MST_DEBUG_V("exit: id: %d rc: %d\n", connector->base.id, rc);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, connector->base.id, rc);
+	if (rc <= 0) {
+		DP_ERR("conn:%d has no modes, rc=%d\n", connector->base.id, rc);
+		rc = 0;
+	} else {
+		DP_MST_INFO("conn:%d has %d modes\n", connector->base.id, rc);
+	}
 
 	return rc;
 }
@@ -1626,7 +1629,7 @@ dp_mst_add_connector(struct drm_dp_mst_topology_mgr *mgr,
 }
 
 static int
-dp_mst_fixed_connector_detect(struct drm_connector *connector, 
+dp_mst_fixed_connector_detect(struct drm_connector *connector,
 			struct drm_modeset_acquire_ctx *ctx,
 			bool force,
 			void *display)
