@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
  */
 
@@ -130,21 +130,21 @@ static void sde_hw_dsc_4hs_config(struct sde_hw_dsc *hw_dsc,
 		struct msm_display_dsc_info *dsc, u32 mode, u32 idx)
 {
 	struct sde_hw_blk_reg_map *dsc_c;
-	u32 data = 0;
-
-	if (!dsc->dsc_4hsmerge_en)
-		return;
+	u32 data = 0, en = 0;
 
 	dsc_c = &hw_dsc->hw;
 
 	if (test_bit(SDE_DSC_4HS, &hw_dsc->caps->features)) {
-		data = dsc->dsc_4hsmerge_alignment << 12;
-		data |= dsc->dsc_4hsmerge_padding << 8;
-		data |= ((mode & DSC_MODE_VIDEO) ? 1 : 0);
+		if (dsc->dsc_4hsmerge_en) {
+			data = dsc->dsc_4hsmerge_alignment << 12;
+			data |= dsc->dsc_4hsmerge_padding << 8;
+			data |= ((mode & DSC_MODE_VIDEO) ? 1 : 0);
+			en = BIT(0);
+		}
 
 		SDE_REG_WRITE(dsc_c, DSC_4HS_MERGE_CFG + idx, data);
-		SDE_REG_WRITE(dsc_c, DSC_4HS_MERGE_EN + idx, BIT(0));
-	} else {
+		SDE_REG_WRITE(dsc_c, DSC_4HS_MERGE_EN + idx, en);
+	} else if (dsc->dsc_4hsmerge_en) {
 		data = SDE_REG_READ(dsc_c, DSC_CFG + idx);
 
 		data |= dsc->dsc_4hsmerge_padding << 18;
