@@ -2947,8 +2947,8 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 			+ dp_panel->max_lm;
 
 	if (num_lm > avail_lm) {
-		DP_DEBUG("mode %sx%d is invalid, not enough lm %d %d\n",
-				mode->name, fps, num_lm, avail_res->num_lm);
+		DP_DEBUG("mode %sx%d is invalid, not enough lm req:%d avail:%d\n",
+				mode->name, fps, num_lm, avail_lm);
 		rc = -EPERM;
 		goto end;
 	} else if (!num_dsc && (num_lm == dual && !num_3dmux)) {
