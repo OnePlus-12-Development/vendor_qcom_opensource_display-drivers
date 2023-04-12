@@ -285,6 +285,13 @@ struct sde_hw_ctl_ops {
 	void (*uidle_enable)(struct sde_hw_ctl *ctx, bool enable);
 
 	/**
+	 * clear flush mask
+	 * @ctx       : ctl path ctx pointer
+	 * @clear     : true to clear the flush mask
+	 */
+	int (*clear_flush_mask)(struct sde_hw_ctl *ctx, bool clear);
+
+	/**
 	 * Clear the value of the cached pending_flush_mask
 	 * No effect on hardware
 	 * @ctx       : ctl path ctx pointer

@@ -2225,6 +2225,11 @@ int sde_encoder_hw_fence_error_handle(struct drm_encoder *drm_enc)
 		}
 	}
 
+	if (phys_enc->hw_ctl->ops.clear_flush_mask) {
+		phys_enc->hw_ctl->ops.clear_flush_mask(phys_enc->hw_ctl, true);
+		SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_CASE2);
+	}
+
 	phys_enc->sde_hw_fence_error_status = false;
 	SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_EXIT);
 	return rc;
@@ -4232,6 +4237,12 @@ static inline void _sde_encoder_trigger_flush(struct drm_encoder *drm_enc,
 			c_conn->ops.update_pps(phys->connector, NULL, c_conn->display);
 
 		ctl->ops.update_bitmask(ctl, SDE_HW_FLUSH_PERIPH, phys->hw_intf->idx, 1);
+	}
+
+	/* update flush mask to ignore fence error frame commit */
+	if (ctl->ops.clear_flush_mask && phys->fence_error_handle_in_progress) {
+		ctl->ops.clear_flush_mask(ctl, false);
+		SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_CASE1);
 	}
 
 	if ((extra_flush && extra_flush->pending_flush_mask)

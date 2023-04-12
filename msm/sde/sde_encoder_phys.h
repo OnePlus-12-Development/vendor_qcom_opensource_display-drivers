@@ -132,6 +132,7 @@ struct sde_encoder_virt_ops {
  * @handle_post_kickoff:	Do any work necessary post-kickoff work
  * @trigger_flush:		Process flush event on physical encoder
  * @trigger_start:		Process start event on physical encoder
+ * @clear_flush_mask:		clear flush mask
  * @needs_single_flush:		Whether encoder slaves need to be flushed
  * @setup_misr:		Sets up MISR, enable and disables based on sysfs
  * @collect_misr:		Collects MISR data on frame update
@@ -186,6 +187,7 @@ struct sde_encoder_phys_ops {
 	void (*handle_post_kickoff)(struct sde_encoder_phys *phys_enc);
 	void (*trigger_flush)(struct sde_encoder_phys *phys_enc);
 	void (*trigger_start)(struct sde_encoder_phys *phys_enc);
+	void (*clear_flush_mask)(struct sde_encoder_phys *phys_enc, bool clear);
 	bool (*needs_single_flush)(struct sde_encoder_phys *phys_enc);
 
 	void (*setup_misr)(struct sde_encoder_phys *phys_encs,
