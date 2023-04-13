@@ -4399,6 +4399,14 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc,
 	}
 
 	sde_crtc = to_sde_crtc(sde_enc->crtc);
+
+	/* reset input fence status and skip flush for fence error case. */
+	if (sde_crtc->input_fence_status < 0) {
+		SDE_EVT32(DRMID(&sde_enc->base), sde_crtc->input_fence_status);
+		sde_crtc->input_fence_status = 0;
+		goto handle_elevated_ahb_vote;
+	}
+
 	if (sde_encoder_check_curr_mode(&sde_enc->base, MSM_DISPLAY_VIDEO_MODE))
 		is_vid_mode = true;
 
@@ -4476,6 +4484,7 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc,
 
 	_sde_encoder_trigger_start(sde_enc->cur_master);
 
+handle_elevated_ahb_vote:
 	if (sde_enc->elevated_ahb_vote) {
 		sde_kms = sde_encoder_get_kms(&sde_enc->base);
 		priv = sde_enc->base.dev->dev_private;

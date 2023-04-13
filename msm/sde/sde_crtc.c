@@ -3856,6 +3856,48 @@ exit:
 }
 
 /**
+ * sde_crtc_sw_fence_error_handle - sw fence error handing
+ * @crtc: Pointer to CRTC object.
+ * @err_status: true if sw input fence error
+ *
+ * return 0 if success non-zero otherwise
+ */
+int sde_crtc_sw_fence_error_handle(struct drm_crtc *crtc, int err_status)
+{
+	struct sde_crtc *sde_crtc = NULL;
+	struct drm_encoder *drm_encoder;
+	bool handle_sw_fence_error_flag;
+	int rc = 0;
+
+	if (!crtc) {
+		SDE_ERROR("invalid crtc\n");
+		return -EINVAL;
+	}
+
+	handle_sw_fence_error_flag = sde_crtc_get_property(
+		to_sde_crtc_state(crtc->state), CRTC_PROP_HANDLE_FENCE_ERROR);
+
+	if (!handle_sw_fence_error_flag || (err_status >= 0))
+		return 0;
+
+	SDE_EVT32(handle_sw_fence_error_flag, err_status);
+
+	sde_crtc = to_sde_crtc(crtc);
+	sde_crtc->input_fence_status = err_status;
+	sde_crtc->handle_fence_error_bw_update = true;
+
+	drm_for_each_encoder_mask(drm_encoder, crtc->dev, crtc->state->encoder_mask) {
+		rc = sde_encoder_handle_dma_fence_out_of_order(drm_encoder);
+		if (rc) {
+			SDE_DEBUG("Dma fence out of order failed, rc = %d\n", rc);
+			SDE_EVT32(rc, SDE_EVTLOG_ERROR);
+		}
+	}
+
+	return rc;
+}
+
+/**
  * _sde_crtc_fences_wait_list - wait for input sw-fences and return any hw-fences
  * @crtc: Pointer to CRTC object.
  * @use_hw_fences: Boolean to indicate if function should use hw-fences and skip hw-fences sw-wait.
@@ -3936,6 +3978,8 @@ static int _sde_crtc_fences_wait_list(struct drm_crtc *crtc, bool use_hw_fences,
 			rc = sde_plane_wait_input_fence(plane, wait_ms, &status);
 		} while (wait_ms && rc == -ERESTARTSYS);
 	}
+
+	sde_crtc_sw_fence_error_handle(crtc, status);
 
 	return num_hw_fences;
 }
