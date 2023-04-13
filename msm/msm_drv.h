@@ -976,6 +976,28 @@ struct msm_drm_thread {
 	struct kthread_worker worker;
 };
 
+/**
+ * struct msm_fence_error_ops - hooks for communication with fence error clients
+ * @fence_error_handle_submodule: fence error handle for display submodule
+ */
+struct msm_fence_error_ops {
+	int (*fence_error_handle_submodule)(void *ctl_data, void *priv_data);
+};
+
+/**
+ * msm_fence_error_client_entry - defines the msm fence error client info
+ * @ops: client msm_fence_error_ops
+ * @dev: client device id
+ * @data: client custom data
+ * @list: linked list entry
+ */
+struct msm_fence_error_client_entry {
+	struct msm_fence_error_ops ops;
+	struct device *dev;
+	void *data;
+	struct list_head list;
+};
+
 struct msm_drm_private {
 
 	struct drm_device *dev;
@@ -1102,6 +1124,9 @@ struct msm_drm_private {
 
 	struct mutex vm_client_lock;
 	struct list_head vm_client_list;
+
+	struct mutex fence_error_client_lock;
+	struct list_head fence_error_client_list;
 };
 
 /* get struct msm_kms * from drm_device * */
@@ -1137,6 +1162,25 @@ void msm_atomic_state_clear(struct drm_atomic_state *state);
 void msm_atomic_state_free(struct drm_atomic_state *state);
 
 void msm_atomic_flush_display_threads(struct msm_drm_private *priv);
+
+/**
+ * msm_register_fence_error_event - api for display dependent drivers(clients) to
+ *                         register for fence error events
+ * @dev: msm device
+ * @ops: fence error event hooks
+ * @priv_data: client custom data
+ */
+void *msm_register_fence_error_event(struct drm_device *ddev, struct msm_fence_error_ops *ops,
+		void *priv_data);
+
+/**
+ * msm_unregister_fence_error_event - api for display dependent drivers(clients) to
+ *                         unregister for fence error events
+ * @dev: msm device
+ * @client_entry_handle: client_entry pointer
+ */
+int msm_unregister_fence_error_event(struct drm_device *ddev,
+		struct msm_fence_error_client_entry *client_entry_handle);
 
 int msm_gem_init_vma(struct msm_gem_address_space *aspace,
 		struct msm_gem_vma *vma, int npages);

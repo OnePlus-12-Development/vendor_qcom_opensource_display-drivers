@@ -3867,6 +3867,10 @@ int sde_crtc_sw_fence_error_handle(struct drm_crtc *crtc, int err_status)
 	struct sde_crtc *sde_crtc = NULL;
 	struct drm_encoder *drm_encoder;
 	bool handle_sw_fence_error_flag;
+	struct sde_kms *sde_kms;
+	struct sde_hw_ctl *hw_ctl;
+	struct msm_drm_private *priv;
+	struct msm_fence_error_client_entry *entry;
 	int rc = 0;
 
 	if (!crtc) {
@@ -3891,6 +3895,29 @@ int sde_crtc_sw_fence_error_handle(struct drm_crtc *crtc, int err_status)
 		if (rc) {
 			SDE_DEBUG("Dma fence out of order failed, rc = %d\n", rc);
 			SDE_EVT32(rc, SDE_EVTLOG_ERROR);
+		}
+	}
+
+	hw_ctl = _sde_crtc_get_hw_ctl(crtc);
+	sde_kms = _sde_crtc_get_kms(crtc);
+	if (!sde_kms || !sde_kms->dev || !sde_kms->dev->dev_private) {
+		SDE_EVT32(DRMID(crtc), SDE_EVTLOG_ERROR);
+		SDE_DEBUG("invalid parameters\n");
+		return -EINVAL;
+	}
+
+	priv = sde_kms->dev->dev_private;
+
+	/* display submodule fence error handling, like pp, dsi, dp. */
+	list_for_each_entry(entry, &priv->fence_error_client_list, list) {
+		if (!entry->ops.fence_error_handle_submodule)
+			continue;
+
+		rc = entry->ops.fence_error_handle_submodule(hw_ctl, entry->data);
+		if (rc) {
+			SDE_ERROR("fence_error_handle_submodule failed for device: %d\n",
+				entry->dev->id);
+			SDE_EVT32(entry->dev->id, rc, SDE_EVTLOG_ERROR);
 		}
 	}
 

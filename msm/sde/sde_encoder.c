@@ -2181,6 +2181,8 @@ int sde_encoder_hw_fence_error_handle(struct drm_encoder *drm_enc)
 {
 	struct sde_encoder_virt *sde_enc;
 	struct sde_encoder_phys *phys_enc;
+	struct msm_drm_private *priv;
+	struct msm_fence_error_client_entry *entry;
 	int rc = 0;
 
 	sde_enc = to_sde_encoder_virt(drm_enc);
@@ -2202,6 +2204,25 @@ int sde_encoder_hw_fence_error_handle(struct drm_encoder *drm_enc)
 	if (rc) {
 		SDE_DEBUG("sde_encoder_handle_dma_fence_out_of_order failed, rc = %d\n", rc);
 		SDE_EVT32(DRMID(phys_enc->parent), rc, SDE_EVTLOG_ERROR);
+	}
+
+	if (!phys_enc->sde_kms && !phys_enc->sde_kms->dev && !phys_enc->sde_kms->dev->dev_private) {
+		SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_ERROR);
+		return -EINVAL;
+	}
+
+	priv = phys_enc->sde_kms->dev->dev_private;
+	list_for_each_entry(entry, &priv->fence_error_client_list, list) {
+		if (!entry->ops.fence_error_handle_submodule)
+			continue;
+
+		SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_CASE1);
+		rc = entry->ops.fence_error_handle_submodule(phys_enc->hw_ctl, entry->data);
+		if (rc) {
+			SDE_ERROR("fence_error_handle_submodule failed for device: %d\n",
+				entry->dev->id);
+			SDE_EVT32(DRMID(drm_enc), rc, SDE_EVTLOG_ERROR);
+		}
 	}
 
 	phys_enc->sde_hw_fence_error_status = false;
