@@ -517,14 +517,18 @@ static void _dp_mst_update_timeslots(struct dp_mst_private *mst,
 				dp_bridge->num_slots = payload->time_slots;
 				dp_bridge->vcpi = payload->vcpi;
 			}
-		} else if ((payload->vc_start_slot < 0) && (dp_bridge->start_slot > prev_start)) {
-			dp_bridge->start_slot -= prev_slots;
 		}
 	}
 
 	// Now commit all the updated payloads
 	for (i = 0; i < MAX_DP_MST_DRM_BRIDGES; i++) {
 		dp_bridge = &mst->mst_bridge[i];
+
+		//Shift payloads to the left if there was a removed payload.
+		if ((payload->vc_start_slot < 0) && (dp_bridge->start_slot > prev_start)) {
+			dp_bridge->start_slot -= prev_slots;
+		}
+
 		mst->dp_display->set_stream_info(mst->dp_display, dp_bridge->dp_panel,
 				dp_bridge->id, dp_bridge->start_slot, dp_bridge->num_slots,
 				dp_bridge->pbn, dp_bridge->vcpi);
