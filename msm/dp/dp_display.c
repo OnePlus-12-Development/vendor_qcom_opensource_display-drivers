@@ -60,6 +60,8 @@
 	(dp->state &= ~(x)); \
 	dp_display_state_log("remove "#x); }
 
+#define MAX_TMDS_CLOCK_HDMI_1_4 340000
+
 enum dp_display_states {
 	DP_STATE_DISCONNECTED           = 0,
 	DP_STATE_CONFIGURED             = BIT(0),
@@ -2859,16 +2861,34 @@ static int dp_display_validate_link_clock(struct dp_display_private *dp,
 		struct drm_display_mode *mode, struct dp_display_mode dp_mode)
 {
 	u32 mode_rate_khz = 0, supported_rate_khz = 0, mode_bpp = 0;
+	u32 mode_bpc = 0, tmds_clock = 0;
 	bool dsc_en;
 	int rate;
+	struct msm_compression_info *c_info = &dp_mode.timing.comp_info;
 
-	dsc_en = dp_mode.timing.comp_info.enabled;
-	mode_bpp = dsc_en ?
-		DSC_BPP(dp_mode.timing.comp_info.dsc_info.config)
-		: dp_mode.timing.bpp;
+	dsc_en = c_info->enabled;
+
+	if (dsc_en) {
+		mode_bpp = DSC_BPP(c_info->dsc_info.config);
+		mode_bpc = c_info->dsc_info.config.bits_per_component;
+	} else {
+		mode_bpp = dp_mode.timing.bpp;
+		mode_bpc = mode_bpp / 3;
+	}
 
 	mode_rate_khz = mode->clock * mode_bpp;
 	rate = drm_dp_bw_code_to_link_rate(dp->link->link_params.bw_code);
+	tmds_clock = mode->clock * mode_bpc / 8;
+
+	/*
+	 * For a HBR 2 dongle, limit TMDS clock to ensure a max resolution
+	 * of 4k@30fps for each MST port
+	 */
+	if (dp->mst.mst_active && rate <= 540000 && tmds_clock > MAX_TMDS_CLOCK_HDMI_1_4) {
+		DP_DEBUG("Limit mode clock: %d kHz\n", mode->clock);
+		return -EPERM;
+	}
+
 	supported_rate_khz = dp->link->link_params.lane_count * rate * 8;
 
 	if (mode_rate_khz > supported_rate_khz) {
