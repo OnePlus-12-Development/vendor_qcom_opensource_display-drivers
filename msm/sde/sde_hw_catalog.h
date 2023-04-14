@@ -455,7 +455,8 @@ enum {
  * @SDE_DSPP_LTM             LTM block
  * @SDE_DSPP_SPR             SPR block
  * @SDE_DSPP_DEMURA          Demura block
- * @SDE_DSPP_RC              RC block
+ * @SDE_DSPP_RC              RC block (mask)
+ * @SDE_DSPP_RC_PU           RC block (pu)
  * @SDE_DSPP_SB              SB LUT DMA
  * @SDE_DSPP_DEMURA_CFG0_PARAM2 Demura block
  * @SDE_DSPP_MAX             maximum value
@@ -476,6 +477,7 @@ enum {
 	SDE_DSPP_SPR,
 	SDE_DSPP_DEMURA,
 	SDE_DSPP_RC,
+	SDE_DSPP_RC_PU,
 	SDE_DSPP_SB,
 	SDE_DSPP_DEMURA_CFG0_PARAM2,
 	SDE_DSPP_MAX
