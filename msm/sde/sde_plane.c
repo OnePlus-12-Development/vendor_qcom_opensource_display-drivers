@@ -2059,7 +2059,7 @@ static int sde_plane_prepare_fb(struct drm_plane *plane,
 	struct sde_plane_state *pstate = to_sde_plane_state(new_state);
 	struct sde_hw_fmt_layout layout;
 	struct msm_gem_address_space *aspace;
-	int ret;
+	int ret, mode;
 
 	if (!fb)
 		return 0;
@@ -2102,12 +2102,21 @@ static int sde_plane_prepare_fb(struct drm_plane *plane,
 		}
 	}
 
-	/* validate framebuffer layout before commit */
-	ret = sde_format_populate_layout(pstate->aspace,
-			fb, &layout);
-	if (ret) {
-		SDE_ERROR_PLANE(psde, "failed to get format layout, %d\n", ret);
-		return ret;
+	/*
+	 * Avoid mapping during the validate phase for S2-only buffer & CSF-2.5.
+	 * _sde_plane_set_scanout can handle the mapping after the scm_call during commit.
+	 */
+	mode = sde_plane_get_property(pstate, PLANE_PROP_FB_TRANSLATION_MODE);
+	if (mode != SDE_DRM_FB_SEC_DIR_TRANS) {
+		/* validate framebuffer layout before commit */
+		ret = sde_format_populate_layout(pstate->aspace, fb, &layout);
+		if (ret) {
+			SDE_ERROR_PLANE(psde, "failed to get format layout, %d\n", ret);
+			return ret;
+		}
+	} else {
+		SDE_DEBUG("deferring dma-buf mapping to commit phase\n");
+		SDE_EVT32(DRMID(plane), fb->base.id, mode);
 	}
 
 	return 0;

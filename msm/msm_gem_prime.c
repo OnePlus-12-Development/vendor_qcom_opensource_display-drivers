@@ -118,7 +118,8 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 	struct msm_drm_private *priv;
 	struct msm_kms *kms;
 	bool lazy_unmap = true;
-	bool is_vmid_tvm = false, is_vmid_cp_pixel = false, is_vmid_cam_preview = false;
+	bool is_vmid_tvm = false, is_vmid_cp_pixel = false;
+	bool is_vmid_sec_display = false, is_vmid_cam_preview = false;
 	int *vmid_list, *perms_list;
 	int nelems = 0, i, ret;
 	unsigned long dma_map_attrs = 0;
@@ -177,7 +178,11 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 		} else if (vmid_list[i] == VMID_CP_CAMERA_PREVIEW) {
 			is_vmid_cam_preview = true;
 			break;
+		} else if (vmid_list[i] == VMID_CP_SEC_DISPLAY) {
+			is_vmid_sec_display = true;
+			break;
 		}
+
 	}
 
 	/* mem_buf_dma_buf_copy_vmperm uses kmemdup, do kfree to free up the memory */
@@ -190,7 +195,8 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 	 */
 	if (is_vmid_cp_pixel) {
 		attach_dev = kms->funcs->get_address_space_device(kms, MSM_SMMU_DOMAIN_SECURE);
-	} else if (!iommu_present(&platform_bus_type) || is_vmid_tvm || is_vmid_cam_preview) {
+	} else if (!iommu_present(&platform_bus_type) || is_vmid_tvm || is_vmid_cam_preview
+			|| is_vmid_sec_display) {
 		attach_dev = dev->dev;
 		lazy_unmap = false;
 	} else {
@@ -225,12 +231,20 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 
 	attach->dma_map_attrs |= dma_map_attrs;
 
-	sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
-	if (IS_ERR(sgt)) {
-		ret = PTR_ERR(sgt);
-		DRM_ERROR(
-		"dma_buf_map_attachment failure, err=%d\n", ret);
-		goto fail_detach;
+	/*
+	 * avoid map_attachment for S2-only buffers and TVM buffers as it needs to be mapped
+	 * after the SID switch scm_call and will be handled during msm_gem_get_dma_addr
+	 */
+	if (!is_vmid_tvm && !is_vmid_cam_preview && !is_vmid_sec_display) {
+		sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
+		if (IS_ERR(sgt)) {
+			ret = PTR_ERR(sgt);
+			DRM_ERROR("dma_buf_map_attachment failure, err=%d\n", ret);
+			goto fail_detach;
+		}
+	} else {
+		DRM_DEBUG("deferring dma_buf_map_attachment; tvm:%d, sec_cam:%d, sec_disp:%d\n",
+				is_vmid_tvm, is_vmid_cam_preview, is_vmid_sec_display);
 	}
 
 	/*
