@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/of_device.h>
@@ -344,6 +344,9 @@ static int dsi_phy_settings_init(struct platform_device *pdev,
 			"qcom,dsi-phy-regulator-min-datarate-bps",
 			&phy->regulator_min_datarate_bps);
 
+	phy->dsi_phy_shared = of_property_read_bool(pdev->dev.of_node,
+			"qcom,dsi-phy-shared");
+
 	return 0;
 err:
 	lane->count_per_lane = 0;
@@ -622,7 +625,8 @@ struct msm_dsi_phy *dsi_phy_get(struct device_node *of_node)
 	}
 
 	mutex_lock(&phy->phy_lock);
-	if (phy->refcount > 0) {
+	if ((phy->dsi_phy_shared && phy->refcount == 2) ||
+		(!phy->dsi_phy_shared && phy->refcount == 1)) {
 		DSI_PHY_ERR(phy, "Device under use\n");
 		phy = ERR_PTR(-EINVAL);
 	} else {

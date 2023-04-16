@@ -2080,6 +2080,8 @@ static int dsi_ctrl_dts_parse(struct dsi_ctrl *dsi_ctrl,
 
 	dsi_ctrl->frame_threshold_time_us = frame_threshold_time_us;
 
+	dsi_ctrl->dsi_ctrl_shared = of_property_read_bool(of_node, "qcom,dsi-ctrl-shared");
+
 	return 0;
 }
 
@@ -2316,7 +2318,8 @@ struct dsi_ctrl *dsi_ctrl_get(struct device_node *of_node)
 	}
 
 	mutex_lock(&ctrl->ctrl_lock);
-	if (ctrl->refcount == 1) {
+	if ((ctrl->dsi_ctrl_shared && ctrl->refcount == 2) ||
+		(!ctrl->dsi_ctrl_shared && ctrl->refcount == 1)) {
 		DSI_CTRL_ERR(ctrl, "Device in use\n");
 		mutex_unlock(&ctrl->ctrl_lock);
 		ctrl = ERR_PTR(-EBUSY);
