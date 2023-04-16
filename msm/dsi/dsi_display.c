@@ -5590,6 +5590,38 @@ static int dsi_display_pre_acquire(void *data)
 	return 0;
 }
 
+static int dsi_display_init_ctrl(struct dsi_display *display)
+{
+	struct dsi_display_ctrl *display_ctrl;
+	int i, rc = 0;
+	struct clk_ctrl_cb clk_cb;
+
+	clk_cb.priv = display;
+	clk_cb.dsi_clk_cb = dsi_display_clk_ctrl_cb;
+
+	display_for_each_ctrl(i, display) {
+		display_ctrl = &display->ctrl[i];
+
+		display_ctrl->ctrl->post_cmd_tx_workq = display->post_cmd_tx_workq;
+
+		rc = dsi_ctrl_clk_cb_register(display_ctrl->ctrl, &clk_cb);
+		if (rc) {
+			DSI_ERR("[%s] failed to register ctrl clk_cb[%d], rc=%d\n",
+				display->name, i, rc);
+				return rc;
+		}
+
+		rc = dsi_phy_clk_cb_register(display_ctrl->phy, &clk_cb);
+		if (rc) {
+			DSI_ERR("[%s] failed to register phy clk_cb[%d], rc=%d\n",
+					display->name, i, rc);
+			return rc;
+		}
+	}
+
+	return rc;
+}
+
 /**
  * dsi_display_bind - bind dsi device with controlling device
  * @dev:        Pointer to base of platform device
@@ -5605,7 +5637,6 @@ static int dsi_display_bind(struct device *dev,
 	struct drm_device *drm;
 	struct dsi_display *display;
 	struct dsi_clk_info info;
-	struct clk_ctrl_cb clk_cb;
 	void *handle = NULL;
 	struct platform_device *pdev = to_platform_device(dev);
 	char *client1 = "dsi_clk_client";
@@ -5686,7 +5717,6 @@ static int dsi_display_bind(struct device *dev,
 			goto error_ctrl_deinit;
 		}
 
-		display_ctrl->ctrl->post_cmd_tx_workq = display->post_cmd_tx_workq;
 		memcpy(&info.c_clks[i],
 				(&display_ctrl->ctrl->clk_info.core_clks),
 				sizeof(struct dsi_core_clk_info));
@@ -5740,27 +5770,6 @@ static int dsi_display_bind(struct device *dev,
 		goto error_clk_client_deinit;
 	} else {
 		display->mdp_clk_handle = handle;
-	}
-
-	clk_cb.priv = display;
-	clk_cb.dsi_clk_cb = dsi_display_clk_ctrl_cb;
-
-	display_for_each_ctrl(i, display) {
-		display_ctrl = &display->ctrl[i];
-
-		rc = dsi_ctrl_clk_cb_register(display_ctrl->ctrl, &clk_cb);
-		if (rc) {
-			DSI_ERR("[%s] failed to register ctrl clk_cb[%d], rc=%d\n",
-			       display->name, i, rc);
-			goto error_ctrl_deinit;
-		}
-
-		rc = dsi_phy_clk_cb_register(display_ctrl->phy, &clk_cb);
-		if (rc) {
-			DSI_ERR("[%s] failed to register phy clk_cb[%d], rc=%d\n",
-			       display->name, i, rc);
-			goto error_ctrl_deinit;
-		}
 	}
 
 	dsi_display_update_byte_intf_div(display);
@@ -8201,6 +8210,8 @@ int dsi_display_prepare(struct dsi_display *display)
 
 	display->hw_ownership = true;
 	mode = display->panel->cur_mode;
+
+	dsi_display_init_ctrl(display);
 
 	dsi_display_set_ctrl_esd_check_flag(display, false);
 
