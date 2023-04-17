@@ -1905,6 +1905,26 @@ void sde_conn_timeline_status(struct drm_connector *conn)
 	sde_fence_timeline_status(c_conn->retire_fence, &conn->base);
 }
 
+void sde_connector_fence_error_ctx_signal(struct drm_connector *conn, int input_fence_status,
+	bool is_vid)
+{
+	struct sde_connector *sde_conn;
+	struct sde_fence_context *ctx;
+	ktime_t time_stamp;
+
+	sde_conn = to_sde_connector(conn);
+	if (!sde_conn)
+		return;
+
+	ctx = sde_conn->retire_fence;
+	sde_fence_error_ctx_update(ctx, input_fence_status,
+		is_vid ? SET_ERROR_ONLY_VID : SET_ERROR_ONLY_CMD_RETIRE);
+	time_stamp = ktime_get();
+
+	sde_fence_signal(ctx, time_stamp, SDE_FENCE_SIGNAL, NULL);
+	sde_fence_error_ctx_update(ctx, 0, NO_ERROR);
+}
+
 void sde_connector_prepare_fence(struct drm_connector *connector)
 {
 	if (!connector) {

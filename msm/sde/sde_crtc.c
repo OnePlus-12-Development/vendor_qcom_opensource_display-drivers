@@ -3879,7 +3879,7 @@ static int _sde_crtc_fences_wait_list(struct drm_crtc *crtc, bool use_hw_fences,
 	uint32_t wait_ms = 1;
 	struct msm_display_mode *msm_mode;
 	bool mode_switch;
-	int i, rc = 0;
+	int i, status = 0, rc = 0;
 
 	msm_mode = sde_crtc_get_msm_mode(crtc->state);
 	mode_switch = msm_is_mode_seamless_poms(msm_mode);
@@ -3933,7 +3933,7 @@ static int _sde_crtc_fences_wait_list(struct drm_crtc *crtc, bool use_hw_fences,
 			else
 				wait_ms = 0;
 
-			rc = sde_plane_wait_input_fence(plane, wait_ms);
+			rc = sde_plane_wait_input_fence(plane, wait_ms, &status);
 		} while (wait_ms && rc == -ERESTARTSYS);
 	}
 

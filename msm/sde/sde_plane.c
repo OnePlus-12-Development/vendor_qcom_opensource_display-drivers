@@ -637,7 +637,7 @@ bool sde_plane_is_sw_fence_signaled(struct drm_plane *plane)
 	return false;
 }
 
-int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms)
+int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms, int *error_status)
 {
 	struct sde_plane *psde;
 	struct sde_plane_state *pstate;
@@ -657,7 +657,7 @@ int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms)
 
 		if (input_fence) {
 			prefix = sde_sync_get_name_prefix(input_fence);
-			rc = sde_sync_wait(input_fence, wait_ms);
+			rc = sde_sync_wait(input_fence, wait_ms, error_status);
 
 			switch (rc) {
 			case 0:

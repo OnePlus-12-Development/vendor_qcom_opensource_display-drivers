@@ -730,6 +730,19 @@ int sde_fence_update_input_hw_fence_signal(struct sde_hw_ctl *hw_ctl, u32 debugf
 	return 0;
 }
 
+void sde_fence_error_ctx_update(struct sde_fence_context *ctx, int input_fence_status,
+	enum sde_fence_error_state sde_fence_error_state)
+{
+	if (!ctx) {
+		SDE_DEBUG("invalid fence\n");
+		SDE_EVT32(input_fence_status, sde_fence_error_state, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	ctx->sde_fence_error_ctx.fence_error_status = input_fence_status;
+	ctx->sde_fence_error_ctx.fence_error_state = sde_fence_error_state;
+}
+
 void *sde_sync_get(uint64_t fd)
 {
 	/* force signed compare, fdget accepts an int argument */
@@ -779,7 +792,7 @@ static void sde_fence_dump_user_fds_info(struct dma_fence *base_fence)
 	}
 }
 
-signed long sde_sync_wait(void *fnc, long timeout_ms)
+signed long sde_sync_wait(void *fnc, long timeout_ms, int *error_status)
 {
 	struct dma_fence *fence = fnc;
 	int rc, status = 0;
@@ -808,6 +821,8 @@ signed long sde_sync_wait(void *fnc, long timeout_ms)
 		}
 	}
 
+	if (error_status)
+		*error_status = fence->error;
 	return rc;
 }
 
@@ -955,6 +970,8 @@ static int _sde_fence_create_fd(void *fence_ctx, uint32_t val, struct sde_hw_ctl
 		ctx->context, val);
 	kref_get(&ctx->kref);
 
+	ctx->sde_fence_error_ctx.curr_frame_fence_seqno = val;
+
 	/* create fd */
 	fd = get_unused_fd_flags(0);
 	if (fd < 0) {
@@ -1045,6 +1062,8 @@ static void _sde_fence_trigger(struct sde_fence_context *ctx, bool error, ktime_
 	unsigned long flags;
 	struct sde_fence *fc, *next;
 	bool is_signaled = false;
+	enum sde_fence_error_state fence_error_state = 0;
+	struct sde_fence_error_ctx *fence_error_ctx;
 
 	kref_get(&ctx->kref);
 
@@ -1054,10 +1073,37 @@ static void _sde_fence_trigger(struct sde_fence_context *ctx, bool error, ktime_
 		goto end;
 	}
 
+	fence_error_ctx = &ctx->sde_fence_error_ctx;
+
 	list_for_each_entry_safe(fc, next, &ctx->fence_list_head, fence_list) {
 		spin_lock_irqsave(&ctx->lock, flags);
 		if (error)
 			dma_fence_set_error(&fc->base, -EBUSY);
+
+		fence_error_state = fence_error_ctx->fence_error_state;
+		if (fence_error_state) {
+			if (fence_error_state == HANDLE_OUT_OF_ORDER &&
+				fence_error_ctx->last_good_frame_fence_seqno == fc->base.seqno) {
+				SDE_EVT32(fence_error_ctx->last_good_frame_fence_seqno,
+					fence_error_state, SDE_EVTLOG_FUNC_CASE1);
+				spin_unlock_irqrestore(&ctx->lock, flags);
+				continue;
+			} else if (((fence_error_state == HANDLE_OUT_OF_ORDER) ||
+				(fence_error_state == SET_ERROR_ONLY_VID) ||
+				(fence_error_state == SET_ERROR_ONLY_CMD_RELEASE))
+				&& (fence_error_ctx->fence_error_status < 0)) {
+				dma_fence_set_error(&fc->base, fence_error_ctx->fence_error_status);
+				dma_fence_signal_timestamp_locked(&fc->base, ts);
+				spin_unlock_irqrestore(&ctx->lock, flags);
+
+				SDE_EVT32(fence_error_state, fence_error_ctx->fence_error_status,
+					ktime_to_us(ts), fc->base.seqno, SDE_EVTLOG_FUNC_CASE2);
+				list_del_init(&fc->fence_list);
+				dma_fence_put(&fc->base);
+				continue;
+			}
+		}
+
 		is_signaled = sde_fence_signaled(&fc->base);
 		if (is_signaled)
 			dma_fence_signal_timestamp_locked(&fc->base, ts);

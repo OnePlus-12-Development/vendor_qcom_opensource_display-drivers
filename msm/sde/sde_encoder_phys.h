@@ -342,6 +342,11 @@ struct sde_encoder_irq {
  * @sde_hw_fence_handle:	Hw fence driver client handle, this handle was returned
  *				during the call 'msm_hw_fence_register' to register the
  *				client
+ * @fence_error_handle_in_progress:
+ *				bool to indicate if fence error handling in progress
+ *				This is set once fence error occurs and cleared only when
+ *				good frame is received. Not cleared in continous fence
+ *				error cases
  * @frame_trigger_mode:		frame trigger mode indication for command
  *				mode display
  * @recovered:			flag set to true when recovered from pp timeout
@@ -397,6 +402,7 @@ struct sde_encoder_phys {
 	bool sde_hw_fence_error_status;
 	int sde_hw_fence_error_value;
 	u64 sde_hw_fence_handle;
+	bool fence_error_handle_in_progress;
 	enum frame_trigger_mode_type frame_trigger_mode;
 	bool recovered;
 	bool autorefresh_disable_trans;
@@ -407,6 +413,13 @@ static inline int sde_encoder_phys_inc_pending(struct sde_encoder_phys *phys)
 {
 	return atomic_inc_return(&phys->pending_kickoff_cnt);
 }
+
+/*
+ * sde_encoder_clear_fence_error_in_progress - clear fence_error_handle_in_progress flag
+ *	after good frame
+ * @phys_enc: Pointer to physical encoder structure
+ */
+void sde_encoder_clear_fence_error_in_progress(struct sde_encoder_phys *phys_enc);
 
 /**
  * sde_encoder_hw_fence_signal - hw fence related fence error handing

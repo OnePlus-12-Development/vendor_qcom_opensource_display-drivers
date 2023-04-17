@@ -2021,6 +2021,24 @@ static void sde_encoder_misr_configure(struct drm_encoder *drm_enc,
 	sde_enc->misr_reconfigure = false;
 }
 
+void sde_encoder_clear_fence_error_in_progress(struct sde_encoder_phys *phys_enc)
+{
+	struct sde_crtc *sde_crtc;
+
+	if (!phys_enc || !phys_enc->parent || !phys_enc->parent->crtc) {
+		SDE_DEBUG("invalid sde_encoder_phys.\n");
+		return;
+	}
+
+	sde_crtc = to_sde_crtc(phys_enc->parent->crtc);
+
+	if ((!phys_enc->sde_hw_fence_error_status) && (!sde_crtc->input_fence_status) &&
+		phys_enc->fence_error_handle_in_progress) {
+		phys_enc->fence_error_handle_in_progress = false;
+		SDE_EVT32(DRMID(phys_enc->parent), phys_enc->fence_error_handle_in_progress);
+	}
+}
+
 static int sde_encoder_hw_fence_signal(struct sde_encoder_phys *phys_enc)
 {
 	struct sde_hw_ctl *hw_ctl;
@@ -2062,6 +2080,100 @@ static int sde_encoder_hw_fence_signal(struct sde_encoder_phys *phys_enc)
 		SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_FUNC_CASE2);
 	}
 
+	SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_FUNC_EXIT);
+	return rc;
+}
+
+int sde_encoder_handle_dma_fence_out_of_order(struct drm_encoder *drm_enc)
+{
+	struct drm_crtc *crtc;
+	struct sde_crtc *sde_crtc;
+	struct sde_crtc_state *cstate;
+	struct sde_encoder_virt *sde_enc;
+	struct sde_encoder_phys *phys_enc;
+	struct sde_fence_context *ctx;
+	struct drm_connector *conn;
+	bool is_vid;
+	int i, fence_status = 0, pending_kickoff_cnt = 0, rc = 0;
+	ktime_t time_stamp;
+
+	crtc = drm_enc->crtc;
+	sde_crtc = to_sde_crtc(crtc);
+	cstate = to_sde_crtc_state(crtc->state);
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	if (!sde_enc || !sde_enc->phys_encs[0]) {
+		SDE_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+
+	phys_enc = sde_enc->phys_encs[0];
+
+	ctx = sde_crtc->output_fence;
+	time_stamp = ktime_get();
+	/* out of order sw fence error signal for video panel.
+	 * Hold the last good frame for video mode panel.
+	 */
+	if (phys_enc->sde_hw_fence_error_value) {
+		fence_status = phys_enc->sde_hw_fence_error_value;
+		phys_enc->sde_hw_fence_error_value = 0;
+	} else {
+		fence_status = sde_crtc->input_fence_status;
+	}
+
+	is_vid = sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_VIDEO_MODE);
+	SDE_EVT32(is_vid, fence_status, phys_enc->fence_error_handle_in_progress);
+	if (is_vid) {
+		/* update last_good_frame_fence_seqno after at least one good frame */
+		if (!phys_enc->fence_error_handle_in_progress) {
+			ctx->sde_fence_error_ctx.last_good_frame_fence_seqno =
+				ctx->sde_fence_error_ctx.curr_frame_fence_seqno - 1;
+			phys_enc->fence_error_handle_in_progress = true;
+		}
+
+		/* signal release fence for vid panel */
+		sde_fence_error_ctx_update(ctx, fence_status, HANDLE_OUT_OF_ORDER);
+	} else {
+		/*
+		 * out of order sw fence error signal for CMD panel.
+		 * always wait frame done for cmd panel.
+		 * signal the sw fence error release fence for CMD panel.
+		 */
+		pending_kickoff_cnt = atomic_read(&phys_enc->pending_kickoff_cnt);
+
+		if (pending_kickoff_cnt) {
+			SDE_EVT32(DRMID(drm_enc), pending_kickoff_cnt, SDE_EVTLOG_FUNC_CASE1);
+			rc = sde_encoder_wait_for_event(drm_enc, MSM_ENC_TX_COMPLETE);
+			if (rc && rc != -EWOULDBLOCK) {
+				SDE_DEBUG("wait for frame done failed %d\n", rc);
+				SDE_EVT32(DRMID(drm_enc), rc, pending_kickoff_cnt,
+					SDE_EVTLOG_ERROR);
+			}
+		}
+
+		/* update fence error context for cmd panel */
+		sde_fence_error_ctx_update(ctx, fence_status, SET_ERROR_ONLY_CMD_RELEASE);
+	}
+
+	sde_fence_signal(ctx, time_stamp, SDE_FENCE_SIGNAL, NULL);
+
+	/**
+	 * clear flag in sde_fence_error_ctx after fence signal,
+	 * the last_good_frame_fence_seqno is supposed to be updated or cleared after
+	 * at least one good frame in case of constant fence error
+	 */
+	sde_fence_error_ctx_update(ctx, 0, NO_ERROR);
+
+	/* signal retire fence */
+	for (i = 0; i < cstate->num_connectors; ++i) {
+		conn = cstate->connectors[i];
+		sde_connector_fence_error_ctx_signal(conn, fence_status, is_vid);
+	}
+
+	SDE_EVT32(ctx->sde_fence_error_ctx.fence_error_status,
+		ctx->sde_fence_error_ctx.fence_error_state,
+		ctx->sde_fence_error_ctx.last_good_frame_fence_seqno, pending_kickoff_cnt);
+
 	return rc;
 }
 
@@ -2084,6 +2196,12 @@ int sde_encoder_hw_fence_error_handle(struct drm_encoder *drm_enc)
 	if (rc) {
 		SDE_DEBUG("sde_encoder_hw_fence_signal error, rc = %d.\n", rc);
 		SDE_EVT32(DRMID(drm_enc), rc, SDE_EVTLOG_ERROR);
+	}
+
+	rc = sde_encoder_handle_dma_fence_out_of_order(phys_enc->parent);
+	if (rc) {
+		SDE_DEBUG("sde_encoder_handle_dma_fence_out_of_order failed, rc = %d\n", rc);
+		SDE_EVT32(DRMID(phys_enc->parent), rc, SDE_EVTLOG_ERROR);
 	}
 
 	phys_enc->sde_hw_fence_error_status = false;

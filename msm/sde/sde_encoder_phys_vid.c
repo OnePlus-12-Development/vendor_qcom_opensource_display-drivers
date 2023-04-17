@@ -968,6 +968,9 @@ static int _sde_encoder_phys_vid_wait_for_vblank(
 	SDE_EVT32(DRMID(phys_enc->parent), event, notify, timeout, ret,
 			ret ? SDE_EVTLOG_FATAL : 0, SDE_EVTLOG_FUNC_EXIT);
 
+	if (!ret)
+		sde_encoder_clear_fence_error_in_progress(phys_enc);
+
 	return ret;
 }
 

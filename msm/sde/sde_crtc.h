@@ -375,6 +375,7 @@ enum sde_crtc_hw_fence_flags {
  *                          sde_crtc_hw_fence_flags for available fields.
  * @hwfence_out_fences_skip: number of frames to skip before create a new hw-fence, this can be
  *                   used to slow-down creation of output hw-fences for debugging purposes.
+ * @input_fence_status : input fence status, negative if the fence has been completed with error.
  * @hanle_fence_error_bw_update: bool to indicate if it is fence error and need to avoid bw vote.
  */
 struct sde_crtc {
@@ -490,6 +491,7 @@ struct sde_crtc {
 
 	DECLARE_BITMAP(hwfence_features_mask, HW_FENCE_FEATURES_MAX);
 	u32 hwfence_out_fences_skip;
+	int input_fence_status;
 	bool handle_fence_error_bw_update;
 };
 
