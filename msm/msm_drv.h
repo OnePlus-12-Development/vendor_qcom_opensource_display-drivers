@@ -961,10 +961,14 @@ struct msm_display_info {
  * struct msm_roi_list - list of regions of interest for a drm object
  * @num_rects: number of valid rectangles in the roi array
  * @roi: list of roi rectangles
+ * @roi_feature_flags: flags indicates that specific roi rect is valid or not
+ * @spr_roi: list of roi rectangles for spr
  */
 struct msm_roi_list {
 	uint32_t num_rects;
 	struct drm_clip_rect roi[MSM_MAX_ROI];
+	uint32_t roi_feature_flags;
+	struct drm_clip_rect spr_roi[MSM_MAX_ROI];
 };
 
 /**
