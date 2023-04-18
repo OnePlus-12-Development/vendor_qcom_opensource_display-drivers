@@ -90,6 +90,9 @@ struct dp_aux_private {
 	u32 aux_error_num;
 	u32 retry_cnt;
 
+	bool switch_enable;
+	int switch_orientation;
+
 	atomic_t aborted;
 };
 
@@ -844,6 +847,9 @@ static int dp_aux_configure_wcd_switch(struct dp_aux *dp_aux,
 		goto end;
 	}
 
+	if ((aux->switch_enable == enable) && (aux->switch_orientation == orientation))
+		goto end;
+
 	if (enable) {
 		status = WCD_USBSS_CABLE_CONNECT;
 
@@ -865,9 +871,12 @@ static int dp_aux_configure_wcd_switch(struct dp_aux *dp_aux,
 			enable, orientation, event);
 
 	rc = wcd_usbss_switch_update(event, status);
-
-	if (rc)
+	if (rc) {
 		DP_AUX_ERR(dp_aux, "failed to configure wcd939x i2c device (%d)\n", rc);
+	} else {
+		aux->switch_enable = enable;
+		aux->switch_orientation = orientation;
+	}
 end:
 	return rc;
 }
@@ -904,6 +913,7 @@ struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog_aux *catalog,
 	aux->aux_bridge = aux_bridge;
 	dp_aux = &aux->dp_aux;
 	aux->retry_cnt = 0;
+	aux->switch_orientation = -1;
 
 	dp_aux->isr     = dp_aux_isr;
 	dp_aux->init    = dp_aux_init;
