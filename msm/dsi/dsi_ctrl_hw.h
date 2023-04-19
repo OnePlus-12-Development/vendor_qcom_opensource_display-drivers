@@ -910,6 +910,15 @@ struct dsi_ctrl_hw_ops {
 			struct dsi_host_common_cfg *cfg);
 
 	/**
+	 * hw.ops.init_cmddma_trig_ctrl() - Initialize the default trigger used
+	 *                             for command mode DMA path.
+	 * @ctrl:	Pointer to the controller host hardware.
+	 * @cfg:	Common configuration parameters.
+	 */
+	void (*init_cmddma_trig_ctrl)(struct dsi_ctrl_hw *ctrl,
+			struct dsi_host_common_cfg *cfg);
+
+	/**
 	 * hw.ops.log_line_count() - reads the MDP interface line count
 	 *			     registers.
 	 * @ctrl:	Pointer to the controller host hardware.

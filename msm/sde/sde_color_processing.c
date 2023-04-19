@@ -19,6 +19,7 @@
 #include "sde_core_irq.h"
 #include "dsi_panel.h"
 #include "sde_hw_color_proc_common_v4.h"
+#include "sde_vm.h"
 
 struct sde_cp_node {
 	u32 property_id;
@@ -824,7 +825,7 @@ static int _set_rc_mask_feature(struct sde_hw_dspp *hw_dspp,
 		return -EINVAL;
 	}
 
-	if (!hw_dspp->ops.setup_rc_mask || !hw_dspp->ops.setup_rc_data) {
+	if (!hw_dspp->ops.setup_rc_mask) {
 		DRM_ERROR("invalid rc ops\n");
 		return -EINVAL;
 	}
@@ -836,15 +837,6 @@ static int _set_rc_mask_feature(struct sde_hw_dspp *hw_dspp,
 	if (ret) {
 		DRM_ERROR("failed to setup rc mask, ret %d\n", ret);
 		goto exit;
-	}
-
-	/* rc data should be programmed once if dspp are in multi-pipe mode */
-	if (hw_dspp->cap->sblk->rc.idx % hw_cfg->num_of_mixers == 0) {
-		ret = hw_dspp->ops.setup_rc_data(hw_dspp, hw_cfg);
-		if (ret) {
-			DRM_ERROR("failed to setup rc data, ret %d\n", ret);
-			goto exit;
-		}
 	}
 
 	_update_pu_feature_enable(sde_crtc, SDE_CP_CRTC_DSPP_RC_PU,
@@ -2328,9 +2320,6 @@ void sde_cp_crtc_apply_properties(struct drm_crtc *crtc)
 	}
 
 	_sde_cp_flush_properties(crtc);
-	if (!sde_crtc->enabled)
-		return;
-
 	mutex_lock(&sde_crtc->crtc_cp_lock);
 	_sde_clear_ltm_merge_mode(sde_crtc);
 
@@ -3925,6 +3914,14 @@ static void _sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 		SDE_ERROR("invalid arg(s)\n");
 		return;
 	}
+
+	sde_vm_lock(kms);
+	if (!sde_vm_owns_hw(kms)) {
+		SDE_DEBUG("op not supported due to HW unavailability\n");
+		sde_vm_unlock(kms);
+		return;
+	}
+	sde_vm_unlock(kms);
 
 	/* disable histogram irq */
 	spin_lock_irqsave(&crtc->spin_lock, flags);

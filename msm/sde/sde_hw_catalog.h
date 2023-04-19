@@ -270,7 +270,8 @@ struct sde_intr_irq_offsets {
  * @SDE_MDP_DHDR_MEMPOOL_4K Dynamic HDR mempool is 4k aligned
  * @SDE_MDP_PERIPH_TOP_REMOVED Indicates if periph top0 block is removed
  * @SDE_MDP_TOP_PPB_SET_SIZE   Indicates if top block supports ppb size setting
- * @SDE_MDP_MAX                Maximum value
+ * @SDE_MDP_HW_FENCE_DIR_WRITE Indicates if hw supports hw-fence dir write
+ * @SDE_MDP_MAX            Maximum value
  */
 enum {
 	SDE_MDP_PANIC_PER_PIPE = 0x1,
@@ -284,6 +285,7 @@ enum {
 	SDE_MDP_DHDR_MEMPOOL_4K,
 	SDE_MDP_PERIPH_TOP_0_REMOVED,
 	SDE_MDP_TOP_PPB_SET_SIZE,
+	SDE_MDP_HW_FENCE_DIR_WRITE,
 	SDE_MDP_MAX
 };
 
@@ -453,7 +455,8 @@ enum {
  * @SDE_DSPP_LTM             LTM block
  * @SDE_DSPP_SPR             SPR block
  * @SDE_DSPP_DEMURA          Demura block
- * @SDE_DSPP_RC              RC block
+ * @SDE_DSPP_RC              RC block (mask)
+ * @SDE_DSPP_RC_PU           RC block (pu)
  * @SDE_DSPP_SB              SB LUT DMA
  * @SDE_DSPP_DEMURA_CFG0_PARAM2 Demura block
  * @SDE_DSPP_MAX             maximum value
@@ -474,6 +477,7 @@ enum {
 	SDE_DSPP_SPR,
 	SDE_DSPP_DEMURA,
 	SDE_DSPP_RC,
+	SDE_DSPP_RC_PU,
 	SDE_DSPP_SB,
 	SDE_DSPP_DEMURA_CFG0_PARAM2,
 	SDE_DSPP_MAX
@@ -597,6 +601,7 @@ enum {
  * @SDE_CTL_UNIFIED_DSPP_FLUSH  CTL supports only one flush bit for DSPP
  * @SDE_CTL_HW_FENCE            CTL supports hw fencing
  * @SDE_CTL_HW_FENCE_TRIGGER_SEL CTL supports SW selection of cmd/vid modes for trigger sel
+ * @SDE_CTL_HW_FENCE_DIR_WRITE  CTL support hw fencing dir writes
  * @SDE_CTL_MAX
  */
 enum {
@@ -608,6 +613,7 @@ enum {
 	SDE_CTL_UNIFIED_DSPP_FLUSH,
 	SDE_CTL_HW_FENCE,
 	SDE_CTL_HW_FENCE_TRIGGER_SEL,
+	SDE_CTL_HW_FENCE_DIR_WRITE,
 	SDE_CTL_MAX
 };
 

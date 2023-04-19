@@ -117,13 +117,12 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 	struct device *attach_dev = NULL;
 	struct msm_drm_private *priv;
 	struct msm_kms *kms;
-	int ret;
-	u32 domain;
-	bool lazy_unmap = true, is_nested_sec_vmid = false;
-#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
+	bool lazy_unmap = true;
+	bool is_vmid_tvm = false, is_vmid_cp_pixel = false;
+	bool is_vmid_sec_display = false, is_vmid_cam_preview = false;
 	int *vmid_list, *perms_list;
-	int nelems = 0, i;
-#endif
+	int nelems = 0, i, ret;
+	unsigned long dma_map_attrs = 0;
 
 	if (!dma_buf || !dev->dev_private)
 		return ERR_PTR(-EINVAL);
@@ -156,38 +155,52 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 		goto fail_put;
 	}
 
+	ret = mem_buf_dma_buf_copy_vmperm(dma_buf, &vmid_list, &perms_list, &nelems);
+	if (ret) {
+		DRM_ERROR("get vmid list failure, ret:%d", ret);
+		goto fail_put;
+	}
+
+	for (i = 0; i < nelems; i++) {
 #if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
-	/* avoid VMID checks in trusted-vm */
-	if (!kms->funcs->in_trusted_vm || !kms->funcs->in_trusted_vm(kms)) {
-		ret = mem_buf_dma_buf_copy_vmperm(dma_buf, &vmid_list, &perms_list, &nelems);
-		if (ret) {
-			DRM_ERROR("get vmid list failure, ret:%d", ret);
-			goto fail_put;
+		/* avoid VMID checks in trusted-vm, set flag in HLOS when only VMID_TVM is set */
+		if ((vmid_list[i] == VMID_TVM) &&
+				(!kms->funcs->in_trusted_vm || !kms->funcs->in_trusted_vm(kms))) {
+			is_vmid_tvm = true;
+			dma_map_attrs = DMA_ATTR_QTI_SMMU_PROXY_MAP;
+		}
+#endif
+		if (vmid_list[i] == VMID_CP_PIXEL) {
+			is_vmid_cp_pixel = true;
+			is_vmid_tvm = false;
+			dma_map_attrs = 0;
+			break;
+		} else if (vmid_list[i] == VMID_CP_CAMERA_PREVIEW) {
+			is_vmid_cam_preview = true;
+			break;
+		} else if (vmid_list[i] == VMID_CP_SEC_DISPLAY) {
+			is_vmid_sec_display = true;
+			break;
 		}
 
-		for (i = 0; i < nelems; i++)
-			if (vmid_list[i] == VMID_TVM)
-				is_nested_sec_vmid = true;
-
-		/* mem_buf_dma_buf_copy_vmperm uses kmemdup, do kfree to free up the memory */
-		kfree(vmid_list);
-		kfree(perms_list);
 	}
-#endif
+
+	/* mem_buf_dma_buf_copy_vmperm uses kmemdup, do kfree to free up the memory */
+	kfree(vmid_list);
+	kfree(perms_list);
 
 	/*
-	 * - attach default drm device for all S2 only buffers or
-	 *   when IOMMU is not available
-	 * - avoid using lazying unmap feature as it doesn't add
-	 *   any value without nested translations
-	 * - use the same drm device for nested secure-camera buffer
+	 * - attach default drm device for VMID_TVM-only or when IOMMU is not available
+	 * - avoid using lazy unmap feature as it doesn't add value without nested translations
 	 */
-	if (!iommu_present(&platform_bus_type) || is_nested_sec_vmid) {
+	if (is_vmid_cp_pixel) {
+		attach_dev = kms->funcs->get_address_space_device(kms, MSM_SMMU_DOMAIN_SECURE);
+	} else if (!iommu_present(&platform_bus_type) || is_vmid_tvm || is_vmid_cam_preview
+			|| is_vmid_sec_display) {
 		attach_dev = dev->dev;
 		lazy_unmap = false;
 	} else {
-		domain = MSM_SMMU_DOMAIN_UNSECURE;
-		attach_dev = kms->funcs->get_address_space_device(kms, domain);
+		attach_dev = kms->funcs->get_address_space_device(kms, MSM_SMMU_DOMAIN_UNSECURE);
 	}
 
 	/*
@@ -216,17 +229,22 @@ struct drm_gem_object *msm_gem_prime_import(struct drm_device *dev,
 	if (lazy_unmap)
 		attach->dma_map_attrs |= DMA_ATTR_DELAYED_UNMAP;
 
-#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
-	if (is_nested_sec_vmid)
-		attach->dma_map_attrs |= DMA_ATTR_QTI_SMMU_PROXY_MAP;
-#endif
+	attach->dma_map_attrs |= dma_map_attrs;
 
-	sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
-	if (IS_ERR(sgt)) {
-		ret = PTR_ERR(sgt);
-		DRM_ERROR(
-		"dma_buf_map_attachment failure, err=%d\n", ret);
-		goto fail_detach;
+	/*
+	 * avoid map_attachment for S2-only buffers and TVM buffers as it needs to be mapped
+	 * after the SID switch scm_call and will be handled during msm_gem_get_dma_addr
+	 */
+	if (!is_vmid_tvm && !is_vmid_cam_preview && !is_vmid_sec_display) {
+		sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
+		if (IS_ERR(sgt)) {
+			ret = PTR_ERR(sgt);
+			DRM_ERROR("dma_buf_map_attachment failure, err=%d\n", ret);
+			goto fail_detach;
+		}
+	} else {
+		DRM_DEBUG("deferring dma_buf_map_attachment; tvm:%d, sec_cam:%d, sec_disp:%d\n",
+				is_vmid_tvm, is_vmid_cam_preview, is_vmid_sec_display);
 	}
 
 	/*

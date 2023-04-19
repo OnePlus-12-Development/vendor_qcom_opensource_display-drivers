@@ -1930,8 +1930,8 @@ static u32 dp_panel_get_supported_bpp(struct dp_panel *dp_panel,
 
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 
-	if (dp_panel->mst_state)
-		max_supported_bpp = 24;
+	if (dp_panel->mst_state && panel->base)
+		max_supported_bpp = panel->base->max_supported_bpp;
 
 	if (dsc_en)
 		min_supported_bpp = 24;
@@ -3113,15 +3113,17 @@ int dp_panel_sink_crc_enable(struct dp_panel *dp_panel, bool enable)
 	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
 	drm_aux = panel->aux->drm_aux;
 
-	ret = drm_dp_dpcd_readb(drm_aux, DP_TEST_SINK, &buf);
-	if (ret < 0)
-		return ret;
+	if (dp_panel->link_info.capabilities & DP_LINK_CAP_CRC) {
+		ret = drm_dp_dpcd_readb(drm_aux, DP_TEST_SINK, &buf);
+		if (ret < 0)
+			return ret;
 
-	ret = drm_dp_dpcd_writeb(drm_aux, DP_TEST_SINK, buf | DP_TEST_SINK_START);
-	if (ret < 0)
-		return ret;
+		ret = drm_dp_dpcd_writeb(drm_aux, DP_TEST_SINK, buf | DP_TEST_SINK_START);
+		if (ret < 0)
+			return ret;
 
-	drm_dp_dpcd_readb(drm_aux, DP_TEST_SINK, &buf);
+		drm_dp_dpcd_readb(drm_aux, DP_TEST_SINK, &buf);
+	}
 
 	return rc;
 }

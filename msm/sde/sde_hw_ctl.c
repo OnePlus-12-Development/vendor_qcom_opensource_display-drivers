@@ -66,6 +66,10 @@
 #define CTL_OUTPUT_FENCE_START_TIMESTAMP1 0x26C
 #define CTL_OUTPUT_FENCE_END_TIMESTAMP0 0x270
 #define CTL_OUTPUT_FENCE_END_TIMESTAMP1 0x274
+#define CTL_OUTPUT_FENCE_DIR_ADDR       0x280
+#define CTL_OUTPUT_FENCE_DIR_DATA       0x284
+#define CTL_OUTPUT_FENCE_DIR_MASK       0x288
+#define CTL_OUTPUT_FENCE_DIR_ATTR       0x28C
 
 #define CTL_MIXER_BORDER_OUT            BIT(24)
 #define CTL_FLUSH_MASK_ROT              BIT(27)
@@ -357,6 +361,25 @@ static inline void sde_hw_ctl_trigger_output_fence(struct sde_hw_ctl *ctx, u32 t
 	u32 val = ((trigger_sel & 0xF) << 4) | 0x1;
 
 	SDE_REG_WRITE(&ctx->hw, CTL_OUTPUT_FENCE_CTRL, val);
+}
+
+static inline void sde_hw_ctl_output_fence_dir_wr_init(struct sde_hw_ctl *ctx, u32 *addr,
+	u32 size, u32 mask)
+{
+	uintptr_t ptr_val = (uintptr_t)addr;
+	u32 attr = SDE_REG_READ(&ctx->hw, CTL_OUTPUT_FENCE_DIR_ATTR);
+
+	attr &= ~(0x7 << 4);
+	attr |= ((size & 0x7) << 4);
+
+	SDE_REG_WRITE(&ctx->hw, CTL_OUTPUT_FENCE_DIR_ATTR, attr);
+	SDE_REG_WRITE(&ctx->hw, CTL_OUTPUT_FENCE_DIR_MASK, mask);
+	SDE_REG_WRITE(&ctx->hw, CTL_OUTPUT_FENCE_DIR_ADDR, ptr_val);
+}
+
+static inline void sde_hw_ctl_output_fence_dir_wr_data(struct sde_hw_ctl *ctx, u32 data)
+{
+	SDE_REG_WRITE(&ctx->hw, CTL_OUTPUT_FENCE_DIR_DATA, data);
 }
 
 static inline void sde_hw_ctl_hw_fence_ctrl(struct sde_hw_ctl *ctx, bool sw_override_set,
@@ -1488,6 +1511,12 @@ static void _setup_ctl_ops(struct sde_hw_ctl_ops *ops,
 		ops->trigger_output_fence_override = sde_hw_ctl_trigger_output_fence_override;
 		ops->hw_fence_output_status = sde_hw_ctl_output_fence_timestamps;
 		ops->hw_fence_output_timestamp_ctrl = sde_hw_ctl_fence_timestamp_ctrl;
+		if (cap & BIT(SDE_CTL_HW_FENCE_DIR_WRITE)) {
+			ops->hw_fence_output_fence_dir_write_init =
+				sde_hw_ctl_output_fence_dir_wr_init;
+			ops->hw_fence_output_fence_dir_write_data =
+				sde_hw_ctl_output_fence_dir_wr_data;
+		}
 	}
 
 	if (cap & BIT(SDE_CTL_UIDLE))

@@ -267,12 +267,20 @@ void reg_dmav1_setup_ltm_vlutv1(struct sde_hw_dspp *ctx, void *cfg);
 void reg_dmav1_setup_ltm_vlutv1_2(struct sde_hw_dspp *ctx, void *cfg);
 
 /**
- * reg_dmav1_setup_rc_datav1() - RC DATA v1 implementation using reg dma v1.
+ * reg_dmav1_setup_rc_pu_configv1() - RC PU CFG v1 implementation using reg dma v1.
  * @ctx: dspp ctx info
  * @cfg: pointer to struct sde_hw_cp_cfg
  * @returns: 0 if success, non-zero otherwise
  */
-int reg_dmav1_setup_rc_datav1(struct sde_hw_dspp *ctx, void *cfg);
+int reg_dmav1_setup_rc_pu_configv1(struct sde_hw_dspp *ctx, void *cfg);
+
+/**
+ * reg_dmav1_setup_rc_mask_configv1() - RC Mask CFG v1 implementation using reg dma v1.
+ * @ctx: dspp ctx info
+ * @cfg: pointer to struct sde_hw_cp_cfg
+ * @returns: 0 if success, non-zero otherwise
+ */
+int reg_dmav1_setup_rc_mask_configv1(struct sde_hw_dspp *ctx, void *cfg);
 
 /**
  * reg_dmav1_deinit_ltm_ops() - deinitialize the ltm feature op for sde v4
