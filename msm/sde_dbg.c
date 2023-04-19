@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2009-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -120,6 +120,12 @@
 
 #define SDE_DBG_LOG_DEBUGBUS(name, addr, block_id, test_id, val) \
 	dev_err(sde_dbg_base.dev, "%s 0x%x %d %d 0x%x\n", name, addr, block_id, test_id, val)
+
+#define SDE_DBG_PRINT_DBGBUS_HEADER(dbg_base, name) do {\
+	drm_printf(dbg_base->sde_dbg_printer, "---------------------------------\n");\
+	drm_printf(dbg_base->sde_dbg_printer, "[dbgbus_%s]\n", name);\
+	drm_printf(dbg_base->sde_dbg_printer, "---------------------------------\n");\
+} while (0)
 
 /**
  * struct sde_dbg_reg_offset - tracking for start and end of region
@@ -1299,32 +1305,32 @@ static void _sde_dump_array(bool do_panic, const char *name, bool dump_secure, u
 
 	start = ktime_get();
 	if (in_dump && coredump_reading)
-		drm_printf(dbg_base->sde_dbg_printer, "============== dump dbgbus_sde ==============\n");
+		SDE_DBG_PRINT_DBGBUS_HEADER(dbg_base, "sde");
 	if (dump_blk_mask & SDE_DBG_SDE_DBGBUS)
 		_sde_dbg_dump_sde_dbg_bus(&dbg_base->dbgbus_sde, dbg_base->dump_option);
 
 	if (in_dump && coredump_reading)
-		drm_printf(dbg_base->sde_dbg_printer, "============== dump dbgbus_lutdma ==============\n");
+		SDE_DBG_PRINT_DBGBUS_HEADER(dbg_base, "lutdma");
 	if (dump_blk_mask & SDE_DBG_LUTDMA_DBGBUS)
 		_sde_dbg_dump_sde_dbg_bus(&dbg_base->dbgbus_lutdma, dbg_base->dump_option);
 
 	if (in_dump && coredump_reading)
-		drm_printf(dbg_base->sde_dbg_printer, "============== dump dbgbus_rsc ==============\n");
+		SDE_DBG_PRINT_DBGBUS_HEADER(dbg_base, "rsc");
 	if (dump_blk_mask & SDE_DBG_RSC_DBGBUS)
 		_sde_dbg_dump_sde_dbg_bus(&dbg_base->dbgbus_rsc, dbg_base->dump_option);
 
 	if (in_dump && coredump_reading)
-		drm_printf(dbg_base->sde_dbg_printer, "============== dump dbgbus_vbif_rt ==============\n");
+		SDE_DBG_PRINT_DBGBUS_HEADER(dbg_base, "vbif_rt");
 	if (dump_blk_mask & SDE_DBG_VBIF_RT_DBGBUS)
 		_sde_dbg_dump_sde_dbg_bus(&dbg_base->dbgbus_vbif_rt, dbg_base->dump_option);
 
 	if (in_dump && coredump_reading)
-		drm_printf(dbg_base->sde_dbg_printer, "============== dump dbgbus_dsi ==============\n");
+		SDE_DBG_PRINT_DBGBUS_HEADER(dbg_base, "dsi");
 	if (dump_blk_mask & SDE_DBG_DSI_DBGBUS)
 		_sde_dbg_dump_dsi_dbg_bus(&dbg_base->dbgbus_dsi, dbg_base->dump_option);
 
 	if (in_dump && coredump_reading)
-		drm_printf(dbg_base->sde_dbg_printer, "============== dump dbgbus_dp ==============\n");
+		SDE_DBG_PRINT_DBGBUS_HEADER(dbg_base, "dp");
 	if (dump_blk_mask & SDE_DBG_DP_DBGBUS)
 		_sde_dbg_dump_sde_dbg_bus(&dbg_base->dbgbus_dp, dbg_base->dump_option);
 
