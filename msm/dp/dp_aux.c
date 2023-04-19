@@ -35,6 +35,14 @@
 		DP_WARN_V(fmt, ##__VA_ARGS__); \
 	} while (0)
 
+#define DP_AUX_WARN_RATELIMITED(dp_aux, fmt, ...) \
+	do { \
+		if (dp_aux) \
+			ipc_log_string(dp_aux->ipc_log_context, "[w][%-4d]"fmt,\
+					current->pid, ##__VA_ARGS__); \
+		DP_WARN_RATELIMITED_V(fmt, ##__VA_ARGS__); \
+	} while (0)
+
 #define DP_AUX_ERR(dp_aux, fmt, ...) \
 	do { \
 		if (dp_aux) \
@@ -210,26 +218,32 @@ static int dp_aux_cmd_fifo_tx(struct dp_aux_private *aux,
 	u32 ret = 0, len = 0, timeout;
 	int const aux_timeout_ms = HZ/4;
 	struct dp_aux *dp_aux = &aux->dp_aux;
+	char prefix[64];
+
+	snprintf(prefix, sizeof(prefix), "%s %s %4xh(%2zu): ",
+			(msg->request & DP_AUX_I2C_MOT) ? "I2C" : "NAT",
+			(msg->request & DP_AUX_I2C_READ) ? "RD" : "WR",
+			msg->address, msg->size);
 
 	reinit_completion(&aux->comp);
 
 	len = dp_aux_write(aux, msg);
 	if (len == 0) {
-		DP_AUX_ERR(dp_aux, "DP AUX write failed\n");
+		DP_AUX_ERR(dp_aux, "DP AUX write failed: %s\n", prefix);
 		return -EINVAL;
 	}
 
 	timeout = wait_for_completion_timeout(&aux->comp, aux_timeout_ms);
 	if (!timeout) {
-		DP_AUX_ERR(dp_aux, "aux %s timeout\n", (aux->read ? "read" : "write"));
+		DP_AUX_WARN_RATELIMITED(dp_aux, "aux timeout during [%s]\n", prefix);
 		return -ETIMEDOUT;
 	}
 
 	if (aux->aux_error_num == DP_AUX_ERR_NONE) {
 		ret = len;
 	} else {
-		DP_AUX_ERR_RATELIMITED(dp_aux, "aux err: %s\n",
-				dp_aux_get_error(aux->aux_error_num));
+		DP_AUX_WARN_RATELIMITED(dp_aux, "aux err [%s] during [%s]\n",
+				dp_aux_get_error(aux->aux_error_num), prefix);
 		ret = -EINVAL;
 	}
 

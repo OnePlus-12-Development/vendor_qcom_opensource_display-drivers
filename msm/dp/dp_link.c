@@ -1512,13 +1512,15 @@ static u32 dp_link_get_test_bits_depth(struct dp_link *dp_link, u32 bpp)
 int dp_link_probe(struct drm_dp_aux *aux, struct drm_dp_link *link)
 {
 	u8 values[3];
-	int err;
+	int ret;
 
 	memset(link, 0, sizeof(*link));
 
-	err = drm_dp_dpcd_read(aux, DP_DPCD_REV, values, sizeof(values));
-	if (err < 0)
-		return err;
+	ret = drm_dp_dpcd_read(aux, DP_DPCD_REV, values, sizeof(values));
+	if (ret < 3) {
+		DP_ERR("failed to probe link, ret:%d\n", ret);
+		ret = -EIO;
+	}
 
 	link->revision = values[0];
 	link->rate = drm_dp_bw_code_to_link_rate(values[1]);
@@ -1540,22 +1542,26 @@ int dp_link_probe(struct drm_dp_aux *aux, struct drm_dp_link *link)
 int dp_link_power_up(struct drm_dp_aux *aux, struct drm_dp_link *link)
 {
 	u8 value;
-	int err;
+	int ret;
 
 	/* DP_SET_POWER register is only available on DPCD v1.1 and later */
 	if (link->revision < 0x11)
 		return 0;
 
-	err = drm_dp_dpcd_readb(aux, DP_SET_POWER, &value);
-	if (err < 0)
-		return err;
+	ret = drm_dp_dpcd_readb(aux, DP_SET_POWER, &value);
+	if (ret != 1) {
+		DP_ERR("failed to read sink power when powering up, ret:%d\n", ret);
+		return -EIO;
+	}
 
 	value &= ~DP_SET_POWER_MASK;
 	value |= DP_SET_POWER_D0;
 
-	err = drm_dp_dpcd_writeb(aux, DP_SET_POWER, value);
-	if (err < 0)
-		return err;
+	ret = drm_dp_dpcd_writeb(aux, DP_SET_POWER, value);
+	if (ret != 1) {
+		DP_ERR("failed to power up[0x%x] sink, ret:%d\n", value, ret);
+		return -EIO;
+	}
 
 	/*
 	 * According to the DP 1.1 specification, a "Sink Device must exit the
@@ -1577,22 +1583,26 @@ int dp_link_power_up(struct drm_dp_aux *aux, struct drm_dp_link *link)
 int dp_link_power_down(struct drm_dp_aux *aux, struct drm_dp_link *link)
 {
 	u8 value;
-	int err;
+	int ret;
 
 	/* DP_SET_POWER register is only available on DPCD v1.1 and later */
 	if (link->revision < 0x11)
 		return 0;
 
-	err = drm_dp_dpcd_readb(aux, DP_SET_POWER, &value);
-	if (err < 0)
-		return err;
+	ret = drm_dp_dpcd_readb(aux, DP_SET_POWER, &value);
+	if (ret != 1) {
+		DP_ERR("failed to read sink power when powering down, ret:%d\n", ret);
+		return -EIO;
+	}
 
 	value &= ~DP_SET_POWER_MASK;
 	value |= DP_SET_POWER_D3;
 
-	err = drm_dp_dpcd_writeb(aux, DP_SET_POWER, value);
-	if (err < 0)
-		return err;
+	ret = drm_dp_dpcd_writeb(aux, DP_SET_POWER, value);
+	if (ret != 1) {
+		DP_ERR("failed to power down[0x%x] sink, ret:%d\n", value, ret);
+		return -EIO;
+	}
 
 	return 0;
 }
@@ -1607,7 +1617,7 @@ int dp_link_power_down(struct drm_dp_aux *aux, struct drm_dp_link *link)
 int dp_link_configure(struct drm_dp_aux *aux, struct drm_dp_link *link)
 {
 	u8 values[2];
-	int err;
+	int ret;
 
 	values[0] = drm_dp_link_rate_to_bw_code(link->rate);
 	values[1] = link->num_lanes;
@@ -1615,9 +1625,11 @@ int dp_link_configure(struct drm_dp_aux *aux, struct drm_dp_link *link)
 	if (link->capabilities & DP_LINK_CAP_ENHANCED_FRAMING)
 		values[1] |= DP_LANE_COUNT_ENHANCED_FRAME_EN;
 
-	err = drm_dp_dpcd_write(aux, DP_LINK_BW_SET, values, sizeof(values));
-	if (err < 0)
-		return err;
+	ret = drm_dp_dpcd_write(aux, DP_LINK_BW_SET, values, sizeof(values));
+	if (ret != 2) {
+		DP_ERR("failed to configure link, ret:%d\n", ret);
+		return -EIO;
+	}
 
 	return 0;
 }
