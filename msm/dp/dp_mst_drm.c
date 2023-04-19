@@ -440,9 +440,9 @@ static int _dp_mst_compute_config(struct drm_atomic_state *state,
 {
 	int slots = 0, pbn;
 	struct sde_connector *c_conn = to_sde_connector(connector);
+	int rc = 0;
 #if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
 	struct drm_dp_mst_topology_state *mst_state;
-	int rc;
 #endif
 
 	DP_MST_DEBUG_V("enter\n");
@@ -456,30 +456,37 @@ static int _dp_mst_compute_config(struct drm_atomic_state *state,
 	if (!mst_state->pbn_div)
 		mst_state->pbn_div = mst->dp_display->get_mst_pbn_div(mst->dp_display);
 
-	slots = mst->mst_fw_cbs->atomic_find_time_slots(state,
-			&mst->mst_mgr, c_conn->mst_port, pbn);
+	rc = mst->mst_fw_cbs->atomic_find_time_slots(state, &mst->mst_mgr, c_conn->mst_port, pbn);
+	if (rc < 0) {
+		DP_ERR("conn:%d failed to find vcpi slots. pbn:%d, rc:%d\n",
+				connector->base.id, pbn, rc);
+		goto end;
+	}
+
+	slots = rc;
 
 	rc = drm_dp_mst_atomic_check(state);
 	if (rc) {
-		DP_ERR("conn:%d mst atomic check failed\n", connector->base.id);
+		DP_ERR("conn:%d mst atomic check failed: rc=%d\n", connector->base.id, rc);
 		slots = 0;
+		goto end;
 	}
 #else
 	slots = mst->mst_fw_cbs->atomic_find_vcpi_slots(state,
 			&mst->mst_mgr, c_conn->mst_port, pbn, 0);
-#endif
 	if (slots < 0) {
 		DP_ERR("conn:%d failed to find vcpi slots. pbn:%d, slots:%d\n",
 				connector->base.id, pbn, slots);
-		return slots;
+		rc = slots;
+		slots = 0;
 	}
+#endif
 
-	DP_MST_DEBUG("conn:%d pbn:%d slots:%d\n", connector->base.id, pbn,
-			slots);
-	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, connector->base.id, pbn,
-			slots);
+end:
+	DP_MST_DEBUG("conn:%d pbn:%d slots:%d rc:%d\n", connector->base.id, pbn, slots, rc);
+	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, connector->base.id, pbn, slots, rc);
 
-	return slots;
+	return (rc < 0 ? rc : slots);
 }
 
 static void _dp_mst_update_timeslots(struct dp_mst_private *mst,
@@ -703,7 +710,6 @@ static void _dp_mst_bridge_pre_disable_part1(struct dp_mst_bridge *dp_bridge)
 #else
 	mst->mst_fw_cbs->reset_vcpi_slots(&mst->mst_mgr, port);
 #endif
-	pr_info("rsdbg: calling update after remove\n");
 	_dp_mst_update_timeslots(mst, dp_bridge, port);
 
 	DP_MST_DEBUG("mst bridge [%d] _pre disable part-1 complete\n",
