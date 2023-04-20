@@ -479,6 +479,7 @@ static int _dp_mst_compute_config(struct drm_atomic_state *state,
 				connector->base.id, pbn, slots);
 		rc = slots;
 		slots = 0;
+		goto end;
 	}
 #endif
 
