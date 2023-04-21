@@ -3688,13 +3688,13 @@ static int sde_cache_parse_dt(struct device_node *np,
 		}
 
 		sc_cfg->llcc_uid = usecase_id;
+		sc_cfg->slice = slice;
 		sc_cfg->llcc_scid = llcc_get_slice_id(slice);
 		sc_cfg->llcc_slice_size = llcc_get_slice_size(slice);
 		sde_core_perf_llcc_stale_configure(sde_cfg, slice);
 
 		SDE_DEBUG("img cache:%d usecase_id:%d, scid:%d slice_size:%zu kb\n",
 				i, usecase_id, sc_cfg->llcc_scid, sc_cfg->llcc_slice_size);
-		llcc_slice_putd(slice);
 	}
 
 	return 0;
@@ -5591,6 +5591,10 @@ void sde_hw_catalog_deinit(struct sde_mdss_cfg *sde_cfg)
 		for (j = VBIF_RT_CLIENT; j < VBIF_MAX_CLIENT; j++)
 			kfree(sde_cfg->vbif[i].qos_tbl[j].priority_lvl);
 	}
+
+	for (i = 0; i < SDE_SYS_CACHE_MAX; i++)
+		if (sde_cfg->sc_cfg[i].slice)
+			llcc_slice_putd(sde_cfg->sc_cfg[i].slice);
 
 	kfree(sde_cfg->perf.qos_refresh_rate);
 	kfree(sde_cfg->perf.danger_lut);

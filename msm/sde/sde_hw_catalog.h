@@ -1764,11 +1764,13 @@ struct sde_perf_cdp_cfg {
 
 /**
  * struct sde_sc_cfg - define system cache configuration
+ * @slice:     llcc slice descriptor
  * @llcc_uuid: llcc use case id for the system cache
  * @llcc_scid: scid for the system cache
  * @llcc_slice_size: slice size of the system cache
  */
 struct sde_sc_cfg {
+	struct llcc_slice_desc *slice;
 	int llcc_uid;
 	int llcc_scid;
 	size_t llcc_slice_size;

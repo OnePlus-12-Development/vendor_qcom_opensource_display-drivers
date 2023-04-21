@@ -323,7 +323,6 @@ void sde_core_perf_llcc_stale_configure(struct sde_mdss_cfg *sde_cfg, struct llc
 
 void sde_core_perf_llcc_stale_frame(struct drm_crtc *crtc, enum sde_sys_cache_type type)
 {
-	struct llcc_slice_desc *slice;
 	struct sde_kms *kms;
 
 	if (!crtc) {
@@ -341,15 +340,7 @@ void sde_core_perf_llcc_stale_frame(struct drm_crtc *crtc, enum sde_sys_cache_ty
 			!kms->perf.llcc_active[type])
 		return;
 
-	slice =  llcc_slice_getd(kms->catalog->sc_cfg[type].llcc_uid);
-	if (IS_ERR_OR_NULL(slice)) {
-		SDE_DEBUG("failed to get system cache for scid:%u", type);
-		return;
-	}
-
-	llcc_notif_staling_inc_counter(slice);
-
-	llcc_slice_putd(slice);
+	llcc_notif_staling_inc_counter(kms->catalog->sc_cfg[type].slice);
 }
 #else
 void sde_core_perf_llcc_stale_configure(struct sde_mdss_cfg *sde_cfg, struct llcc_slice_desc *slice)
