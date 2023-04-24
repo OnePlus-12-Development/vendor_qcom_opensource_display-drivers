@@ -956,32 +956,16 @@ static void _sde_core_perf_crtc_update_check(struct drm_crtc *crtc,
 		if ((params_changed &&
 				(new->bw_ctl[i] > old->bw_ctl[i])) ||
 				(!params_changed &&
-				(new->bw_ctl[i] < old->bw_ctl[i]))) {
-
-			SDE_DEBUG(
-				"crtc=%d p=%d new_bw=%llu,old_bw=%llu\n",
-				crtc->base.id, params_changed,
-				new->bw_ctl[i], old->bw_ctl[i]);
-			old->bw_ctl[i] = new->bw_ctl[i];
+				(new->bw_ctl[i] < old->bw_ctl[i])))
 			*update_bus |= BIT(i);
-		}
 
 		if ((params_changed &&
 				(new->max_per_pipe_ib[i] >
 				 old->max_per_pipe_ib[i])) ||
 				(!params_changed &&
 				(new->max_per_pipe_ib[i] <
-				old->max_per_pipe_ib[i]))) {
-
-			SDE_DEBUG(
-				"crtc=%d p=%d new_ib=%llu,old_ib=%llu\n",
-				crtc->base.id, params_changed,
-				new->max_per_pipe_ib[i],
-				old->max_per_pipe_ib[i]);
-			old->max_per_pipe_ib[i] =
-					new->max_per_pipe_ib[i];
+				old->max_per_pipe_ib[i])))
 			*update_bus |= BIT(i);
-		}
 
 		/* display rsc override during solver mode */
 		if (kms->perf.bw_vote_mode == DISP_RSC_MODE &&
@@ -992,9 +976,6 @@ static void _sde_core_perf_crtc_update_check(struct drm_crtc *crtc,
 					old->bw_ctl[i]) ||
 					(new->max_per_pipe_ib[i] !=
 					old->max_per_pipe_ib[i]))) {
-				old->bw_ctl[i] = new->bw_ctl[i];
-				old->max_per_pipe_ib[i] =
-						new->max_per_pipe_ib[i];
 				*update_bus |= BIT(i);
 			/*
 			 * reduce bw vote is not required in solver
@@ -1003,6 +984,15 @@ static void _sde_core_perf_crtc_update_check(struct drm_crtc *crtc,
 			} else if (!params_changed) {
 				*update_bus &= ~BIT(i);
 			}
+		}
+
+		if ((*update_bus) & BIT(i)) {
+			SDE_DEBUG(
+				"crtc=%d p=%d new_bw=%llu,old_bw=%llu new_ib=%llu old_ib=%llu\n",
+				crtc->base.id, params_changed, new->bw_ctl[i], old->bw_ctl[i],
+				new->max_per_pipe_ib[i], old->max_per_pipe_ib[i]);
+			old->bw_ctl[i] = new->bw_ctl[i];
+			old->max_per_pipe_ib[i] = new->max_per_pipe_ib[i];
 		}
 	}
 
