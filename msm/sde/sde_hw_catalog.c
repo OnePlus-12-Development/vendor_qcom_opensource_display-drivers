@@ -2507,6 +2507,7 @@ static int sde_intf_parse_dt(struct device_node *np,
 			set_bit(SDE_INTF_TE_SINGLE_UPDATE, &intf->features);
 			set_bit(SDE_INTF_WD_LTJ_CTL, &intf->features);
 			set_bit(SDE_INTF_TE_DEASSERT_DETECT, &intf->features);
+			set_bit(SDE_INTF_VSYNC_TS_SRC_EN, &intf->features);
 		}
 	}
 
