@@ -1437,7 +1437,7 @@ static void _sde_encoder_update_ppb_size(struct drm_encoder *drm_enc)
 	struct sde_hw_mdp *hw_mdp;
 	struct drm_display_mode *mode;
 	struct sde_encoder_virt *sde_enc;
-	u32 maxw, pixels_per_pp, num_lm_or_pp, latency_lines;
+	u32 pixels_per_pp, num_lm_or_pp, latency_lines;
 	int i;
 
 	if (!drm_enc) {
@@ -1491,17 +1491,21 @@ static void _sde_encoder_update_ppb_size(struct drm_encoder *drm_enc)
 			SDE_DEBUG_ENC(sde_enc, "hw-pp i:%d pp_cnt:%d pixels_per_pp:%d\n",
 					i, num_lm_or_pp, pixels_per_pp);
 		} else if (hw_mdp->ops.set_ppb_fifo_size) {
-			maxw = sde_conn_get_max_mode_width(sde_enc->cur_master->connector);
-			if (!maxw) {
+			struct sde_connector *sde_conn =
+					to_sde_connector(sde_enc->cur_master->connector);
+
+			if (!sde_conn || !sde_conn->max_mode_width) {
 				SDE_DEBUG_ENC(sde_enc, "failed to get max horizantal resolution\n");
 				return;
 			}
 
-			pixels_per_pp = mult_frac(maxw, latency_lines, num_lm_or_pp);
+			pixels_per_pp = mult_frac(sde_conn->max_mode_width,
+					latency_lines, num_lm_or_pp);
 			hw_mdp->ops.set_ppb_fifo_size(hw_mdp, hw_pp->idx, pixels_per_pp);
 
-			SDE_EVT32(DRMID(drm_enc), i, hw_pp->idx, maxw, pixels_per_pp,
-					sde_kms->catalog->ppb_sz_program, SDE_EVTLOG_FUNC_CASE2);
+			SDE_EVT32(DRMID(drm_enc), i, hw_pp->idx, sde_conn->max_mode_width,
+					pixels_per_pp, sde_kms->catalog->ppb_sz_program,
+					SDE_EVTLOG_FUNC_CASE2);
 			SDE_DEBUG_ENC(sde_enc, "hw-pp i:%d pp_cnt:%d pixels_per_pp:%d\n",
 					i, num_lm_or_pp, pixels_per_pp);
 		} else {
