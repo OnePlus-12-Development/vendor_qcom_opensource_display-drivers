@@ -635,6 +635,7 @@ enum {
  * @SDE_INTF_WD_JITTER          INTF block has WD timer jitter support
  * @SDE_INTF_WD_LTJ_CTL         INTF block has WD long term jitter control support
  * @SDE_INTF_TE_DEASSERT_DETECT INTF block has TE Deassert detect support
+ * @SDE_INTF_VSYNC_TS_SRC_EN    INTF block has VSYNC timestamp source selection support
  * @SDE_INTF_MAX
  */
 enum {
@@ -653,6 +654,7 @@ enum {
 	SDE_INTF_WD_JITTER,
 	SDE_INTF_WD_LTJ_CTL,
 	SDE_INTF_TE_DEASSERT_DETECT,
+	SDE_INTF_VSYNC_TS_SRC_EN,
 	SDE_INTF_MAX
 };
 
