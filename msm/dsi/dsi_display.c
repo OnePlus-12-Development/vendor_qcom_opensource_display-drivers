@@ -3964,22 +3964,25 @@ static int dsi_display_parse_lane_map(struct dsi_display *display)
 {
 	int rc = 0, i = 0;
 	const char *data;
-	u8 temp[DSI_LANE_MAX - 1];
+	u32 temp[DSI_LANE_MAX - 1];
+	struct dsi_parser_utils *utils;
 
 	if (!display) {
 		DSI_ERR("invalid params\n");
 		return -EINVAL;
 	}
 
+	utils = &display->panel->utils;
+
 	/* lane-map-v2 supersedes lane-map-v1 setting */
-	rc = of_property_read_u8_array(display->pdev->dev.of_node,
+	rc = utils->read_u32_array(display->pdev->dev.of_node,
 		"qcom,lane-map-v2", temp, (DSI_LANE_MAX - 1));
 	if (!rc) {
 		for (i = DSI_LOGICAL_LANE_0; i < (DSI_LANE_MAX - 1); i++)
 			display->lane_map.lane_map_v2[i] = BIT(temp[i]);
 		return 0;
-	} else if (rc != EINVAL) {
-		DSI_DEBUG("Incorrect mapping, configure default\n");
+	} else if (rc != -EINVAL) {
+		DSI_DEBUG("Incorrect mapping, configuring default\n");
 		goto set_default;
 	}
 
