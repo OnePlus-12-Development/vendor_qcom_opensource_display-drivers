@@ -2,10 +2,17 @@
 
 DISPLAY_SELECT := CONFIG_DRM_MSM=m
 
+KBUILD_EXTRA_SYMBOLS := \
+    $(ANDROID_BUILD_TOP)/out/vendor/qcom/opensource/mm-drivers/hw_fence/Module.symvers \
+    $(ANDROID_BUILD_TOP)/out/vendor/qcom/opensource/mm-drivers/msm_ext_display/Module.symvers \
+    $(ANDROID_BUILD_TOP)/out/vendor/qcom/opensource/mm-drivers/sync_fence/Module.symvers \
+    $(ANDROID_BUILD_TOP)/out/vendor/qcom/opensource/mmrm-driver/Module.symvers \
+    $(ANDROID_BUILD_TOP)/out/vendor/qcom/opensource/securemsm-kernel/Module.symvers
+
 KBUILD_OPTIONS += DISPLAY_ROOT=$(KERNEL_SRC)/$(M)/../
 KBUILD_OPTIONS += BOARD_PLATFORM=pineapple
 KBUILD_OPTIONS += $(DISPLAY_SELECT)
-KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS=$(ANDROID_BUILD_TOP)/out/vendor/qcom/opensource/mmrm-driver/Module.symvers
+KBUILD_OPTIONS += $(KBUILD_EXTRA_SYMBOLS)
 
 all: modules
 
