@@ -4748,9 +4748,10 @@ static int _sde_encoder_prepare_for_kickoff_processing(struct drm_encoder *drm_e
 void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 {
 	ktime_t current_ts, ept_ts;
-	u32 avr_step_fps, min_fps = 0, qsync_mode;
+	u32 avr_step_fps, min_fps = 0, qsync_mode, fps;
 	u64 timeout_us = 0, ept;
 	bool is_cmd_mode;
+	char atrace_buf[64];
 	struct drm_connector *drm_conn;
 	struct msm_mode_info *info = &sde_enc->mode_info;
 	struct sde_kms *sde_kms = sde_encoder_get_kms(&sde_enc->base);
@@ -4768,6 +4769,9 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 		_sde_encoder_get_qsync_fps_callback(&sde_enc->base, &min_fps, drm_conn->state);
 	/* use min qsync fps, if feature is enabled; otherwise min default fps */
 	min_fps = min_fps ? min_fps : DEFAULT_MIN_FPS;
+	fps = sde_encoder_get_fps(&sde_enc->base);
+	min_fps = min(min_fps, fps);
+
 	is_cmd_mode = sde_encoder_check_curr_mode(&sde_enc->base, MSM_DISPLAY_CMD_MODE);
 
 	/* for cmd mode with qsync - EPT_FPS will be used to delay the processing */
@@ -4782,7 +4786,7 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	current_ts = ktime_get_ns();
 	/* ept is in ns and avr_step is mulitple of refresh rate */
 	ept_ts = avr_step_fps ? ept - DIV_ROUND_UP(NSEC_PER_SEC, avr_step_fps) + NSEC_PER_MSEC
-				: ept - NSEC_PER_MSEC;
+				: ept - (2 * NSEC_PER_MSEC);
 
 	/* ept time already elapsed */
 	if (ept_ts <= current_ts) {
@@ -4799,9 +4803,10 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 		return;
 	}
 
-	SDE_ATRACE_BEGIN("schedule_timeout");
+	snprintf(atrace_buf, sizeof(atrace_buf), "schedule_timeout_%llu", ept);
+	SDE_ATRACE_BEGIN(atrace_buf);
 	usleep_range(timeout_us, timeout_us + 10);
-	SDE_ATRACE_END("schedule_timeout");
+	SDE_ATRACE_END(atrace_buf);
 
 	SDE_EVT32(DRMID(&sde_enc->base), qsync_mode, avr_step_fps, min_fps, ktime_to_us(current_ts),
 					ktime_to_us(ept_ts), timeout_us);
