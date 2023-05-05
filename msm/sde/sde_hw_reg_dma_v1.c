@@ -1142,7 +1142,7 @@ int reset_v1(struct sde_hw_ctl *ctl)
 	struct sde_hw_blk_reg_map hw;
 	u32 val, i = 0, k = 0;
 
-	if (!ctl || ctl->idx > CTL_MAX) {
+	if (!ctl || ctl->idx >= CTL_MAX) {
 		DRM_ERROR("invalid ctl %pK ctl idx %d\n",
 			ctl, ((ctl) ? ctl->idx : 0));
 		return -EINVAL;
