@@ -2583,6 +2583,8 @@ static int sde_connector_fill_modes(struct drm_connector *connector,
 	mode_count = drm_helper_probe_single_connector_modes(connector,
 			max_width, max_height);
 
+	sde_conn->max_mode_width = sde_conn_get_max_mode_width(connector);
+
 	if (sde_conn->ops.set_allowed_mode_switch)
 		sde_conn->ops.set_allowed_mode_switch(connector,
 				sde_conn->display);
