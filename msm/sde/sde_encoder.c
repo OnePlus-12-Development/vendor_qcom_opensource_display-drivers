@@ -4423,8 +4423,12 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc,
 
 	/* reset input fence status and skip flush for fence error case. */
 	if (sde_crtc->input_fence_status < 0) {
-		SDE_EVT32(DRMID(&sde_enc->base), sde_crtc->input_fence_status);
-		sde_crtc->input_fence_status = 0;
+		if (!sde_encoder_in_clone_mode(&sde_enc->base))
+			sde_crtc->input_fence_status = 0;
+
+		SDE_EVT32(DRMID(&sde_enc->base), sde_encoder_in_clone_mode(&sde_enc->base),
+			sde_crtc->input_fence_status);
+
 		goto handle_elevated_ahb_vote;
 	}
 

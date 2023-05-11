@@ -3891,6 +3891,10 @@ int sde_crtc_sw_fence_error_handle(struct drm_crtc *crtc, int err_status)
 	sde_crtc->handle_fence_error_bw_update = true;
 
 	drm_for_each_encoder_mask(drm_encoder, crtc->dev, crtc->state->encoder_mask) {
+		/* continue if copy encoder is encountered */
+		if (sde_crtc_state_in_clone_mode(drm_encoder, crtc->state))
+			continue;
+
 		rc = sde_encoder_handle_dma_fence_out_of_order(drm_encoder);
 		if (rc) {
 			SDE_DEBUG("Dma fence out of order failed, rc = %d\n", rc);
