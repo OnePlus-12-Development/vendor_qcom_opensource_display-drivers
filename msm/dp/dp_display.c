@@ -2350,6 +2350,9 @@ static int dp_display_set_mode(struct dp_display *dp_display, void *panel,
 	mode->timing.bpp = dp->panel->get_mode_bpp(dp->panel,
 			mode->timing.bpp, mode->timing.pixel_clk_khz, dsc_en);
 
+	if (dp->mst.mst_active)
+		dp->mst.cbs.set_mst_mode_params(&dp->dp_display, mode);
+
 	dp_panel->pinfo = mode->timing;
 	mutex_unlock(&dp->session_lock);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
