@@ -393,8 +393,14 @@ static void _sde_encoder_phys_vid_avr_ctrl(struct sde_encoder_phys *phys_enc)
 	if (vid_enc->base.hw_intf->ops.avr_ctrl)
 		vid_enc->base.hw_intf->ops.avr_ctrl(vid_enc->base.hw_intf, &avr_params);
 
+	if (vid_enc->base.hw_intf->ops.enable_te_level_trigger &&
+			!sde_enc->disp_info.is_te_using_watchdog_timer)
+		vid_enc->base.hw_intf->ops.enable_te_level_trigger(vid_enc->base.hw_intf,
+				(avr_step_state == AVR_STEP_ENABLE));
+
 	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_intf->idx - INTF_0, avr_params.avr_mode,
-			avr_params.avr_step_lines, info->avr_step_fps, avr_step_state);
+			avr_params.avr_step_lines, info->avr_step_fps, avr_step_state,
+			sde_enc->disp_info.is_te_using_watchdog_timer);
 }
 
 static void sde_encoder_phys_vid_setup_timing_engine(
