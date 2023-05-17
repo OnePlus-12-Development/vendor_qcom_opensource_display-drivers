@@ -2851,8 +2851,10 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	/* log this as it results from user action of cable dis-connection */
 	DP_INFO("[OK]\n");
 end:
+	mutex_lock(&dp->accounting_lock);
 	dp->tot_lm_blks_in_use -= dp_panel->max_lm;
 	dp_panel->max_lm = 0;
+	mutex_unlock(&dp->accounting_lock);
 	dp_panel->deinit(dp_panel, flags);
 	mutex_unlock(&dp->session_lock);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
@@ -3050,9 +3052,13 @@ static enum drm_mode_status dp_display_validate_mode(
 
 	mode_status = MODE_OK;
 
-	dp->tot_lm_blks_in_use -= dp_panel->max_lm;
-	dp_panel->max_lm = max(dp_panel->max_lm, dp_mode.lm_count);
-	dp->tot_lm_blks_in_use += dp_panel->max_lm;
+	if (!avail_res->num_lm_in_use) {
+		mutex_lock(&dp->accounting_lock);
+		dp->tot_lm_blks_in_use -= dp_panel->max_lm;
+		dp_panel->max_lm = max(dp_panel->max_lm, dp_mode.lm_count);
+		dp->tot_lm_blks_in_use += dp_panel->max_lm;
+		mutex_unlock(&dp->accounting_lock);
+	}
 
 end:
 	mutex_unlock(&dp->session_lock);
