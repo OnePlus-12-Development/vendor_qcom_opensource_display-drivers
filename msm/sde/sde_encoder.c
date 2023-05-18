@@ -1437,7 +1437,7 @@ static void _sde_encoder_update_ppb_size(struct drm_encoder *drm_enc)
 	struct sde_hw_mdp *hw_mdp;
 	struct drm_display_mode *mode;
 	struct sde_encoder_virt *sde_enc;
-	u32 maxw, pixels_per_pp, num_lm_or_pp, latency_lines;
+	u32 pixels_per_pp, num_lm_or_pp, latency_lines;
 	int i;
 
 	if (!drm_enc) {
@@ -1491,17 +1491,21 @@ static void _sde_encoder_update_ppb_size(struct drm_encoder *drm_enc)
 			SDE_DEBUG_ENC(sde_enc, "hw-pp i:%d pp_cnt:%d pixels_per_pp:%d\n",
 					i, num_lm_or_pp, pixels_per_pp);
 		} else if (hw_mdp->ops.set_ppb_fifo_size) {
-			maxw = sde_conn_get_max_mode_width(sde_enc->cur_master->connector);
-			if (!maxw) {
+			struct sde_connector *sde_conn =
+					to_sde_connector(sde_enc->cur_master->connector);
+
+			if (!sde_conn || !sde_conn->max_mode_width) {
 				SDE_DEBUG_ENC(sde_enc, "failed to get max horizantal resolution\n");
 				return;
 			}
 
-			pixels_per_pp = mult_frac(maxw, latency_lines, num_lm_or_pp);
+			pixels_per_pp = mult_frac(sde_conn->max_mode_width,
+					latency_lines, num_lm_or_pp);
 			hw_mdp->ops.set_ppb_fifo_size(hw_mdp, hw_pp->idx, pixels_per_pp);
 
-			SDE_EVT32(DRMID(drm_enc), i, hw_pp->idx, maxw, pixels_per_pp,
-					sde_kms->catalog->ppb_sz_program, SDE_EVTLOG_FUNC_CASE2);
+			SDE_EVT32(DRMID(drm_enc), i, hw_pp->idx, sde_conn->max_mode_width,
+					pixels_per_pp, sde_kms->catalog->ppb_sz_program,
+					SDE_EVTLOG_FUNC_CASE2);
 			SDE_DEBUG_ENC(sde_enc, "hw-pp i:%d pp_cnt:%d pixels_per_pp:%d\n",
 					i, num_lm_or_pp, pixels_per_pp);
 		} else {
@@ -4744,9 +4748,10 @@ static int _sde_encoder_prepare_for_kickoff_processing(struct drm_encoder *drm_e
 void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 {
 	ktime_t current_ts, ept_ts;
-	u32 avr_step_fps, min_fps = 0, qsync_mode;
+	u32 avr_step_fps, min_fps = 0, qsync_mode, fps;
 	u64 timeout_us = 0, ept;
 	bool is_cmd_mode;
+	char atrace_buf[64];
 	struct drm_connector *drm_conn;
 	struct msm_mode_info *info = &sde_enc->mode_info;
 	struct sde_kms *sde_kms = sde_encoder_get_kms(&sde_enc->base);
@@ -4764,6 +4769,9 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 		_sde_encoder_get_qsync_fps_callback(&sde_enc->base, &min_fps, drm_conn->state);
 	/* use min qsync fps, if feature is enabled; otherwise min default fps */
 	min_fps = min_fps ? min_fps : DEFAULT_MIN_FPS;
+	fps = sde_encoder_get_fps(&sde_enc->base);
+	min_fps = min(min_fps, fps);
+
 	is_cmd_mode = sde_encoder_check_curr_mode(&sde_enc->base, MSM_DISPLAY_CMD_MODE);
 
 	/* for cmd mode with qsync - EPT_FPS will be used to delay the processing */
@@ -4778,7 +4786,7 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	current_ts = ktime_get_ns();
 	/* ept is in ns and avr_step is mulitple of refresh rate */
 	ept_ts = avr_step_fps ? ept - DIV_ROUND_UP(NSEC_PER_SEC, avr_step_fps) + NSEC_PER_MSEC
-				: ept - NSEC_PER_MSEC;
+				: ept - (2 * NSEC_PER_MSEC);
 
 	/* ept time already elapsed */
 	if (ept_ts <= current_ts) {
@@ -4795,9 +4803,10 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 		return;
 	}
 
-	SDE_ATRACE_BEGIN("schedule_timeout");
+	snprintf(atrace_buf, sizeof(atrace_buf), "schedule_timeout_%llu", ept);
+	SDE_ATRACE_BEGIN(atrace_buf);
 	usleep_range(timeout_us, timeout_us + 10);
-	SDE_ATRACE_END("schedule_timeout");
+	SDE_ATRACE_END(atrace_buf);
 
 	SDE_EVT32(DRMID(&sde_enc->base), qsync_mode, avr_step_fps, min_fps, ktime_to_us(current_ts),
 					ktime_to_us(ept_ts), timeout_us);

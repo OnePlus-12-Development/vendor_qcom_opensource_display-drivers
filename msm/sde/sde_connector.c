@@ -2583,6 +2583,8 @@ static int sde_connector_fill_modes(struct drm_connector *connector,
 	mode_count = drm_helper_probe_single_connector_modes(connector,
 			max_width, max_height);
 
+	sde_conn->max_mode_width = sde_conn_get_max_mode_width(connector);
+
 	if (sde_conn->ops.set_allowed_mode_switch)
 		sde_conn->ops.set_allowed_mode_switch(connector,
 				sde_conn->display);
@@ -3080,10 +3082,6 @@ static void _sde_connector_install_qsync_properties(struct sde_kms *sde_kms,
 		msm_property_install_enum(&c_conn->property_info, "qsync_mode", 0, 0, e_qsync_mode,
 				ARRAY_SIZE(e_qsync_mode), 0, CONNECTOR_PROP_QSYNC_MODE);
 
-		if (test_bit(SDE_FEATURE_EPT, sde_kms->catalog->features))
-			msm_property_install_range(&c_conn->property_info, "EPT", 0x0, 0, U64_MAX,
-					0, CONNECTOR_PROP_EPT);
-
 		if (test_bit(SDE_FEATURE_AVR_STEP, sde_kms->catalog->features) &&
 				(display_info->capabilities & MSM_DISPLAY_CAP_VID_MODE))
 			msm_property_install_enum(&c_conn->property_info, "avr_step_state",
@@ -3209,6 +3207,10 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 
 	if (connector_type == DRM_MODE_CONNECTOR_DSI) {
 		_sde_connector_install_qsync_properties(sde_kms, c_conn, dsi_display, display_info);
+
+		if (test_bit(SDE_FEATURE_EPT, sde_kms->catalog->features))
+			msm_property_install_range(&c_conn->property_info, "EPT", 0x0, 0, U64_MAX,
+				0, CONNECTOR_PROP_EPT);
 
 		msm_property_install_enum(&c_conn->property_info, "dsc_mode", 0,
 			0, e_dsc_mode, ARRAY_SIZE(e_dsc_mode), 0, CONNECTOR_PROP_DSC_MODE);

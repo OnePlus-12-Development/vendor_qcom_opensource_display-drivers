@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/iopoll.h>
 #include "dsi_ctrl_hw.h"
@@ -24,18 +24,26 @@
 #define DSI_MDP_MISR_CTRL 0x364
 #define DSI_MDP_MISR_SIGNATURE 0x368
 
-void dsi_ctrl_hw_22_setup_lane_map(struct dsi_ctrl_hw *ctrl,
+void dsi_ctrl_hw_22_setup_lane_map(struct dsi_ctrl_hw *ctrl_hw,
 		       struct dsi_lane_map *lane_map)
 {
-	u32 reg_value = lane_map->lane_map_v2[DSI_LOGICAL_LANE_0] |
+	struct dsi_ctrl *ctrl = container_of(ctrl_hw, struct dsi_ctrl, hw);
+	u32 reg_value;
+
+	/* Lane swap is performed through PHY for controller version 2.2/PHY versions 3.0 and above */
+	if (ctrl->version >= DSI_CTRL_VERSION_2_2) {
+		DSI_CTRL_HW_DBG(ctrl_hw, "DSI controller version is >=2.2, lane swap is performed through PHY");
+		return;
+	}
+	reg_value = lane_map->lane_map_v2[DSI_LOGICAL_LANE_0] |
 			(lane_map->lane_map_v2[DSI_LOGICAL_LANE_1] << 4) |
 			(lane_map->lane_map_v2[DSI_LOGICAL_LANE_2] << 8) |
 			(lane_map->lane_map_v2[DSI_LOGICAL_LANE_3] << 12);
 
-	DSI_W32(ctrl, DSI_LANE_SWAP_CTRL, reg_value);
+	DSI_W32(ctrl_hw, DSI_LOGICAL_LANE_SWAP_CTRL, reg_value);
 
-	DSI_CTRL_HW_DBG(ctrl, "[DSI_%d] Lane swap setup complete\n",
-			ctrl->index);
+	DSI_CTRL_HW_DBG(ctrl_hw, "[DSI_%d] Lane swap setup complete\n",
+			ctrl_hw->index);
 }
 
 int dsi_ctrl_hw_22_wait_for_lane_idle(struct dsi_ctrl_hw *ctrl,

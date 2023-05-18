@@ -323,7 +323,6 @@ void sde_core_perf_llcc_stale_configure(struct sde_mdss_cfg *sde_cfg, struct llc
 
 void sde_core_perf_llcc_stale_frame(struct drm_crtc *crtc, enum sde_sys_cache_type type)
 {
-	struct llcc_slice_desc *slice;
 	struct sde_kms *kms;
 
 	if (!crtc) {
@@ -341,15 +340,7 @@ void sde_core_perf_llcc_stale_frame(struct drm_crtc *crtc, enum sde_sys_cache_ty
 			!kms->perf.llcc_active[type])
 		return;
 
-	slice =  llcc_slice_getd(kms->catalog->sc_cfg[type].llcc_uid);
-	if (IS_ERR_OR_NULL(slice)) {
-		SDE_DEBUG("failed to get system cache for scid:%u", type);
-		return;
-	}
-
-	llcc_notif_staling_inc_counter(slice);
-
-	llcc_slice_putd(slice);
+	llcc_notif_staling_inc_counter(kms->catalog->sc_cfg[type].slice);
 }
 #else
 void sde_core_perf_llcc_stale_configure(struct sde_mdss_cfg *sde_cfg, struct llcc_slice_desc *slice)
@@ -965,32 +956,16 @@ static void _sde_core_perf_crtc_update_check(struct drm_crtc *crtc,
 		if ((params_changed &&
 				(new->bw_ctl[i] > old->bw_ctl[i])) ||
 				(!params_changed &&
-				(new->bw_ctl[i] < old->bw_ctl[i]))) {
-
-			SDE_DEBUG(
-				"crtc=%d p=%d new_bw=%llu,old_bw=%llu\n",
-				crtc->base.id, params_changed,
-				new->bw_ctl[i], old->bw_ctl[i]);
-			old->bw_ctl[i] = new->bw_ctl[i];
+				(new->bw_ctl[i] < old->bw_ctl[i])))
 			*update_bus |= BIT(i);
-		}
 
 		if ((params_changed &&
 				(new->max_per_pipe_ib[i] >
 				 old->max_per_pipe_ib[i])) ||
 				(!params_changed &&
 				(new->max_per_pipe_ib[i] <
-				old->max_per_pipe_ib[i]))) {
-
-			SDE_DEBUG(
-				"crtc=%d p=%d new_ib=%llu,old_ib=%llu\n",
-				crtc->base.id, params_changed,
-				new->max_per_pipe_ib[i],
-				old->max_per_pipe_ib[i]);
-			old->max_per_pipe_ib[i] =
-					new->max_per_pipe_ib[i];
+				old->max_per_pipe_ib[i])))
 			*update_bus |= BIT(i);
-		}
 
 		/* display rsc override during solver mode */
 		if (kms->perf.bw_vote_mode == DISP_RSC_MODE &&
@@ -1001,9 +976,6 @@ static void _sde_core_perf_crtc_update_check(struct drm_crtc *crtc,
 					old->bw_ctl[i]) ||
 					(new->max_per_pipe_ib[i] !=
 					old->max_per_pipe_ib[i]))) {
-				old->bw_ctl[i] = new->bw_ctl[i];
-				old->max_per_pipe_ib[i] =
-						new->max_per_pipe_ib[i];
 				*update_bus |= BIT(i);
 			/*
 			 * reduce bw vote is not required in solver
@@ -1012,6 +984,15 @@ static void _sde_core_perf_crtc_update_check(struct drm_crtc *crtc,
 			} else if (!params_changed) {
 				*update_bus &= ~BIT(i);
 			}
+		}
+
+		if ((*update_bus) & BIT(i)) {
+			SDE_DEBUG(
+				"crtc=%d p=%d new_bw=%llu,old_bw=%llu new_ib=%llu old_ib=%llu\n",
+				crtc->base.id, params_changed, new->bw_ctl[i], old->bw_ctl[i],
+				new->max_per_pipe_ib[i], old->max_per_pipe_ib[i]);
+			old->bw_ctl[i] = new->bw_ctl[i];
+			old->max_per_pipe_ib[i] = new->max_per_pipe_ib[i];
 		}
 	}
 

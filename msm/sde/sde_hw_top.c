@@ -118,6 +118,9 @@
 #define HW_FENCE_IPCC_FENCE_PROTOCOL_ID 4
 #define HW_FENCE_DPU_FENCE_PROTOCOL_ID 3
 
+#define HW_FENCE_QOS_PRIORITY 0x7
+#define HW_FENCE_QOS_PRIORITY_LVL 0x0
+
 static int ppb_offset_map[PINGPONG_MAX] = {1, 0, 3, 2, 5, 4, 7, 7, 6, 6, -1, -1};
 
 static void sde_hw_setup_split_pipe(struct sde_hw_mdp *mdp,
@@ -679,6 +682,10 @@ static void _sde_hw_setup_hw_input_fences_config(u32 protocol_id, u32 client_phy
 	val = (protocol_id == HW_FENCE_IPCC_FENCE_PROTOCOL_ID) ?
 		HW_FENCE_DPU_FENCE_PROTOCOL_ID : protocol_id;
 	SDE_REG_WRITE(c, MDP_CTL_HW_FENCE_CTRL, val);
+
+	/* set QOS priority */
+	val = (HW_FENCE_QOS_PRIORITY_LVL << 4) | (HW_FENCE_QOS_PRIORITY & 0x7);
+	SDE_REG_WRITE(c, MDP_CTL_HW_FENCE_QOS, val);
 
 	/* configure the start of the FENCE_IDn_ISR ops for input and output fence isr's */
 	val = (HW_FENCE_DPU_OUTPUT_FENCE_START_N << 16) | (HW_FENCE_DPU_INPUT_FENCE_START_N & 0xFF);

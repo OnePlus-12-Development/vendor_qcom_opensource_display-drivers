@@ -987,6 +987,9 @@ static void sde_hw_ctl_clear_all_blendstages(struct sde_hw_ctl *ctx)
 	for (i = 0; i < ctx->mixer_count; i++) {
 		int mixer_id = ctx->mixer_hw_caps[i].id;
 
+		if (mixer_id >= LM_DCWB_DUMMY_0)
+			return;
+
 		SDE_REG_WRITE(c, CTL_LAYER(mixer_id), 0);
 		SDE_REG_WRITE(c, CTL_LAYER_EXT(mixer_id), 0);
 		SDE_REG_WRITE(c, CTL_LAYER_EXT2(mixer_id), 0);

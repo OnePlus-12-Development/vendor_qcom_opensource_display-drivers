@@ -433,17 +433,22 @@ static void sde_hw_intf_setup_timing_engine(struct sde_hw_intf *ctx,
 	SDE_REG_WRITE(c, INTF_ACTIVE_DATA_HCTL, active_data_hctl);
 }
 
-static void sde_hw_intf_enable_timing_engine(
-		struct sde_hw_intf *intf,
-		u8 enable)
+static void sde_hw_intf_enable_timing_engine(struct sde_hw_intf *intf, u8 enable)
 {
 	struct sde_hw_blk_reg_map *c = &intf->hw;
+	u32 val;
 
 	/* Note: Display interface select is handled in top block hw layer */
 	SDE_REG_WRITE(c, INTF_TIMING_ENGINE_EN, enable != 0);
 
-	if (enable && (intf->cap->features & (BIT(SDE_INTF_PANEL_VSYNC_TS) | BIT(SDE_INTF_MDP_VSYNC_TS))))
-		SDE_REG_WRITE(c, INTF_VSYNC_TIMESTAMP_CTRL, BIT(0));
+	if (enable && (intf->cap->features
+			& (BIT(SDE_INTF_PANEL_VSYNC_TS) | BIT(SDE_INTF_MDP_VSYNC_TS)))) {
+		val = BIT(0);
+		if (intf->cap->features & SDE_INTF_VSYNC_TS_SRC_EN)
+			val |= BIT(4);
+
+		SDE_REG_WRITE(c, INTF_VSYNC_TIMESTAMP_CTRL, val);
+	}
 }
 
 static void sde_hw_intf_setup_prg_fetch(
@@ -843,8 +848,14 @@ static int sde_hw_intf_enable_te(struct sde_hw_intf *intf, bool enable)
 
 	SDE_REG_WRITE(c, INTF_TEAR_TEAR_CHECK_EN, val);
 
-	if (enable && (intf->cap->features & (BIT(SDE_INTF_PANEL_VSYNC_TS) | BIT(SDE_INTF_MDP_VSYNC_TS))))
-		SDE_REG_WRITE(c, INTF_VSYNC_TIMESTAMP_CTRL, BIT(0));
+	if (enable && (intf->cap->features &
+				(BIT(SDE_INTF_PANEL_VSYNC_TS) | BIT(SDE_INTF_MDP_VSYNC_TS)))) {
+		val = BIT(0);
+		if (intf->cap->features & SDE_INTF_VSYNC_TS_SRC_EN)
+			val |= BIT(5);
+
+		SDE_REG_WRITE(c, INTF_VSYNC_TIMESTAMP_CTRL, val);
+	}
 
 	return 0;
 }

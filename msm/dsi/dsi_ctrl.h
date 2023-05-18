@@ -243,6 +243,8 @@ struct dsi_ctrl_interrupts {
  *				count.
  * @cmd_mode:			Boolean to indicate if panel is running in
  *				command mode.
+ * @dsi_ctrl_shared:		Boolean to indicate if ctrl is shared between
+ *				dual displays.
  * @cmd_trigger_line:		unsigned integer that indicates the line at
  *				which command gets triggered.
  * @cmd_trigger_frame:		unsigned integer that indicates the frame at
@@ -316,6 +318,7 @@ struct dsi_ctrl {
 	bool split_link_supported;
 	bool enable_cmd_dma_stats;
 	bool cmd_mode;
+	bool dsi_ctrl_shared;
 	u32 cmd_trigger_line;
 	u32 cmd_trigger_frame;
 	u32 cmd_success_line;
@@ -943,4 +946,10 @@ int dsi_ctrl_get_io_resources(struct msm_io_res *io_res);
  * dsi_ctrl_toggle_error_interrupt_status() - Toggles error interrupt status
  */
 void dsi_ctrl_toggle_error_interrupt_status(struct dsi_ctrl *dsi_ctrl, bool enable);
+
+/**
+ * dsi_ctrl_transfer_cleanup() - Clean up post command transfer
+ * @dsi_ctrl:                 DSI controller handle.
+ */
+void dsi_ctrl_transfer_cleanup(struct dsi_ctrl *dsi_ctrl);
 #endif /* _DSI_CTRL_H_ */

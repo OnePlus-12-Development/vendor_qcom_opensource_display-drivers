@@ -577,6 +577,7 @@ struct sde_misr_sign {
  * @misr_event_notify_enabled: Flag to indicate if misr event notify is enabled or not
  * @previous_misr_sign: store previous misr signature
  * @hwfence_wb_retire_fences_enable: enable hw-fences for wb retire-fence
+ * @max_mode_width: max width of all available modes
  */
 struct sde_connector {
 	struct drm_connector base;
@@ -657,6 +658,8 @@ struct sde_connector {
 	struct sde_misr_sign previous_misr_sign;
 
 	bool hwfence_wb_retire_fences_enable;
+
+	u32 max_mode_width;
 };
 
 /**

@@ -440,9 +440,9 @@ static int _dp_mst_compute_config(struct drm_atomic_state *state,
 {
 	int slots = 0, pbn;
 	struct sde_connector *c_conn = to_sde_connector(connector);
+	int rc = 0;
 #if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
 	struct drm_dp_mst_topology_state *mst_state;
-	int rc;
 #endif
 
 	DP_MST_DEBUG_V("enter\n");
@@ -456,30 +456,38 @@ static int _dp_mst_compute_config(struct drm_atomic_state *state,
 	if (!mst_state->pbn_div)
 		mst_state->pbn_div = mst->dp_display->get_mst_pbn_div(mst->dp_display);
 
-	slots = mst->mst_fw_cbs->atomic_find_time_slots(state,
-			&mst->mst_mgr, c_conn->mst_port, pbn);
+	rc = mst->mst_fw_cbs->atomic_find_time_slots(state, &mst->mst_mgr, c_conn->mst_port, pbn);
+	if (rc < 0) {
+		DP_ERR("conn:%d failed to find vcpi slots. pbn:%d, rc:%d\n",
+				connector->base.id, pbn, rc);
+		goto end;
+	}
+
+	slots = rc;
 
 	rc = drm_dp_mst_atomic_check(state);
 	if (rc) {
-		DP_ERR("conn:%d mst atomic check failed\n", connector->base.id);
+		DP_ERR("conn:%d mst atomic check failed: rc=%d\n", connector->base.id, rc);
 		slots = 0;
+		goto end;
 	}
 #else
 	slots = mst->mst_fw_cbs->atomic_find_vcpi_slots(state,
 			&mst->mst_mgr, c_conn->mst_port, pbn, 0);
-#endif
 	if (slots < 0) {
 		DP_ERR("conn:%d failed to find vcpi slots. pbn:%d, slots:%d\n",
 				connector->base.id, pbn, slots);
-		return slots;
+		rc = slots;
+		slots = 0;
+		goto end;
 	}
+#endif
 
-	DP_MST_DEBUG("conn:%d pbn:%d slots:%d\n", connector->base.id, pbn,
-			slots);
-	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, connector->base.id, pbn,
-			slots);
+end:
+	DP_MST_DEBUG("conn:%d pbn:%d slots:%d rc:%d\n", connector->base.id, pbn, slots, rc);
+	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, connector->base.id, pbn, slots, rc);
 
-	return slots;
+	return (rc < 0 ? rc : slots);
 }
 
 static void _dp_mst_update_timeslots(struct dp_mst_private *mst,
@@ -517,14 +525,18 @@ static void _dp_mst_update_timeslots(struct dp_mst_private *mst,
 				dp_bridge->num_slots = payload->time_slots;
 				dp_bridge->vcpi = payload->vcpi;
 			}
-		} else if ((payload->vc_start_slot < 0) && (dp_bridge->start_slot > prev_start)) {
-			dp_bridge->start_slot -= prev_slots;
 		}
 	}
 
 	// Now commit all the updated payloads
 	for (i = 0; i < MAX_DP_MST_DRM_BRIDGES; i++) {
 		dp_bridge = &mst->mst_bridge[i];
+
+		//Shift payloads to the left if there was a removed payload.
+		if ((payload->vc_start_slot < 0) && (dp_bridge->start_slot > prev_start)) {
+			dp_bridge->start_slot -= prev_slots;
+		}
+
 		mst->dp_display->set_stream_info(mst->dp_display, dp_bridge->dp_panel,
 				dp_bridge->id, dp_bridge->start_slot, dp_bridge->num_slots,
 				dp_bridge->pbn, dp_bridge->vcpi);
@@ -626,7 +638,7 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 	payload = drm_atomic_get_mst_payload_state(mst_state, port);
 
 	drm_dp_mst_update_slots(mst_state, DP_CAP_ANSI_8B10B);
-	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, mst_state, payload);	
+	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, mst_state, payload);
 #else
 	ret = mst->mst_fw_cbs->allocate_vcpi(&mst->mst_mgr, port, pbn, slots);
 	if (!ret) {
@@ -699,7 +711,6 @@ static void _dp_mst_bridge_pre_disable_part1(struct dp_mst_bridge *dp_bridge)
 #else
 	mst->mst_fw_cbs->reset_vcpi_slots(&mst->mst_mgr, port);
 #endif
-	pr_info("rsdbg: calling update after remove\n");
 	_dp_mst_update_timeslots(mst, dp_bridge, port);
 
 	DP_MST_DEBUG("mst bridge [%d] _pre disable part-1 complete\n",
@@ -1157,8 +1168,7 @@ static int dp_mst_connector_get_modes(struct drm_connector *connector,
 			&mst->mst_mgr, c_conn->mst_port);
 
 	if (!edid) {
-		DP_MST_DEBUG("get edid failed. id: %d\n",
-				connector->base.id);
+		DP_ERR("get edid failed. id: %d\n", connector->base.id);
 		goto end;
 	}
 
@@ -1172,7 +1182,6 @@ duplicate_edid:
 	mutex_unlock(&mst->edid_lock);
 
 	if (IS_ERR(edid)) {
-		rc = PTR_ERR(edid);
 		DP_MST_DEBUG("edid duplication failed. id: %d\n",
 				connector->base.id);
 		goto end;
@@ -1182,8 +1191,13 @@ duplicate_edid:
 			connector, edid);
 
 end:
-	DP_MST_DEBUG_V("exit: id: %d rc: %d\n", connector->base.id, rc);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, connector->base.id, rc);
+	if (rc <= 0) {
+		DP_ERR("conn:%d has no modes, rc=%d\n", connector->base.id, rc);
+		rc = 0;
+	} else {
+		DP_MST_INFO("conn:%d has %d modes\n", connector->base.id, rc);
+	}
 
 	return rc;
 }
@@ -1637,7 +1651,7 @@ dp_mst_add_connector(struct drm_dp_mst_topology_mgr *mgr,
 }
 
 static int
-dp_mst_fixed_connector_detect(struct drm_connector *connector, 
+dp_mst_fixed_connector_detect(struct drm_connector *connector,
 			struct drm_modeset_acquire_ctx *ctx,
 			bool force,
 			void *display)
