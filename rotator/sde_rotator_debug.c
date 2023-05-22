@@ -882,11 +882,7 @@ static int sde_rotator_base_create_debugfs(
 	debugfs_create_u32("iommu_ref_cnt", 0444, debugfs_root, &mdata->iommu_ref_cnt);
 
 	mdata->clk_always_on = false;
-	if (!debugfs_create_bool("clk_always_on", 0644,
-			debugfs_root, &mdata->clk_always_on)) {
-		SDEROT_WARN("failed to create debugfs clk_always_on\n");
-		return -EINVAL;
-	}
+	debugfs_create_bool("clk_always_on", 0644, debugfs_root, &mdata->clk_always_on);
 
 	return 0;
 }
