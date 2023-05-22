@@ -79,6 +79,9 @@
 /* Maximum number of VSYNC wait attempts for RSC state transition */
 #define MAX_RSC_WAIT	5
 
+/* Worst case time required for trigger the frame after the EPT wait */
+#define EPT_BACKOFF_THRESHOLD	(3 * NSEC_PER_MSEC)
+
 #define IS_ROI_UPDATED(a, b) (a.x1 != b.x1 || a.x2 != b.x2 || \
 			a.y1 != b.y1 || a.y2 != b.y2)
 
@@ -5083,7 +5086,7 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	current_ts = ktime_get_ns();
 	/* ept is in ns and avr_step is mulitple of refresh rate */
 	ept_ts = avr_step_fps ? ept - DIV_ROUND_UP(NSEC_PER_SEC, avr_step_fps) + NSEC_PER_MSEC
-				: ept - (2 * NSEC_PER_MSEC);
+				: ept - EPT_BACKOFF_THRESHOLD;
 
 	/* ept time already elapsed */
 	if (ept_ts <= current_ts) {
@@ -5182,8 +5185,6 @@ int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 		goto end;
 	}
 
-	_sde_encoder_delay_kickoff_processing(sde_enc);
-
 	ret = _sde_encoder_prepare_for_kickoff_processing(drm_enc, params, sde_enc, sde_kms,
 			needs_hw_reset, is_cmd_mode);
 
@@ -5229,6 +5230,9 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool config_changed)
 	}
 	if (sde_enc->cur_master)
 		_sde_encoder_update_retire_txq(sde_enc->cur_master, sde_kms);
+
+	/* delay frame kickoff based on expected present time */
+	_sde_encoder_delay_kickoff_processing(sde_enc);
 
 	/* All phys encs are ready to go, trigger the kickoff */
 	_sde_encoder_kickoff_phys(sde_enc, config_changed);
