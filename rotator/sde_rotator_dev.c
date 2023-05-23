@@ -531,14 +531,13 @@ static const struct vb2_ops sde_rotator_vb2_q_ops = {
 
 /*
  * sde_rotator_get_userptr - Map and get buffer handler for user pointer buffer.
+ * @vb: video buffer
  * @dev: device allocated in buf_setup.
  * @vaddr: Virtual addr passed from userpsace (in our case ion fd)
  * @size: Size of the buffer
- * @dma_dir: DMA data direction of the given buffer.
  */
-static void *sde_rotator_get_userptr(struct device *dev,
-	unsigned long vaddr, unsigned long size,
-	enum dma_data_direction dma_dir)
+static void *sde_rotator_get_userptr(struct vb2_buffer *vb, struct device *dev,
+	unsigned long vaddr, unsigned long size)
 {
 	struct sde_rotator_ctx *ctx = (struct sde_rotator_ctx *)dev;
 	struct sde_rotator_device *rot_dev = ctx->rot_dev;
