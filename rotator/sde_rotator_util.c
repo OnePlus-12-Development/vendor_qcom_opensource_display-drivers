@@ -21,6 +21,7 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/regulator/consumer.h>
+#include <linux/version.h>
 #include <linux/module.h>
 #include <media/mmm_color_fmt.h>
 #include <linux/videodev2.h>
