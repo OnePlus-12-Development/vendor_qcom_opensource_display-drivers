@@ -223,6 +223,11 @@ struct sde_hw_intf_ops {
 			const struct intf_avr_params *avr_params);
 
 	/**
+	 * Enable trigger based on TE level
+	 */
+	void (*enable_te_level_trigger)(struct sde_hw_intf *intf, bool enable);
+
+	/**
 	 * Indicates the AVR armed status
 	 *
 	 * @return: false if a trigger is pending, else true while AVR is enabled

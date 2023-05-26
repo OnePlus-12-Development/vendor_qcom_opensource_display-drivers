@@ -6779,6 +6779,7 @@ int dsi_display_get_info(struct drm_connector *connector,
 	info->has_qsync_min_fps_list = (display->panel->qsync_caps.qsync_min_fps_list_len > 0);
 	info->avr_step_fps = display->panel->avr_caps.avr_step_fps;
 	info->poms_align_vsync = display->panel->poms_align_vsync;
+	info->is_te_using_watchdog_timer = is_sim_panel(display);
 
 	switch (display->panel->panel_mode) {
 	case DSI_OP_VIDEO_MODE:
@@ -6792,7 +6793,6 @@ int dsi_display_get_info(struct drm_connector *connector,
 		info->capabilities |= MSM_DISPLAY_CAP_CMD_MODE;
 		if (display->panel->panel_mode_switch_enabled)
 			info->capabilities |= MSM_DISPLAY_CAP_VID_MODE;
-		info->is_te_using_watchdog_timer = is_sim_panel(display);
 		break;
 	default:
 		DSI_ERR("unknwown dsi panel mode %d\n",
