@@ -601,7 +601,7 @@ static void _dp_mst_update_single_timeslot(struct dp_mst_private *mst,
 	}
 }
 
-static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
+static int _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 {
 	struct dp_display *dp_display = dp_bridge->display;
 	struct sde_connector *c_conn =
@@ -614,6 +614,7 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 #endif
 	bool ret;
 	int pbn, slots;
+	int rc = 0;
 
 	DP_MST_DEBUG_V("enter\n");
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, DP_MST_CONN_ID(dp_bridge));
@@ -624,7 +625,7 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 		drm_dp_send_power_updown_phy(&mst->mst_mgr, port, true);
 		dp_display->wakeup_phy_layer(dp_display, false);
 		_dp_mst_update_single_timeslot(mst, dp_bridge);
-		return;
+		return rc;
 	}
 
 	pbn = mst->mst_fw_cbs->calc_pbn_mode(&dp_bridge->dp_mode);
@@ -637,6 +638,11 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 #if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
 	mst_state = to_drm_dp_mst_topology_state(mst->mst_mgr.base.state);
 	payload = drm_atomic_get_mst_payload_state(mst_state, port);
+	if (payload->time_slots <= 0) {
+		DP_ERR("time slots not allocated for conn:%d\n", DP_MST_CONN_ID(dp_bridge));
+		rc = -EINVAL;
+		goto end;
+	}
 
 	drm_dp_mst_update_slots(mst_state, DP_CAP_ANSI_8B10B);
 	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, mst_state, payload);
@@ -644,13 +650,17 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 	ret = mst->mst_fw_cbs->allocate_vcpi(&mst->mst_mgr, port, pbn, slots);
 	if (!ret) {
 		DP_ERR("mst: failed to allocate vcpi. bridge:%d\n", dp_bridge->id);
-		return;
+		rc = -EINVAL;
+		goto end;
 	}
 
 	dp_bridge->vcpi = port->vcpi.vcpi;
 	dp_bridge->pbn = pbn;
 #endif
 	_dp_mst_update_timeslots(mst, dp_bridge, port);
+
+end:
+	return rc;
 }
 
 static void _dp_mst_bridge_pre_enable_part2(struct dp_mst_bridge *dp_bridge)
@@ -794,7 +804,12 @@ static void dp_mst_bridge_pre_enable(struct drm_bridge *drm_bridge)
 		goto end;
 	}
 
-	_dp_mst_bridge_pre_enable_part1(bridge);
+	rc = _dp_mst_bridge_pre_enable_part1(bridge);
+	if (rc) {
+		DP_ERR("[%d] DP display pre-enable failed, rc=%d\n", bridge->id, rc);
+		dp->unprepare(dp, bridge->dp_panel);
+		goto end;
+	}
 
 	rc = dp->enable(dp, bridge->dp_panel);
 	if (rc) {
