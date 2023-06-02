@@ -1540,7 +1540,7 @@ static int dp_panel_dsc_prepare_basic_params(
 	 * 2. The ppr per slice cannot exceed the maximum.
 	 * 3. The number of slices must be explicitly supported.
 	 */
-	while (slice_width >= max_slice_width ||
+	while (slice_width > max_slice_width ||
 			ppr_per_slice > peak_throughput ||
 			!dp_panel_check_slice_support(
 			comp_info->dsc_info.slice_per_pkt, slice_caps_1,
