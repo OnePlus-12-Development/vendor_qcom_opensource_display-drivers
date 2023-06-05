@@ -84,23 +84,6 @@ struct dp_panel_private {
 	u8 minor;
 };
 
-static const struct dp_panel_info fail_safe = {
-	.h_active = 640,
-	.v_active = 480,
-	.h_back_porch = 48,
-	.h_front_porch = 16,
-	.h_sync_width = 96,
-	.h_active_low = 0,
-	.v_back_porch = 33,
-	.v_front_porch = 10,
-	.v_sync_width = 2,
-	.v_active_low = 0,
-	.h_skew = 0,
-	.refresh_rate = 60,
-	.pixel_clk_khz = 25200,
-	.bpp = 24,
-};
-
 /* OEM NAME */
 static const u8 vendor_name[8] = {81, 117, 97, 108, 99, 111, 109, 109};
 
@@ -2060,10 +2043,7 @@ static int dp_panel_get_modes(struct dp_panel *dp_panel,
 		return _sde_edid_update_modes(connector, dp_panel->edid_ctrl);
 	}
 
-	/* fail-safe mode */
-	memcpy(&mode->timing, &fail_safe,
-		sizeof(fail_safe));
-	return 1;
+	return 0;
 }
 
 static void dp_panel_handle_sink_request(struct dp_panel *dp_panel)

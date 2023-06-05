@@ -1178,6 +1178,7 @@ static int dp_mst_connector_get_modes(struct drm_connector *connector,
 	struct sde_connector *c_conn = to_sde_connector(connector);
 	struct dp_display *dp_display = display;
 	struct dp_mst_private *mst = dp_display->dp_mst_prv_info;
+	struct dp_display_mode *dp_mode = NULL;
 	int rc = 0;
 	struct edid *edid = NULL;
 
@@ -1195,7 +1196,7 @@ static int dp_mst_connector_get_modes(struct drm_connector *connector,
 			&mst->mst_mgr, c_conn->mst_port);
 
 	if (!edid) {
-		DP_ERR("get edid failed. id: %d\n", connector->base.id);
+		DP_WARN("get edid failed. id: %d\n", connector->base.id);
 		goto end;
 	}
 
@@ -1220,8 +1221,13 @@ duplicate_edid:
 end:
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, connector->base.id, rc);
 	if (rc <= 0) {
-		DP_ERR("conn:%d has no modes, rc=%d\n", connector->base.id, rc);
-		rc = 0;
+		DP_WARN("conn:%d has no modes, adding failsafe. rc=%d\n", connector->base.id, rc);
+		dp_mode = kzalloc(sizeof(*dp_mode),  GFP_KERNEL);
+		if (!dp_mode)
+			return 0;
+
+		init_failsafe_mode(dp_mode);
+		rc = dp_connector_add_custom_mode(connector, dp_mode);
 	} else {
 		DP_MST_INFO("conn:%d has %d modes\n", connector->base.id, rc);
 	}

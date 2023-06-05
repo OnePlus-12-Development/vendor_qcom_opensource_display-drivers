@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -308,6 +308,47 @@ static const struct drm_bridge_funcs dp_bridge_ops = {
 	.mode_set     = dp_bridge_mode_set,
 };
 
+int dp_connector_add_custom_mode(struct drm_connector *conn, struct dp_display_mode *dp_mode)
+{
+	struct drm_display_mode *m, drm_mode;
+
+	memset(&drm_mode, 0x0, sizeof(drm_mode));
+	convert_to_drm_mode(dp_mode, &drm_mode);
+	m = drm_mode_duplicate(conn->dev, &drm_mode);
+	if (!m) {
+		DP_ERR("failed to add mode %ux%u\n", drm_mode.hdisplay, drm_mode.vdisplay);
+		return 0;
+	}
+	m->width_mm = conn->display_info.width_mm;
+	m->height_mm = conn->display_info.height_mm;
+	drm_mode_probed_add(conn, m);
+
+	return 1;
+}
+
+void init_failsafe_mode(struct dp_display_mode *dp_mode)
+{
+	static const struct dp_panel_info fail_safe = {
+		.h_active = 640,
+		.v_active = 480,
+		.h_back_porch = 48,
+		.h_front_porch = 16,
+		.h_sync_width = 96,
+		.h_active_low = 1,
+		.v_back_porch = 33,
+		.v_front_porch = 10,
+		.v_sync_width = 2,
+		.v_active_low = 1,
+		.h_skew = 0,
+		.refresh_rate = 60,
+		.pixel_clk_khz = 25175,
+		.bpp = 24,
+		.widebus_en = true,
+	};
+
+	memcpy(&dp_mode->timing, &fail_safe, sizeof(fail_safe));
+}
+
 int dp_connector_config_hdr(struct drm_connector *connector, void *display,
 	struct sde_connector_state *c_state)
 {
@@ -558,7 +599,6 @@ int dp_connector_get_modes(struct drm_connector *connector,
 	int rc = 0;
 	struct dp_display *dp;
 	struct dp_display_mode *dp_mode = NULL;
-	struct drm_display_mode *m, drm_mode;
 	struct sde_connector *sde_conn;
 
 	if (!connector || !display)
@@ -578,25 +618,19 @@ int dp_connector_get_modes(struct drm_connector *connector,
 
 	/* pluggable case assumes EDID is read when HPD */
 	if (dp->is_sst_connected) {
+		/*
+		 * 1. for test request, rc = 1, and dp_mode will have test mode populated
+		 * 2. During normal operation, dp_mode will be untouched
+		 *    a. if mode query succeeds rc >= 0, valid modes will be added to connector
+		 *    b. if edid read failed, then connector mode list will be empty and rc <= 0
+		 */
 		rc = dp->get_modes(dp, sde_conn->drv_panel, dp_mode);
-		if (!rc)
-			DP_ERR("failed to get DP sink modes, rc=%d\n", rc);
-
-		if (dp_mode->timing.pixel_clk_khz) { /* valid DP mode */
-			memset(&drm_mode, 0x0, sizeof(drm_mode));
-			convert_to_drm_mode(dp_mode, &drm_mode);
-			m = drm_mode_duplicate(connector->dev, &drm_mode);
-			if (!m) {
-				DP_ERR("failed to add mode %ux%u\n",
-				       drm_mode.hdisplay,
-				       drm_mode.vdisplay);
-				kfree(dp_mode);
-				return 0;
-			}
-			m->width_mm = connector->display_info.width_mm;
-			m->height_mm = connector->display_info.height_mm;
-			drm_mode_probed_add(connector, m);
+		if (!rc) {
+			DP_WARN("failed to get DP sink modes, adding failsafe");
+			init_failsafe_mode(dp_mode);
 		}
+		if (dp_mode->timing.pixel_clk_khz) /* valid DP mode */
+			rc = dp_connector_add_custom_mode(connector, dp_mode);
 	} else {
 		DP_ERR("No sink connected\n");
 	}

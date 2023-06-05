@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -167,6 +168,19 @@ int dp_connector_update_pps(struct drm_connector *connector,
  */
 int dp_connector_install_properties(void *display,
 		struct drm_connector *conn);
+
+/**
+ * init_failsafe_mode - add failsafe edid mode
+ * @dp_mode: Pointer to mode
+ */
+void init_failsafe_mode(struct dp_display_mode *dp_mode);
+
+/**
+ * dp_connector_add_custom_mode - add edid mode to connector
+ * @conn: Pointer to connector
+ * @dp_mode: Pointer to mode
+ */
+int dp_connector_add_custom_mode(struct drm_connector *conn, struct dp_display_mode *dp_mode);
 
 #else
 static inline int dp_connector_config_hdr(struct drm_connector *connector,
