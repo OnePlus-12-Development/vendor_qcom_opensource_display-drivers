@@ -934,7 +934,7 @@ static void _sde_dbg_vbif_clear_test_point(void __iomem *mem_base, u32 wr_addr)
 static u32 _sde_dbg_sde_read_test_point(void __iomem *mem_base, u32 wr_addr, u32 rd_addr,
 			u32 block_id, u32 test_id)
 {
-	if (block_id > EXT_TEST_GROUP_SEL_EN)
+	if (test_id > EXT_TEST_GROUP_SEL_EN)
 		writel_relaxed(TEST_EXT_MASK(block_id, test_id), mem_base + wr_addr);
 	else
 		writel_relaxed(TEST_MASK(block_id, test_id), mem_base + wr_addr);
