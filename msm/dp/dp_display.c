@@ -3040,6 +3040,12 @@ static enum drm_mode_status dp_display_validate_mode(
 
 	dp_display->convert_to_dp_mode(dp_display, panel, mode, &dp_mode);
 
+	/* As per spec, 640x480 mode should always be present as fail-safe */
+	if ((dp_mode.timing.h_active == 640) && (dp_mode.timing.v_active == 480) &&
+			(dp_mode.timing.pixel_clk_khz == 25175)) {
+		goto skip_validation;
+	}
+
 	rc = dp_display_validate_topology(dp, dp_panel, mode, &dp_mode, avail_res);
 	if (rc == -EAGAIN) {
 		dp_panel->convert_to_dp_mode(dp_panel, mode, &dp_mode);
@@ -3057,6 +3063,7 @@ static enum drm_mode_status dp_display_validate_mode(
 	if (rc)
 		goto end;
 
+skip_validation:
 	mode_status = MODE_OK;
 
 	if (!avail_res->num_lm_in_use) {
@@ -3070,7 +3077,7 @@ static enum drm_mode_status dp_display_validate_mode(
 end:
 	mutex_unlock(&dp->session_lock);
 
-	DP_DEBUG_V("[%s] mode is %s\n", mode->name,
+	DP_DEBUG_V("[%s clk:%d] mode is %s\n", mode->name, mode->clock,
 			(mode_status == MODE_OK) ? "valid" : "invalid");
 
 	return mode_status;
