@@ -417,6 +417,15 @@ static bool _dsi_bridge_mode_validate_and_fixup(struct drm_bridge *bridge,
 	convert_to_dsi_mode(cur_mode, &cur_dsi_mode);
 	msm_parse_mode_priv_info(&old_conn_state->msm_mode, &cur_dsi_mode);
 
+	if (cur_dsi_mode.priv_info) {
+		// in TUI, sometimes msm_mode->private == NULL
+		rc = dsi_display_restore_bit_clk(display, &cur_dsi_mode);
+		if (rc) {
+			DSI_WARN("couldn't restore dsi bit clk");
+			return rc;
+		}
+	}
+
 	rc = dsi_display_validate_mode_change(c_bridge->display, &cur_dsi_mode, adj_mode);
 	if (rc) {
 		DSI_ERR("[%s] seamless mode mismatch failure rc=%d\n", c_bridge->display->name, rc);
