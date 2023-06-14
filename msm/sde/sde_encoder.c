@@ -5051,12 +5051,13 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 {
 	ktime_t current_ts, ept_ts;
 	u32 avr_step_fps, min_fps = 0, qsync_mode, fps;
-	u64 timeout_us = 0, ept;
+	u64 timeout_us = 0, ept, next_vsync_time_ns;
 	bool is_cmd_mode;
 	char atrace_buf[64];
 	struct drm_connector *drm_conn;
 	struct msm_mode_info *info = &sde_enc->mode_info;
 	struct sde_kms *sde_kms = sde_encoder_get_kms(&sde_enc->base);
+	struct sde_encoder_phys *phy_enc = sde_enc->cur_master;
 
 	if (!sde_enc->cur_master || !sde_enc->cur_master->connector || !sde_kms)
 		return;
@@ -5094,24 +5095,40 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	if (ept_ts <= current_ts) {
 		SDE_DEBUG("enc:%d, ept elapsed; ept:%llu, ept_ts:%llu, current_ts:%llu\n",
 				DRMID(&sde_enc->base), ept, ept_ts, current_ts);
+		SDE_EVT32(DRMID(&sde_enc->base), qsync_mode, avr_step_fps, min_fps, fps,
+			ktime_to_us(current_ts), ktime_to_us(ept_ts), SDE_EVTLOG_FUNC_CASE1);
+		return;
+	}
+
+	next_vsync_time_ns = DIV_ROUND_UP(NSEC_PER_SEC, fps) + phy_enc->last_vsync_timestamp;
+	/* ept time is within last & next vsync expected with current fps */
+	if (!qsync_mode && (ept_ts < next_vsync_time_ns)) {
+		SDE_EVT32(DRMID(&sde_enc->base), qsync_mode, avr_step_fps, min_fps, fps,
+			ktime_to_us(current_ts), ktime_to_us(ept), ktime_to_us(ept_ts),
+			ktime_to_us(next_vsync_time_ns), is_cmd_mode, SDE_EVTLOG_FUNC_CASE2);
 		return;
 	}
 
 	timeout_us = DIV_ROUND_UP((ept_ts - current_ts), 1000);
 	/* validate timeout is not beyond the min fps */
 	if (timeout_us > DIV_ROUND_UP(USEC_PER_SEC, min_fps)) {
-		SDE_ERROR("enc:%d, invalid timeout_us:%llu; ept:%llu, ept_ts:%llu, cur_ts:%llu\n",
-				DRMID(&sde_enc->base), timeout_us, ept, ept_ts, current_ts);
+		pr_err_ratelimited(
+		"enc:%d, invalid timeout_us:%llu; ept:%llu, ept_ts:%llu, cur_ts:%llu min_fps:%d, fps:%d, qsync_mode:%d, avr_step_fps:%d\n",
+			DRMID(&sde_enc->base), timeout_us, ept, ept_ts, current_ts,
+			min_fps, fps, qsync_mode, avr_step_fps);
+		SDE_EVT32(DRMID(&sde_enc->base), qsync_mode, avr_step_fps,
+			min_fps, fps, ktime_to_us(current_ts),
+			ktime_to_us(ept_ts), timeout_us, SDE_EVTLOG_ERROR);
 		return;
 	}
 
 	snprintf(atrace_buf, sizeof(atrace_buf), "schedule_timeout_%llu", ept);
 	SDE_ATRACE_BEGIN(atrace_buf);
-	usleep_range(timeout_us, timeout_us + 10);
+	usleep_range((timeout_us - USEC_PER_MSEC), timeout_us);
 	SDE_ATRACE_END(atrace_buf);
 
-	SDE_EVT32(DRMID(&sde_enc->base), qsync_mode, avr_step_fps, min_fps, ktime_to_us(current_ts),
-					ktime_to_us(ept_ts), timeout_us);
+	SDE_EVT32(DRMID(&sde_enc->base), qsync_mode, avr_step_fps, min_fps, fps,
+		ktime_to_us(current_ts), ktime_to_us(ept_ts), timeout_us, SDE_EVTLOG_FUNC_CASE3);
 }
 
 int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
