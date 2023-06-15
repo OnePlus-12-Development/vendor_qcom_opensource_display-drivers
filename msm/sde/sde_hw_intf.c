@@ -773,6 +773,7 @@ static int sde_hw_intf_setup_te_config(struct sde_hw_intf *intf,
 	SDE_REG_WRITE(c, INTF_TEAR_RD_PTR_IRQ, te->rd_ptr_irq);
 	SDE_REG_WRITE(c, INTF_TEAR_WR_PTR_IRQ, te->wr_ptr_irq);
 	SDE_REG_WRITE(c, INTF_TEAR_START_POS, te->start_pos);
+	SDE_REG_WRITE(c, INTF_TEAR_TEAR_DETECT_CTRL, te->detect_ctrl);
 	if (intf->cap->features & BIT(SDE_INTF_TE_32BIT))
 		SDE_REG_WRITE(c,  INTF_TEAR_SYNC_THRESH_EXT,
 				((te->sync_threshold_continue & 0xffff0000) |
