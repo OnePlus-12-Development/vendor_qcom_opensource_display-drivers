@@ -1,6 +1,7 @@
 DISPLAY_SELECT := CONFIG_DRM_MSM=m
 
 LOCAL_PATH := $(call my-dir)
+LOCAL_MODULE_DDK_BUILD := true
 include $(CLEAR_VARS)
 
 # This makefile is only for DLKM
