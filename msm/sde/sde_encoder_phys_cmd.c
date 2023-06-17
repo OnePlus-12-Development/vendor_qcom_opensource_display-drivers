@@ -1308,7 +1308,7 @@ static void _get_tearcheck_cfg(struct sde_encoder_phys *phys_enc,
 	struct msm_mode_info *info = &sde_enc->mode_info;
 	struct drm_display_mode *mode = &phys_enc->cached_mode;
 	enum sde_rm_qsync_modes qsync_mode;
-	ktime_t qsync_time_ns, default_time_ns, default_line_time_ns, ept_time_ns;
+	ktime_t qsync_time_ns, default_time_ns, default_line_time_ns, ept_time_ns = 0;
 	ktime_t extra_time_ns = 0, ept_extra_time_ns = 0, qsync_l_bound_ns, qsync_u_bound_ns;
 	u32 threshold_lines, ept_threshold_lines = 0, yres;
 	u32 default_fps, qsync_min_fps = 0, ept_fps = 0;

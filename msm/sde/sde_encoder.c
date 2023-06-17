@@ -1612,7 +1612,7 @@ static void sde_encoder_control_te(struct sde_encoder_virt *sde_enc, bool enable
 		return;
 	}
 
-	for (i = 0; i < sde_enc->num_phys_encs; i++) {
+	for (i = 0; i < sde_enc->num_phys_encs && i < ARRAY_SIZE(sde_enc->phys_encs); i++) {
 		phys = sde_enc->phys_encs[i];
 		if (phys && phys->ops.control_te)
 			phys->ops.control_te(phys, enable);
@@ -2102,6 +2102,11 @@ int sde_encoder_handle_dma_fence_out_of_order(struct drm_encoder *drm_enc)
 	int i, fence_status = 0, pending_kickoff_cnt = 0, rc = 0;
 	ktime_t time_stamp;
 
+	if (!drm_enc) {
+		SDE_ERROR("invalid encoder\n");
+		return false;
+	}
+
 	crtc = drm_enc->crtc;
 	sde_crtc = to_sde_crtc(crtc);
 	cstate = to_sde_crtc_state(crtc->state);
@@ -2211,7 +2216,7 @@ int sde_encoder_hw_fence_error_handle(struct drm_encoder *drm_enc)
 		SDE_EVT32(DRMID(phys_enc->parent), rc, SDE_EVTLOG_ERROR);
 	}
 
-	if (!phys_enc->sde_kms && !phys_enc->sde_kms->dev && !phys_enc->sde_kms->dev->dev_private) {
+	if (!phys_enc->sde_kms || !phys_enc->sde_kms->dev || !phys_enc->sde_kms->dev->dev_private) {
 		SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_ERROR);
 		return -EINVAL;
 	}
@@ -4438,7 +4443,7 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc,
 	sde_crtc = to_sde_crtc(sde_enc->crtc);
 
 	/* reset input fence status and skip flush for fence error case. */
-	if (sde_crtc->input_fence_status < 0) {
+	if (sde_crtc && sde_crtc->input_fence_status < 0) {
 		if (!sde_encoder_in_clone_mode(&sde_enc->base))
 			sde_crtc->input_fence_status = 0;
 
