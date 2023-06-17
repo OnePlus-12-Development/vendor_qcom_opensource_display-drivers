@@ -36,6 +36,7 @@
 #define AUTOREFRESH_SEQ1_POLL_TIME	2000
 #define AUTOREFRESH_SEQ2_POLL_TIME	25000
 #define AUTOREFRESH_SEQ2_POLL_TIMEOUT	1000000
+#define TEAR_DETECT_CTRL	0x14
 
 static inline int _sde_encoder_phys_cmd_get_idle_timeout(
 		struct sde_encoder_phys *phys_enc)
@@ -1498,6 +1499,7 @@ static void sde_encoder_phys_cmd_tearcheck_config(
 	tc_cfg.sync_threshold_continue = DEFAULT_TEARCHECK_SYNC_THRESH_CONTINUE;
 	tc_cfg.rd_ptr_irq = mode->vdisplay + 1;
 	tc_cfg.wr_ptr_irq = 1;
+	tc_cfg.detect_ctrl = tc_cfg.vsync_init_val + TEAR_DETECT_CTRL;
 	cmd_enc->qsync_threshold_lines = tc_cfg.sync_threshold_start;
 
 	SDE_DEBUG_CMDENC(cmd_enc,
