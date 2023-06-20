@@ -96,7 +96,6 @@ struct dp_aux_private {
 	atomic_t aborted;
 };
 
-#if IS_ENABLED(CONFIG_DYNAMIC_DEBUG)
 static void dp_aux_hex_dump(struct drm_dp_aux *drm_aux,
 		struct drm_dp_aux_msg *msg)
 {
@@ -126,12 +125,6 @@ static void dp_aux_hex_dump(struct drm_dp_aux *drm_aux,
 			DP_AUX_DEBUG(dp_aux, "%s%s\n", prefix, linebuf);
 	}
 }
-#else
-static void dp_aux_hex_dump(struct drm_dp_aux *drm_aux,
-		struct drm_dp_aux_msg *msg)
-{
-}
-#endif /* CONFIG_DYNAMIC_DEBUG */
 
 static char *dp_aux_get_error(u32 aux_error)
 {
