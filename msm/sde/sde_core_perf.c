@@ -1054,6 +1054,15 @@ void sde_core_perf_crtc_update(struct drm_crtc *crtc,
 	old = &sde_crtc->cur_perf;
 	new = &sde_crtc->new_perf;
 
+	/* avoid the voting in fence error case when there is decrease in BW vote */
+	if (!params_changed && !stop_req && sde_crtc->handle_fence_error_bw_update) {
+		new = &sde_crtc->cur_perf;
+		SDE_EVT32(kms->dev, params_changed, stop_req,
+			sde_crtc->handle_fence_error_bw_update);
+
+		sde_crtc->handle_fence_error_bw_update = false;
+	}
+
 	if (_sde_core_perf_crtc_is_power_on(crtc) && !stop_req) {
 		_sde_core_perf_crtc_update_check(crtc, params_changed,
 				&update_bus, &update_clk);

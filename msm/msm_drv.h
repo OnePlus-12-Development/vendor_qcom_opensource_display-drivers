@@ -198,6 +198,7 @@ enum msm_mdp_crtc_property {
 	CRTC_PROP_VM_REQ_STATE,
 	CRTC_PROP_NOISE_LAYER_V1,
 	CRTC_PROP_FRAME_DATA_BUF,
+	CRTC_PROP_HANDLE_FENCE_ERROR,
 
 	/* total # of properties */
 	CRTC_PROP_COUNT
@@ -254,6 +255,7 @@ enum msm_mdp_conn_property {
 	CONNECTOR_PROP_WB_USAGE_TYPE,
 	CONNECTOR_PROP_WB_ROT_TYPE,
 	CONNECTOR_PROP_WB_ROT_BYTES_PER_CLK,
+	CONNECTOR_PROP_BPP_MODE,
 
 	/* total # of properties */
 	CONNECTOR_PROP_COUNT
@@ -348,6 +350,18 @@ enum panel_op_mode {
 };
 
 /**
+ * enum msm_display_pixel_format - display dsi pixel format
+ * @MSM_DISPLAY_PIXEL_FORMAT_NONE: none
+ * @MSM_DISPLAY_PIXEL_FORMAT_RGB888: 24BPP
+ * @MSM_DISPLAY_PIXEL_FORMAT_RGB101010: 30BPP
+ */
+enum msm_display_pixel_format {
+	MSM_DISPLAY_PIXEL_FORMAT_NONE,
+	MSM_DISPLAY_PIXEL_FORMAT_RGB888,
+	MSM_DISPLAY_PIXEL_FORMAT_RGB101010,
+};
+
+/**
  * enum msm_display_dsc_mode - panel dsc mode
  * @MSM_DISPLAY_DSC_MODE_NONE: No operation
  * @MSM_DISPLAY_DSC_MODE_ENABLED: DSC is enabled
@@ -374,9 +388,11 @@ struct msm_display_mode {
 /**
  * struct msm_sub_mode - msm display sub mode
  * @dsc_enabled: boolean used to indicate if dsc should be enabled
+ * @pixel_format_mode: used to indicate pixel format mode
  */
 struct msm_sub_mode {
 	enum msm_display_dsc_mode dsc_mode;
+	enum msm_display_pixel_format pixel_format_mode;
 };
 
 /**
@@ -805,6 +821,8 @@ struct msm_display_wd_jitter_config {
  * @roi_caps:        panel roi capabilities
  * @wide_bus_en:	wide-bus mode cfg for interface module
  * @panel_mode_caps   panel mode capabilities
+ * @pixel_format_caps      pixel format capabilities.
+ * @bpp                    bits per pixel.
  * @mdp_transfer_time_us   Specifies the mdp transfer time for command mode
  *                         panels in microseconds.
  * @mdp_transfer_time_us_min   Specifies the minimum possible mdp transfer time
@@ -832,6 +850,8 @@ struct msm_mode_info {
 	struct msm_roi_caps roi_caps;
 	bool wide_bus_en;
 	u32 panel_mode_caps;
+	u32 pixel_format_caps;
+	u32 bpp;
 	u32 mdp_transfer_time_us;
 	u32 mdp_transfer_time_us_min;
 	u32 mdp_transfer_time_us_max;
@@ -975,6 +995,28 @@ struct msm_drm_thread {
 	struct kthread_worker worker;
 };
 
+/**
+ * struct msm_fence_error_ops - hooks for communication with fence error clients
+ * @fence_error_handle_submodule: fence error handle for display submodule
+ */
+struct msm_fence_error_ops {
+	int (*fence_error_handle_submodule)(void *ctl_data, void *priv_data);
+};
+
+/**
+ * msm_fence_error_client_entry - defines the msm fence error client info
+ * @ops: client msm_fence_error_ops
+ * @dev: client device id
+ * @data: client custom data
+ * @list: linked list entry
+ */
+struct msm_fence_error_client_entry {
+	struct msm_fence_error_ops ops;
+	struct device *dev;
+	void *data;
+	struct list_head list;
+};
+
 struct msm_drm_private {
 
 	struct drm_device *dev;
@@ -1101,6 +1143,9 @@ struct msm_drm_private {
 
 	struct mutex vm_client_lock;
 	struct list_head vm_client_list;
+
+	struct mutex fence_error_client_lock;
+	struct list_head fence_error_client_list;
 };
 
 /* get struct msm_kms * from drm_device * */
@@ -1136,6 +1181,25 @@ void msm_atomic_state_clear(struct drm_atomic_state *state);
 void msm_atomic_state_free(struct drm_atomic_state *state);
 
 void msm_atomic_flush_display_threads(struct msm_drm_private *priv);
+
+/**
+ * msm_register_fence_error_event - api for display dependent drivers(clients) to
+ *                         register for fence error events
+ * @dev: msm device
+ * @ops: fence error event hooks
+ * @priv_data: client custom data
+ */
+void *msm_register_fence_error_event(struct drm_device *ddev, struct msm_fence_error_ops *ops,
+		void *priv_data);
+
+/**
+ * msm_unregister_fence_error_event - api for display dependent drivers(clients) to
+ *                         unregister for fence error events
+ * @dev: msm device
+ * @client_entry_handle: client_entry pointer
+ */
+int msm_unregister_fence_error_event(struct drm_device *ddev,
+		struct msm_fence_error_client_entry *client_entry_handle);
 
 int msm_gem_init_vma(struct msm_gem_address_space *aspace,
 		struct msm_gem_vma *vma, int npages);

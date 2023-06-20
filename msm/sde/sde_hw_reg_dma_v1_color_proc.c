@@ -126,9 +126,6 @@
 
 #define REG_DMA_DSPP_GAMUT_OP_MASK 0xFFFFFFE0
 
-#define DEMURAV1_CFG0_PARAM4_MASK 5
-#define DEMURAV2_CFG0_PARAM4_MASK 7
-
 #define LOG_FEATURE_OFF SDE_EVT32(ctx->idx, 0)
 #define LOG_FEATURE_ON SDE_EVT32(ctx->idx, 1)
 
@@ -6533,26 +6530,14 @@ static bool __reg_dmav1_valid_hfc_en_cfg(struct drm_msm_dem_cfg *dcfg,
 	return false;
 }
 
-static int __reg_dmav1_setup_demura_common_en(struct sde_hw_dspp *ctx,
+static void __reg_dmav1_setup_demura_common_en(struct sde_hw_dspp *ctx,
 		struct drm_msm_dem_cfg *dcfg,
 		struct sde_reg_dma_setup_ops_cfg *dma_write_cfg,
 		struct sde_hw_reg_dma_ops *dma_ops,
 		struct sde_hw_cp_cfg *hw_cfg,
 		u32 *en)
 {
-	u32 backl;
-	int rc;
 	bool valid_hfc_cfg = false;
-	u32 demura_base = ctx->cap->sblk->demura.base + ctx->hw.blk_off;
-
-	backl = (1024 << 16) | 1024;
-	REG_DMA_SETUP_OPS(*dma_write_cfg, demura_base + 0x8,
-		&backl, sizeof(backl), REG_SINGLE_WRITE, 0, 0, 0);
-	rc = dma_ops->setup_payload(dma_write_cfg);
-	if (rc) {
-		DRM_ERROR("0x8: REG_SINGLE_WRITE failed ret %d\n", rc);
-		return rc;
-	}
 
 	*en = (dcfg->src_id == BIT(3)) ? 0 : BIT(31);
 	*en |= (dcfg->cfg1_high_idx & REG_MASK(3)) << 24;
@@ -6569,8 +6554,6 @@ static int __reg_dmav1_setup_demura_common_en(struct sde_hw_dspp *ctx,
 		*en |= (dcfg->cfg0_en) ? BIT(2) : 0;
 	*en |= (dcfg->cfg1_en) ? BIT(1) : 0;
 	DRM_DEBUG_DRIVER("demura common en %x\n", *en);
-
-	return rc;
 }
 
 static int __reg_dmav1_setup_demurav1_en(struct sde_hw_dspp *ctx,
@@ -6583,11 +6566,7 @@ static int __reg_dmav1_setup_demurav1_en(struct sde_hw_dspp *ctx,
 	int rc;
 	u32 demura_base = ctx->cap->sblk->demura.base + ctx->hw.blk_off;
 
-	rc = __reg_dmav1_setup_demura_common_en(ctx, dcfg, dma_write_cfg, dma_ops, hw_cfg, &en);
-	if (rc) {
-		DRM_ERROR("failed reg_dmav1_setup_demura_common_en %d", rc);
-		return rc;
-	}
+	__reg_dmav1_setup_demura_common_en(ctx, dcfg, dma_write_cfg, dma_ops, hw_cfg, &en);
 
 	DRM_DEBUG_DRIVER("demura v1 en 0x%x\n", en);
 	SDE_EVT32(en);
@@ -6610,11 +6589,7 @@ static int __reg_dmav1_setup_demurav2_en(struct sde_hw_dspp *ctx,
 	int rc, val;
 	u32 demura_base = ctx->cap->sblk->demura.base + ctx->hw.blk_off;
 
-	rc = __reg_dmav1_setup_demura_common_en(ctx, dcfg, dma_write_cfg, dma_ops, hw_cfg, &en);
-	if (rc) {
-		DRM_ERROR("failed reg_dmav1_setup_demura_common_en %d", rc);
-		return rc;
-	}
+	__reg_dmav1_setup_demura_common_en(ctx, dcfg, dma_write_cfg, dma_ops, hw_cfg, &en);
 
 	/* These are Demura V2 config flags */
 	val = (dcfg->flags & DEMURA_FLAG_2) >> 2;
@@ -6635,52 +6610,6 @@ static int __reg_dmav1_setup_demurav2_en(struct sde_hw_dspp *ctx,
 	if (rc)
 		DRM_ERROR("0x4: REG_SINGLE_WRITE failed ret %d\n", rc);
 
-	return rc;
-}
-
-static int __reg_dmav1_setup_demura_cfg0_param4_common(struct sde_hw_dspp *ctx,
-		struct drm_msm_dem_cfg *dcfg,
-		struct sde_reg_dma_setup_ops_cfg *dma_write_cfg,
-		struct sde_hw_reg_dma_ops *dma_ops,
-		uint32_t mask_bits)
-{
-	int rc = 0;
-	u32 *temp = NULL, i;
-	u32 demura_base = ctx->cap->sblk->demura.base + ctx->hw.blk_off;
-
-	if (!dcfg->cfg0_en) {
-		DRM_DEBUG_DRIVER("dcfg->cfg0_en is disabled\n");
-		return 0;
-	}
-
-	temp = kvzalloc(sizeof(struct drm_msm_dem_cfg), GFP_KERNEL);
-	if (!temp)
-		return -ENOMEM;
-
-	memset(temp, 0, sizeof(u32) * 2);
-	for (i = 0; i < ARRAY_SIZE(dcfg->cfg0_param4); i++)
-		DRM_DEBUG_DRIVER("hfc gain is %d\n", dcfg->cfg0_param4[i]);
-	temp[0] = (dcfg->cfg0_param4[0] & REG_MASK(mask_bits)) |
-		((dcfg->cfg0_param4[1] & REG_MASK(mask_bits)) << 8) |
-		((dcfg->cfg0_param4[2] & REG_MASK(mask_bits)) << 16) |
-		((dcfg->cfg0_param4[3] & REG_MASK(mask_bits)) << 24);
-	temp[1] = (dcfg->cfg0_param4[4] & REG_MASK(mask_bits)) |
-		((dcfg->cfg0_param4[5] & REG_MASK(mask_bits)) << 8) |
-		((dcfg->cfg0_param4[6] & REG_MASK(mask_bits)) << 16) |
-		((dcfg->cfg0_param4[7] & REG_MASK(mask_bits)) << 24);
-	DRM_DEBUG_DRIVER("0x4c: value is temp[0] %x temp[1] %x\n",
-				temp[0], temp[1]);
-	REG_DMA_SETUP_OPS(*dma_write_cfg, demura_base + 0x4c,
-		temp, sizeof(u32) * 2, REG_BLK_WRITE_SINGLE, 0, 0, 0);
-	rc = dma_ops->setup_payload(dma_write_cfg);
-	if (rc) {
-		DRM_ERROR("0x4c: REG_BLK_WRITE_SINGLE %d len %zd buf idx %d\n",
-			rc, sizeof(u32) * 2, dma_write_cfg->dma_buf->index);
-		goto quit;
-	}
-
-quit:
-	kvfree(temp);
 	return rc;
 }
 
@@ -6803,13 +6732,6 @@ void reg_dmav1_setup_demurav1(struct sde_hw_dspp *ctx, void *cfx)
 		return;
 	}
 
-	rc = __reg_dmav1_setup_demura_cfg0_param4_common(ctx, dcfg, &dma_write_cfg,
-							 dma_ops, DEMURAV1_CFG0_PARAM4_MASK);
-	if (rc) {
-		DRM_ERROR("failed setup demura v1 cfg0_param4 rc %d", rc);
-		return;
-	}
-
 	rc = __reg_dmav1_setup_demurav1_en(ctx, dcfg, &dma_write_cfg, dma_ops, hw_cfg);
 	if (rc) {
 		DRM_ERROR("failed setup_demurav1_en rc %d", rc);
@@ -6869,13 +6791,6 @@ void reg_dmav1_setup_demurav2(struct sde_hw_dspp *ctx, void *cfx)
 	rc = __reg_dmav1_setup_demura_cfg_common(ctx, dcfg, &dma_write_cfg, dma_ops, hw_cfg);
 	if (rc) {
 		DRM_ERROR("failed to setup_demurav2_cfg rc %d", rc);
-		return;
-	}
-
-	rc = __reg_dmav1_setup_demura_cfg0_param4_common(ctx, dcfg, &dma_write_cfg,
-							 dma_ops, DEMURAV2_CFG0_PARAM4_MASK);
-	if (rc) {
-		DRM_ERROR("failed setup demura v2 cfg0_param4 rc %d", rc);
 		return;
 	}
 

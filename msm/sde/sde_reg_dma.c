@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
@@ -8,6 +8,7 @@
 #include "sde_reg_dma.h"
 #include "sde_hw_reg_dma_v1.h"
 #include "sde_dbg.h"
+#include "sde_hw_ctl.h"
 
 #define REG_DMA_VER_1_0 0x00010000
 #define REG_DMA_VER_1_1 0x00010001
@@ -93,11 +94,39 @@ static void set_default_dma_ops(struct sde_hw_reg_dma *reg_dma)
 
 static struct sde_hw_reg_dma reg_dma;
 
+static int sde_reg_dma_reset(void *ctl_data, void *priv_data)
+{
+	struct sde_hw_ctl *sde_hw_ctl = (struct sde_hw_ctl *)ctl_data;
+	struct sde_hw_reg_dma_ops *ops = sde_reg_dma_get_ops();
+
+	if (ops && ops->reset) {
+		SDE_EVT32(sde_hw_ctl ? sde_hw_ctl->idx : 0xff, SDE_EVTLOG_FUNC_ENTRY);
+		return ops->reset(sde_hw_ctl);
+	}
+
+	return 0;
+}
+
 int sde_reg_dma_init(void __iomem *addr, struct sde_mdss_cfg *m,
 		struct drm_device *dev)
 {
 	int rc = 0;
+	void *client_entry_handle;
+	struct msm_fence_error_ops sde_reg_dma_event_ops = {
+		.fence_error_handle_submodule = sde_reg_dma_reset,
+	};
+
+	client_entry_handle = msm_register_fence_error_event(dev, &sde_reg_dma_event_ops, NULL);
+	if (IS_ERR_OR_NULL(client_entry_handle))
+		DRM_INFO("register fence_error_event failed.\n");
+
 	set_default_dma_ops(&reg_dma);
+
+	if (!addr || !m || !dev) {
+		DRM_DEBUG("invalid addr %pK catalog %pK dev %pK\n", addr, m,
+				dev);
+		return 0;
+	}
 
 	/**
 	 * Register dummy range to ensure register dump is only done on
@@ -105,12 +134,6 @@ int sde_reg_dma_init(void __iomem *addr, struct sde_mdss_cfg *m,
 	 */
 	sde_dbg_reg_register_dump_range(LUTDMA_DBG_NAME, "DUMMY_LUTDMA", 1, 1,
 			m->dma_cfg.xin_id);
-
-	if (!addr || !m || !dev) {
-		DRM_DEBUG("invalid addr %pK catalog %pK dev %pK\n", addr, m,
-				dev);
-		return 0;
-	}
 
 	if (!m->reg_dma_count)
 		return 0;

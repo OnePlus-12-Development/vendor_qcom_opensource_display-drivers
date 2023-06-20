@@ -92,6 +92,8 @@ static void msm_parse_mode_priv_info(const struct msm_display_mode *msm_mode,
 		dsi_mode->dsi_mode_flags |= DSI_MODE_FLAG_POMS_TO_CMD;
 	if (msm_is_mode_seamless_dyn_clk(msm_mode))
 		dsi_mode->dsi_mode_flags |= DSI_MODE_FLAG_DYN_CLK;
+	if (msm_is_mode_bpp_switch(msm_mode))
+		dsi_mode->dsi_mode_flags |= DSI_MODE_FLAG_NONDSC_BPP_SWITCH;
 }
 
 void dsi_convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
@@ -160,6 +162,8 @@ static void dsi_convert_to_msm_mode(const struct dsi_display_mode *dsi_mode,
 		msm_mode->private_flags |= MSM_MODE_FLAG_SEAMLESS_POMS_CMD;
 	if (dsi_mode->dsi_mode_flags & DSI_MODE_FLAG_DYN_CLK)
 		msm_mode->private_flags |= MSM_MODE_FLAG_SEAMLESS_DYN_CLK;
+	if (dsi_mode->dsi_mode_flags & DSI_MODE_FLAG_NONDSC_BPP_SWITCH)
+		msm_mode->private_flags |= MSM_MODE_FLAG_NONDSC_BPP_SWITCH;
 }
 
 static int dsi_bridge_attach(struct drm_bridge *bridge,
@@ -416,6 +420,7 @@ static bool _dsi_bridge_mode_validate_and_fixup(struct drm_bridge *bridge,
 
 	convert_to_dsi_mode(cur_mode, &cur_dsi_mode);
 	msm_parse_mode_priv_info(&old_conn_state->msm_mode, &cur_dsi_mode);
+	cur_dsi_mode.pixel_format_caps = display->panel->host_config.dst_format;
 
 	rc = dsi_display_validate_mode_change(c_bridge->display, &cur_dsi_mode, adj_mode);
 	if (rc) {
@@ -503,7 +508,8 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 	msm_parse_mode_priv_info(&conn_state->msm_mode, &dsi_mode);
 	new_sub_mode.dsc_mode = sde_connector_get_property(drm_conn_state,
 				CONNECTOR_PROP_DSC_MODE);
-
+	new_sub_mode.pixel_format_mode = sde_connector_get_property(drm_conn_state,
+				CONNECTOR_PROP_BPP_MODE);
 	/*
 	 * retrieve dsi mode from dsi driver's cache since not safe to take
 	 * the drm mode config mutex in all paths
@@ -517,6 +523,7 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 	dsi_mode.priv_info = panel_dsi_mode->priv_info;
 	dsi_mode.dsi_mode_flags = panel_dsi_mode->dsi_mode_flags;
 	dsi_mode.panel_mode_caps = panel_dsi_mode->panel_mode_caps;
+	dsi_mode.pixel_format_caps = panel_dsi_mode->pixel_format_caps;
 	dsi_mode.timing.dsc_enabled = dsi_mode.priv_info->dsc_enabled;
 	dsi_mode.timing.dsc = &dsi_mode.priv_info->dsc;
 
@@ -636,6 +643,8 @@ int dsi_conn_get_mode_info(struct drm_connector *connector,
 	mode_info->jitter_denom = dsi_mode->priv_info->panel_jitter_denom;
 	mode_info->dfps_maxfps = dsi_drm_get_dfps_maxfps(display);
 	mode_info->panel_mode_caps = dsi_mode->panel_mode_caps;
+	mode_info->bpp = dsi_mode->bpp;
+	mode_info->pixel_format_caps = dsi_mode->pixel_format_caps;
 	mode_info->mdp_transfer_time_us = dsi_mode->priv_info->mdp_transfer_time_us;
 	mode_info->mdp_transfer_time_us_min = dsi_mode->priv_info->mdp_transfer_time_us_min;
 	mode_info->mdp_transfer_time_us_max = dsi_mode->priv_info->mdp_transfer_time_us_max;
@@ -923,6 +932,7 @@ void dsi_conn_set_submode_blob_info(struct drm_connector *conn,
 		struct dsi_display_mode *dsi_mode = &dsi_display->modes[i];
 
 		u32 panel_mode_caps = 0;
+		u32 pixel_format_caps = 0;
 		const char *topo_name = NULL;
 
 		if (!dsi_display_mode_match(&partial_dsi_mode, dsi_mode,
@@ -941,6 +951,19 @@ void dsi_conn_set_submode_blob_info(struct drm_connector *conn,
 
 		sde_kms_info_add_keyint(info, "panel_mode_capabilities",
 			panel_mode_caps);
+
+		switch (dsi_mode->pixel_format_caps) {
+		case DSI_PIXEL_FORMAT_RGB888:
+			pixel_format_caps = DRM_MODE_FLAG_DSI_24BPP;
+			break;
+		case DSI_PIXEL_FORMAT_RGB101010:
+			pixel_format_caps = DRM_MODE_FLAG_DSI_30BPP;
+			break;
+		default:
+			break;
+		}
+
+		sde_kms_info_add_keyint(info, "bpp_mode", pixel_format_caps);
 
 		sde_kms_info_add_keyint(info, "dsc_mode",
 			dsi_mode->priv_info->dsc_enabled ? MSM_DISPLAY_DSC_MODE_ENABLED :

@@ -316,6 +316,22 @@ void sde_encoder_get_hw_resources(struct drm_encoder *encoder,
 void sde_encoder_early_wakeup(struct drm_encoder *drm_enc);
 
 /**
+ * sde_encoder_handle_hw_fence_error - hw fence error handing in sde encoder
+ * @ctl_idx:	control path index
+ * @sde_kms:	Pointer to sde_kms
+ * @handle:	hash of fence signaled with error
+ * @error:	error signaled for fence from hw fence callback
+ */
+void sde_encoder_handle_hw_fence_error(int ctl_idx, struct sde_kms *sde_kms, u32 handle, int error);
+
+/**
+ * sde_encoder_hw_fence_error_handle - fence error handing while hw fence error
+ * @drm_enc: Pointer to drm encoder structure
+ * return: 0 on success; error code otherwise
+ */
+int sde_encoder_hw_fence_error_handle(struct drm_encoder *drm_enc);
+
+/**
  * sde_encoder_register_vblank_callback - provide callback to encoder that
  *	will be called on the next vblank.
  * @encoder:	encoder pointer
@@ -760,6 +776,12 @@ void sde_encoder_add_data_to_minidump_va(struct drm_encoder *drm_enc);
  * @drm_enc: pointer to drm encoder
  */
 void sde_encoder_misr_sign_event_notify(struct drm_encoder *drm_enc);
+
+/**
+ * sde_encoder_handle_dma_fence_out_of_order - sw dma fence out of order signal
+ * @drm_enc: pointer to drm encoder
+ */
+int sde_encoder_handle_dma_fence_out_of_order(struct drm_encoder *drm_enc);
 
 /**
  * sde_encoder_register_misr_event - register or deregister MISR event

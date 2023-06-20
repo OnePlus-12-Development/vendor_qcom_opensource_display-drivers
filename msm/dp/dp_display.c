@@ -1204,7 +1204,7 @@ static void dp_display_host_deinit(struct dp_display_private *dp)
 static int dp_display_process_hpd_high(struct dp_display_private *dp)
 {
 	int rc = -EINVAL;
-	unsigned long wait_timeout_ms;
+	unsigned long wait_timeout_ms = 0;
 	unsigned long t;
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, dp->state);
@@ -1224,10 +1224,8 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 	if (!dp->debug->sim_mode && !dp->no_aux_switch && !dp->parser->gpio_aux_switch
 			&& dp->aux_switch_node && dp->aux->switch_configure) {
 		rc = dp->aux->switch_configure(dp->aux, true, dp->hpd->orientation);
-		if (rc) {
-			mutex_unlock(&dp->session_lock);
-			return rc;
-		}
+		if (rc)
+			goto err_state;
 	}
 
 	/*
@@ -1255,7 +1253,7 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 				 */
 				dp_display_state_remove(DP_STATE_CONNECTED);
 			}
-			goto end;
+			goto err_unlock;
 		}
 
 		/*
@@ -1269,14 +1267,14 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 	rc = dp_display_host_ready(dp);
 	if (rc) {
 		dp_display_state_show("[ready failed]");
-		goto end;
+		goto err_state;
 	}
 
 	dp->link->psm_config(dp->link, &dp->panel->link_info, false);
 	dp->debug->psm_enabled = false;
 
 	if (!dp->dp_display.base_connector)
-		goto end;
+		goto err_unready;
 
 	rc = dp->panel->read_sink_caps(dp->panel,
 			dp->dp_display.base_connector, dp->hpd->multi_func);
@@ -1284,10 +1282,8 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 	 * ETIMEDOUT --> cable may have been removed
 	 * ENOTCONN --> no downstream device connected
 	 */
-	if (rc == -ETIMEDOUT || rc == -ENOTCONN) {
-		dp_display_state_remove(DP_STATE_CONNECTED);
-		goto end;
-	}
+	if (rc == -ETIMEDOUT || rc == -ENOTCONN)
+		goto err_unready;
 
 	dp->link->process_request(dp->link);
 	dp->panel->handle_sink_request(dp->panel);
@@ -1296,15 +1292,13 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 
 	rc = dp->ctrl->on(dp->ctrl, dp->mst.mst_active,
 			dp->panel->fec_en, dp->panel->dsc_en, false);
-	if (rc) {
-		dp_display_state_remove(DP_STATE_CONNECTED);
-		goto end;
-	}
+	if (rc)
+		goto err_mst;
 
 	dp->process_hpd_connect = false;
 
 	dp_display_set_mst_mgr_state(dp, true);
-end:
+
 	mutex_unlock(&dp->session_lock);
 
 	/*
@@ -1337,13 +1331,23 @@ end:
 		(work_busy(&dp->attention_work) == WORK_BUSY_PENDING)) {
 		SDE_EVT32_EXTERNAL(dp->state, 99, jiffies_to_msecs(t));
 		DP_DEBUG("Attention pending, skip HPD notification\n");
-		goto skip_notify;
+		goto end;
 	}
 
 	if (!rc && !dp_display_state_is(DP_STATE_ABORTED))
 		dp_display_send_hpd_notification(dp, false);
 
-skip_notify:
+	goto end;
+
+err_mst:
+	dp_display_update_mst_state(dp, false);
+err_unready:
+	dp_display_host_unready(dp);
+err_state:
+	dp_display_state_remove(DP_STATE_CONNECTED);
+err_unlock:
+	mutex_unlock(&dp->session_lock);
+end:
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state,
 		wait_timeout_ms, rc);
 	return rc;
@@ -2350,6 +2354,9 @@ static int dp_display_set_mode(struct dp_display *dp_display, void *panel,
 	mode->timing.bpp = dp->panel->get_mode_bpp(dp->panel,
 			mode->timing.bpp, mode->timing.pixel_clk_khz, dsc_en);
 
+	if (dp->mst.mst_active)
+		dp->mst.cbs.set_mst_mode_params(&dp->dp_display, mode);
+
 	dp_panel->pinfo = mode->timing;
 	mutex_unlock(&dp->session_lock);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
@@ -2851,8 +2858,10 @@ static int dp_display_unprepare(struct dp_display *dp_display, void *panel)
 	/* log this as it results from user action of cable dis-connection */
 	DP_INFO("[OK]\n");
 end:
+	mutex_lock(&dp->accounting_lock);
 	dp->tot_lm_blks_in_use -= dp_panel->max_lm;
 	dp_panel->max_lm = 0;
+	mutex_unlock(&dp->accounting_lock);
 	dp_panel->deinit(dp_panel, flags);
 	mutex_unlock(&dp->session_lock);
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state);
@@ -3031,6 +3040,12 @@ static enum drm_mode_status dp_display_validate_mode(
 
 	dp_display->convert_to_dp_mode(dp_display, panel, mode, &dp_mode);
 
+	/* As per spec, 640x480 mode should always be present as fail-safe */
+	if ((dp_mode.timing.h_active == 640) && (dp_mode.timing.v_active == 480) &&
+			(dp_mode.timing.pixel_clk_khz == 25175)) {
+		goto skip_validation;
+	}
+
 	rc = dp_display_validate_topology(dp, dp_panel, mode, &dp_mode, avail_res);
 	if (rc == -EAGAIN) {
 		dp_panel->convert_to_dp_mode(dp_panel, mode, &dp_mode);
@@ -3048,16 +3063,21 @@ static enum drm_mode_status dp_display_validate_mode(
 	if (rc)
 		goto end;
 
+skip_validation:
 	mode_status = MODE_OK;
 
-	dp->tot_lm_blks_in_use -= dp_panel->max_lm;
-	dp_panel->max_lm = max(dp_panel->max_lm, dp_mode.lm_count);
-	dp->tot_lm_blks_in_use += dp_panel->max_lm;
+	if (!avail_res->num_lm_in_use) {
+		mutex_lock(&dp->accounting_lock);
+		dp->tot_lm_blks_in_use -= dp_panel->max_lm;
+		dp_panel->max_lm = max(dp_panel->max_lm, dp_mode.lm_count);
+		dp->tot_lm_blks_in_use += dp_panel->max_lm;
+		mutex_unlock(&dp->accounting_lock);
+	}
 
 end:
 	mutex_unlock(&dp->session_lock);
 
-	DP_DEBUG_V("[%s] mode is %s\n", mode->name,
+	DP_DEBUG_V("[%s clk:%d] mode is %s\n", mode->name, mode->clock,
 			(mode_status == MODE_OK) ? "valid" : "invalid");
 
 	return mode_status;

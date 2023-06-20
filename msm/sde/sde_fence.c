@@ -12,6 +12,7 @@
 #include "msm_drv.h"
 #include "sde_kms.h"
 #include "sde_fence.h"
+#include "sde_encoder.h"
 
 #define TIMELINE_VAL_LENGTH		128
 #define SPEC_FENCE_FLAG_FENCE_ARRAY	0x10
@@ -102,12 +103,39 @@ struct sde_hw_fence_data hw_fence_data_dpu_client[SDE_HW_FENCE_CLIENT_MAX] = {
 		0, 8, 25, 0, 0}
 };
 
-int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc, struct msm_mmu *mmu)
+void msm_hw_fence_error_cb(u32 handle, int error, void *cb_data)
+{
+	struct msm_hw_fence_cb_data *msm_hw_fence_cb_data;
+	struct sde_hw_fence_error_cb_data *sde_hw_fence_error_data;
+
+	SDE_EVT32(handle, error, SDE_EVTLOG_FUNC_ENTRY);
+
+	msm_hw_fence_cb_data = (struct msm_hw_fence_cb_data *)cb_data;
+	if (!msm_hw_fence_cb_data) {
+		SDE_ERROR("msm hw fence cb data is NULL.\n");
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE1, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	sde_hw_fence_error_data = (struct sde_hw_fence_error_cb_data *)(msm_hw_fence_cb_data->data);
+	if (!sde_hw_fence_error_data) {
+		SDE_ERROR("sde hw fence cb data is NULL.\n");
+		SDE_EVT32(SDE_EVTLOG_FUNC_CASE2, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	sde_encoder_handle_hw_fence_error(sde_hw_fence_error_data->ctl_idx,
+		sde_hw_fence_error_data->sde_kms, handle, error);
+}
+
+int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, struct sde_kms *sde_kms, bool use_dpu_ipcc,
+		struct msm_mmu *mmu)
 {
 	struct msm_hw_fence_hfi_queue_header *hfi_queue_header_va, *hfi_queue_header_pa;
 	struct msm_hw_fence_hfi_queue_table_header *hfi_table_header;
 	struct sde_hw_fence_data *sde_hw_fence_data;
 	struct sde_hw_fence_data *hwfence_data;
+	struct sde_hw_fence_error_cb_data *sde_hw_fence_error_cb_data;
 	phys_addr_t queue_pa;
 	void *queue_va;
 	u32 qhdr0_offset, ctl_hfi_iova;
@@ -147,6 +175,17 @@ int sde_hw_fence_init(struct sde_hw_ctl *hw_ctl, bool use_dpu_ipcc, struct msm_m
 		SDE_DEBUG("error cannot register ctl_id:%d hw-fence client:%d\n", ctl_id,
 			hwfence_data->hw_fence_client_id);
 		return -EINVAL;
+	}
+
+	sde_hw_fence_error_cb_data = &(hwfence_data->sde_hw_fence_error_cb_data);
+	sde_hw_fence_error_cb_data->ctl_idx = hw_ctl->idx;
+	sde_hw_fence_error_cb_data->sde_kms = sde_kms;
+
+	ret = msm_hw_fence_register_error_cb(hwfence_data->hw_fence_handle,
+		msm_hw_fence_error_cb, (void *)sde_hw_fence_error_cb_data);
+	if (ret) {
+		SDE_EVT32(hw_ctl->idx, SDE_EVTLOG_ERROR);
+		SDE_DEBUG("hw fence cb register failed. ret = %d\n", ret);
 	}
 
 	/* one-to-one memory map of ctl-path client queues */
@@ -691,6 +730,19 @@ int sde_fence_update_input_hw_fence_signal(struct sde_hw_ctl *hw_ctl, u32 debugf
 	return 0;
 }
 
+void sde_fence_error_ctx_update(struct sde_fence_context *ctx, int input_fence_status,
+	enum sde_fence_error_state sde_fence_error_state)
+{
+	if (!ctx) {
+		SDE_DEBUG("invalid fence\n");
+		SDE_EVT32(input_fence_status, sde_fence_error_state, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	ctx->sde_fence_error_ctx.fence_error_status = input_fence_status;
+	ctx->sde_fence_error_ctx.fence_error_state = sde_fence_error_state;
+}
+
 void *sde_sync_get(uint64_t fd)
 {
 	/* force signed compare, fdget accepts an int argument */
@@ -740,7 +792,7 @@ static void sde_fence_dump_user_fds_info(struct dma_fence *base_fence)
 	}
 }
 
-signed long sde_sync_wait(void *fnc, long timeout_ms)
+signed long sde_sync_wait(void *fnc, long timeout_ms, int *error_status)
 {
 	struct dma_fence *fence = fnc;
 	int rc, status = 0;
@@ -769,6 +821,8 @@ signed long sde_sync_wait(void *fnc, long timeout_ms)
 		}
 	}
 
+	if (error_status)
+		*error_status = fence->error;
 	return rc;
 }
 
@@ -916,6 +970,8 @@ static int _sde_fence_create_fd(void *fence_ctx, uint32_t val, struct sde_hw_ctl
 		ctx->context, val);
 	kref_get(&ctx->kref);
 
+	ctx->sde_fence_error_ctx.curr_frame_fence_seqno = val;
+
 	/* create fd */
 	fd = get_unused_fd_flags(0);
 	if (fd < 0) {
@@ -1006,6 +1062,8 @@ static void _sde_fence_trigger(struct sde_fence_context *ctx, bool error, ktime_
 	unsigned long flags;
 	struct sde_fence *fc, *next;
 	bool is_signaled = false;
+	enum sde_fence_error_state fence_error_state = 0;
+	struct sde_fence_error_ctx *fence_error_ctx;
 
 	kref_get(&ctx->kref);
 
@@ -1015,10 +1073,37 @@ static void _sde_fence_trigger(struct sde_fence_context *ctx, bool error, ktime_
 		goto end;
 	}
 
+	fence_error_ctx = &ctx->sde_fence_error_ctx;
+
 	list_for_each_entry_safe(fc, next, &ctx->fence_list_head, fence_list) {
 		spin_lock_irqsave(&ctx->lock, flags);
 		if (error)
 			dma_fence_set_error(&fc->base, -EBUSY);
+
+		fence_error_state = fence_error_ctx->fence_error_state;
+		if (fence_error_state) {
+			if (fence_error_state == HANDLE_OUT_OF_ORDER &&
+				fence_error_ctx->last_good_frame_fence_seqno == fc->base.seqno) {
+				SDE_EVT32(fence_error_ctx->last_good_frame_fence_seqno,
+					fence_error_state, SDE_EVTLOG_FUNC_CASE1);
+				spin_unlock_irqrestore(&ctx->lock, flags);
+				continue;
+			} else if (((fence_error_state == HANDLE_OUT_OF_ORDER) ||
+				(fence_error_state == SET_ERROR_ONLY_VID) ||
+				(fence_error_state == SET_ERROR_ONLY_CMD_RELEASE))
+				&& (fence_error_ctx->fence_error_status < 0)) {
+				dma_fence_set_error(&fc->base, fence_error_ctx->fence_error_status);
+				dma_fence_signal_timestamp_locked(&fc->base, ts);
+				spin_unlock_irqrestore(&ctx->lock, flags);
+
+				SDE_EVT32(fence_error_state, fence_error_ctx->fence_error_status,
+					ktime_to_us(ts), fc->base.seqno, SDE_EVTLOG_FUNC_CASE2);
+				list_del_init(&fc->fence_list);
+				dma_fence_put(&fc->base);
+				continue;
+			}
+		}
+
 		is_signaled = sde_fence_signaled(&fc->base);
 		if (is_signaled)
 			dma_fence_signal_timestamp_locked(&fc->base, ts);

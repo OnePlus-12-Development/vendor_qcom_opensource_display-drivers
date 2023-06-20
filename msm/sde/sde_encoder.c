@@ -79,6 +79,9 @@
 /* Maximum number of VSYNC wait attempts for RSC state transition */
 #define MAX_RSC_WAIT	5
 
+/* Worst case time required for trigger the frame after the EPT wait */
+#define EPT_BACKOFF_THRESHOLD	(3 * NSEC_PER_MSEC)
+
 #define IS_ROI_UPDATED(a, b) (a.x1 != b.x1 || a.x2 != b.x2 || \
 			a.y1 != b.y1 || a.y2 != b.y2)
 
@@ -1095,6 +1098,8 @@ static int _sde_encoder_atomic_check_reserve(struct drm_encoder *drm_enc,
 
 		sub_mode.dsc_mode = sde_connector_get_property(conn_state,
 				CONNECTOR_PROP_DSC_MODE);
+		sub_mode.pixel_format_mode = sde_connector_get_property(conn_state,
+				CONNECTOR_PROP_BPP_MODE);
 		ret = sde_connector_get_mode_info(&sde_conn->base,
 				adj_mode, &sub_mode, &sde_conn_state->mode_info);
 		if (ret) {
@@ -1261,7 +1266,7 @@ static int _sde_encoder_atomic_check_qsync(struct sde_connector *sde_conn,
 	ept = msm_property_is_dirty(&sde_conn->property_info,
 				&sde_conn_state->property_state, CONNECTOR_PROP_EPT);
 
-	if (has_modeset && (qsync_dirty || ept) &&
+	if (has_modeset && qsync_dirty &&
 		(msm_is_mode_seamless_poms(&sde_conn_state->msm_mode) ||
 			msm_is_mode_seamless_dyn_clk(&sde_conn_state->msm_mode))) {
 		SDE_ERROR("invalid qsync update during modeset priv flag:%x\n",
@@ -2019,6 +2024,220 @@ static void sde_encoder_misr_configure(struct drm_encoder *drm_enc,
 		phys->ops.setup_misr(phys, enable, frame_count);
 	}
 	sde_enc->misr_reconfigure = false;
+}
+
+void sde_encoder_clear_fence_error_in_progress(struct sde_encoder_phys *phys_enc)
+{
+	struct sde_crtc *sde_crtc;
+
+	if (!phys_enc || !phys_enc->parent || !phys_enc->parent->crtc) {
+		SDE_DEBUG("invalid sde_encoder_phys.\n");
+		return;
+	}
+
+	sde_crtc = to_sde_crtc(phys_enc->parent->crtc);
+
+	if ((!phys_enc->sde_hw_fence_error_status) && (!sde_crtc->input_fence_status) &&
+		phys_enc->fence_error_handle_in_progress) {
+		phys_enc->fence_error_handle_in_progress = false;
+		SDE_EVT32(DRMID(phys_enc->parent), phys_enc->fence_error_handle_in_progress);
+	}
+}
+
+static int sde_encoder_hw_fence_signal(struct sde_encoder_phys *phys_enc)
+{
+	struct sde_hw_ctl *hw_ctl;
+	struct sde_hw_fence_data *hwfence_data;
+	int pending_kickoff_cnt = -1;
+	int rc = 0;
+
+	if (!phys_enc || !phys_enc->parent || !phys_enc->hw_ctl) {
+		SDE_DEBUG("invalid parameters\n");
+		SDE_EVT32(SDE_EVTLOG_ERROR);
+		return -EINVAL;
+	}
+
+	hw_ctl = phys_enc->hw_ctl;
+	hwfence_data = &hw_ctl->hwfence_data;
+
+	pending_kickoff_cnt = atomic_read(&phys_enc->pending_kickoff_cnt);
+
+	/* out of order hw fence error signal is needed for video panel. */
+	if (sde_encoder_check_curr_mode(phys_enc->parent, MSM_DISPLAY_VIDEO_MODE)) {
+		/* out of order hw fence error signal */
+		msm_hw_fence_update_txq_error(hwfence_data->hw_fence_handle,
+			phys_enc->sde_hw_fence_handle, 1, MSM_HW_FENCE_UPDATE_ERROR_WITH_MOVE);
+	/* wait for frame done to avoid out of order signalling for cmd mode. */
+	} else if (pending_kickoff_cnt) {
+		SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_FUNC_CASE1);
+		rc = sde_encoder_wait_for_event(phys_enc->parent, MSM_ENC_TX_COMPLETE);
+		if (rc && rc != -EWOULDBLOCK) {
+			SDE_DEBUG("wait for frame done failed %d\n", rc);
+			SDE_EVT32(DRMID(phys_enc->parent), rc, pending_kickoff_cnt,
+				SDE_EVTLOG_ERROR);
+		}
+	}
+
+	/* HW o/p fence override register */
+	if (hw_ctl->ops.trigger_output_fence_override) {
+		hw_ctl->ops.trigger_output_fence_override(hw_ctl);
+		SDE_DEBUG("trigger_output_fence_override executed.\n");
+		SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_FUNC_CASE2);
+	}
+
+	SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_FUNC_EXIT);
+	return rc;
+}
+
+int sde_encoder_handle_dma_fence_out_of_order(struct drm_encoder *drm_enc)
+{
+	struct drm_crtc *crtc;
+	struct sde_crtc *sde_crtc;
+	struct sde_crtc_state *cstate;
+	struct sde_encoder_virt *sde_enc;
+	struct sde_encoder_phys *phys_enc;
+	struct sde_fence_context *ctx;
+	struct drm_connector *conn;
+	bool is_vid;
+	int i, fence_status = 0, pending_kickoff_cnt = 0, rc = 0;
+	ktime_t time_stamp;
+
+	crtc = drm_enc->crtc;
+	sde_crtc = to_sde_crtc(crtc);
+	cstate = to_sde_crtc_state(crtc->state);
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	if (!sde_enc || !sde_enc->phys_encs[0]) {
+		SDE_ERROR("invalid params\n");
+		return -EINVAL;
+	}
+
+	phys_enc = sde_enc->phys_encs[0];
+
+	ctx = sde_crtc->output_fence;
+	time_stamp = ktime_get();
+	/* out of order sw fence error signal for video panel.
+	 * Hold the last good frame for video mode panel.
+	 */
+	if (phys_enc->sde_hw_fence_error_value) {
+		fence_status = phys_enc->sde_hw_fence_error_value;
+		phys_enc->sde_hw_fence_error_value = 0;
+	} else {
+		fence_status = sde_crtc->input_fence_status;
+	}
+
+	is_vid = sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_VIDEO_MODE);
+	SDE_EVT32(is_vid, fence_status, phys_enc->fence_error_handle_in_progress);
+	if (is_vid) {
+		/* update last_good_frame_fence_seqno after at least one good frame */
+		if (!phys_enc->fence_error_handle_in_progress) {
+			ctx->sde_fence_error_ctx.last_good_frame_fence_seqno =
+				ctx->sde_fence_error_ctx.curr_frame_fence_seqno - 1;
+			phys_enc->fence_error_handle_in_progress = true;
+		}
+
+		/* signal release fence for vid panel */
+		sde_fence_error_ctx_update(ctx, fence_status, HANDLE_OUT_OF_ORDER);
+	} else {
+		/*
+		 * out of order sw fence error signal for CMD panel.
+		 * always wait frame done for cmd panel.
+		 * signal the sw fence error release fence for CMD panel.
+		 */
+		pending_kickoff_cnt = atomic_read(&phys_enc->pending_kickoff_cnt);
+
+		if (pending_kickoff_cnt) {
+			SDE_EVT32(DRMID(drm_enc), pending_kickoff_cnt, SDE_EVTLOG_FUNC_CASE1);
+			rc = sde_encoder_wait_for_event(drm_enc, MSM_ENC_TX_COMPLETE);
+			if (rc && rc != -EWOULDBLOCK) {
+				SDE_DEBUG("wait for frame done failed %d\n", rc);
+				SDE_EVT32(DRMID(drm_enc), rc, pending_kickoff_cnt,
+					SDE_EVTLOG_ERROR);
+			}
+		}
+
+		/* update fence error context for cmd panel */
+		sde_fence_error_ctx_update(ctx, fence_status, SET_ERROR_ONLY_CMD_RELEASE);
+	}
+
+	sde_fence_signal(ctx, time_stamp, SDE_FENCE_SIGNAL, NULL);
+
+	/**
+	 * clear flag in sde_fence_error_ctx after fence signal,
+	 * the last_good_frame_fence_seqno is supposed to be updated or cleared after
+	 * at least one good frame in case of constant fence error
+	 */
+	sde_fence_error_ctx_update(ctx, 0, NO_ERROR);
+
+	/* signal retire fence */
+	for (i = 0; i < cstate->num_connectors; ++i) {
+		conn = cstate->connectors[i];
+		sde_connector_fence_error_ctx_signal(conn, fence_status, is_vid);
+	}
+
+	SDE_EVT32(ctx->sde_fence_error_ctx.fence_error_status,
+		ctx->sde_fence_error_ctx.fence_error_state,
+		ctx->sde_fence_error_ctx.last_good_frame_fence_seqno, pending_kickoff_cnt);
+
+	return rc;
+}
+
+int sde_encoder_hw_fence_error_handle(struct drm_encoder *drm_enc)
+{
+	struct sde_encoder_virt *sde_enc;
+	struct sde_encoder_phys *phys_enc;
+	struct msm_drm_private *priv;
+	struct msm_fence_error_client_entry *entry;
+	int rc = 0;
+
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	if (!sde_enc || !sde_enc->phys_encs[0] ||
+		!sde_enc->phys_encs[0]->sde_hw_fence_error_status)
+		return 0;
+
+	SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_ENTRY);
+
+	phys_enc = sde_enc->phys_encs[0];
+
+	rc = sde_encoder_hw_fence_signal(phys_enc);
+	if (rc) {
+		SDE_DEBUG("sde_encoder_hw_fence_signal error, rc = %d.\n", rc);
+		SDE_EVT32(DRMID(drm_enc), rc, SDE_EVTLOG_ERROR);
+	}
+
+	rc = sde_encoder_handle_dma_fence_out_of_order(phys_enc->parent);
+	if (rc) {
+		SDE_DEBUG("sde_encoder_handle_dma_fence_out_of_order failed, rc = %d\n", rc);
+		SDE_EVT32(DRMID(phys_enc->parent), rc, SDE_EVTLOG_ERROR);
+	}
+
+	if (!phys_enc->sde_kms && !phys_enc->sde_kms->dev && !phys_enc->sde_kms->dev->dev_private) {
+		SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_ERROR);
+		return -EINVAL;
+	}
+
+	priv = phys_enc->sde_kms->dev->dev_private;
+	list_for_each_entry(entry, &priv->fence_error_client_list, list) {
+		if (!entry->ops.fence_error_handle_submodule)
+			continue;
+
+		SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_CASE1);
+		rc = entry->ops.fence_error_handle_submodule(phys_enc->hw_ctl, entry->data);
+		if (rc) {
+			SDE_ERROR("fence_error_handle_submodule failed for device: %d\n",
+				entry->dev->id);
+			SDE_EVT32(DRMID(drm_enc), rc, SDE_EVTLOG_ERROR);
+		}
+	}
+
+	if (phys_enc->hw_ctl->ops.clear_flush_mask) {
+		phys_enc->hw_ctl->ops.clear_flush_mask(phys_enc->hw_ctl, true);
+		SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_CASE2);
+	}
+
+	phys_enc->sde_hw_fence_error_status = false;
+	SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_EXIT);
+	return rc;
 }
 
 static void sde_encoder_input_event_handler(struct input_handle *handle,
@@ -3131,8 +3350,8 @@ static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 	bpc = dsc->config.bits_per_component;
 	bpp = dsc->config.bits_per_pixel;
 
-	/* disable dither for 10 bpp or 10bpc dsc config */
-	if (bpp == 10 || bpc == 10) {
+	/* disable dither for 10 bpp or 10bpc dsc config or 30bpp without dsc */
+	if (bpp == 10 || bpc == 10 || sde_enc->mode_info.bpp == 30) {
 		phys->hw_pp->ops.setup_dither(phys->hw_pp, NULL, 0);
 		return;
 	}
@@ -4025,6 +4244,12 @@ static inline void _sde_encoder_trigger_flush(struct drm_encoder *drm_enc,
 		ctl->ops.update_bitmask(ctl, SDE_HW_FLUSH_PERIPH, phys->hw_intf->idx, 1);
 	}
 
+	/* update flush mask to ignore fence error frame commit */
+	if (ctl->ops.clear_flush_mask && phys->fence_error_handle_in_progress) {
+		ctl->ops.clear_flush_mask(ctl, false);
+		SDE_EVT32(DRMID(drm_enc), SDE_EVTLOG_FUNC_CASE1);
+	}
+
 	if ((extra_flush && extra_flush->pending_flush_mask)
 			&& ctl->ops.update_pending_flush)
 		ctl->ops.update_pending_flush(ctl, extra_flush);
@@ -4211,6 +4436,18 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc,
 	}
 
 	sde_crtc = to_sde_crtc(sde_enc->crtc);
+
+	/* reset input fence status and skip flush for fence error case. */
+	if (sde_crtc->input_fence_status < 0) {
+		if (!sde_encoder_in_clone_mode(&sde_enc->base))
+			sde_crtc->input_fence_status = 0;
+
+		SDE_EVT32(DRMID(&sde_enc->base), sde_encoder_in_clone_mode(&sde_enc->base),
+			sde_crtc->input_fence_status);
+
+		goto handle_elevated_ahb_vote;
+	}
+
 	if (sde_encoder_check_curr_mode(&sde_enc->base, MSM_DISPLAY_VIDEO_MODE))
 		is_vid_mode = true;
 
@@ -4288,6 +4525,7 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc,
 
 	_sde_encoder_trigger_start(sde_enc->cur_master);
 
+handle_elevated_ahb_vote:
 	if (sde_enc->elevated_ahb_vote) {
 		sde_kms = sde_encoder_get_kms(&sde_enc->base);
 		priv = sde_enc->base.dev->dev_private;
@@ -4550,6 +4788,70 @@ void sde_encoder_early_wakeup(struct drm_encoder *drm_enc)
 	SDE_ATRACE_END("queue_early_wakeup_work");
 }
 
+void sde_encoder_handle_hw_fence_error(int ctl_idx, struct sde_kms *sde_kms, u32 handle, int error)
+{
+	struct drm_encoder *drm_enc;
+	struct sde_encoder_virt *sde_enc;
+	struct sde_encoder_phys *cur_master;
+	struct sde_crtc *sde_crtc;
+	struct sde_crtc_state *sde_crtc_state;
+	bool encoder_detected = false;
+	bool handle_fence_error;
+
+	SDE_EVT32(ctl_idx, handle, error, SDE_EVTLOG_FUNC_ENTRY);
+
+	if (!sde_kms || !sde_kms->dev) {
+		SDE_ERROR("Invalid sde_kms or sde_kms->dev\n");
+		return;
+	}
+
+	drm_for_each_encoder(drm_enc, sde_kms->dev) {
+		sde_enc = to_sde_encoder_virt(drm_enc);
+
+		if (sde_enc && sde_enc->phys_encs[0] && sde_enc->phys_encs[0]->hw_ctl &&
+			sde_enc->phys_encs[0]->hw_ctl->idx == ctl_idx) {
+			encoder_detected = true;
+			cur_master = sde_enc->phys_encs[0];
+			SDE_EVT32(ctl_idx, SDE_EVTLOG_FUNC_CASE1);
+			break;
+		}
+	}
+
+	if (!encoder_detected) {
+		SDE_DEBUG("failed to get the sde_encoder_phys.\n");
+		SDE_EVT32(ctl_idx, SDE_EVTLOG_FUNC_CASE2, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	if (!cur_master->parent || !cur_master->parent->crtc || !cur_master->parent->crtc->state) {
+		SDE_DEBUG("unexpected null pointer in cur_master.\n");
+		SDE_EVT32(ctl_idx, SDE_EVTLOG_FUNC_CASE3, SDE_EVTLOG_ERROR);
+		return;
+	}
+
+	sde_crtc = to_sde_crtc(cur_master->parent->crtc);
+	sde_crtc_state = to_sde_crtc_state(cur_master->parent->crtc->state);
+	handle_fence_error = sde_crtc_get_property(sde_crtc_state, CRTC_PROP_HANDLE_FENCE_ERROR);
+	if (!handle_fence_error) {
+		SDE_DEBUG("userspace not enabled handle fence error in kernel.\n");
+		SDE_EVT32(ctl_idx, SDE_EVTLOG_FUNC_CASE4);
+		return;
+	}
+
+	cur_master->sde_hw_fence_handle = handle;
+
+	if (error) {
+		sde_crtc->handle_fence_error_bw_update = true;
+		cur_master->sde_hw_fence_error_status = true;
+		cur_master->sde_hw_fence_error_value = error;
+	}
+
+	atomic_add_unless(&cur_master->pending_retire_fence_cnt, -1, 0);
+	wake_up_all(&cur_master->pending_kickoff_wq);
+
+	SDE_EVT32(ctl_idx, error, SDE_EVTLOG_FUNC_EXIT);
+}
+
 int sde_encoder_poll_line_counts(struct drm_encoder *drm_enc)
 {
 	static const uint64_t timeout_us = 50000;
@@ -4786,7 +5088,7 @@ void _sde_encoder_delay_kickoff_processing(struct sde_encoder_virt *sde_enc)
 	current_ts = ktime_get_ns();
 	/* ept is in ns and avr_step is mulitple of refresh rate */
 	ept_ts = avr_step_fps ? ept - DIV_ROUND_UP(NSEC_PER_SEC, avr_step_fps) + NSEC_PER_MSEC
-				: ept - (2 * NSEC_PER_MSEC);
+				: ept - EPT_BACKOFF_THRESHOLD;
 
 	/* ept time already elapsed */
 	if (ept_ts <= current_ts) {
@@ -4885,8 +5187,6 @@ int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 		goto end;
 	}
 
-	_sde_encoder_delay_kickoff_processing(sde_enc);
-
 	ret = _sde_encoder_prepare_for_kickoff_processing(drm_enc, params, sde_enc, sde_kms,
 			needs_hw_reset, is_cmd_mode);
 
@@ -4932,6 +5232,9 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool config_changed)
 	}
 	if (sde_enc->cur_master)
 		_sde_encoder_update_retire_txq(sde_enc->cur_master, sde_kms);
+
+	/* delay frame kickoff based on expected present time */
+	_sde_encoder_delay_kickoff_processing(sde_enc);
 
 	/* All phys encs are ready to go, trigger the kickoff */
 	_sde_encoder_kickoff_phys(sde_enc, config_changed);

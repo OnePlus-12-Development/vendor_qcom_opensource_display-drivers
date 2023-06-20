@@ -1599,7 +1599,8 @@ static void sde_encoder_phys_cmd_enable_helper(
 	sde_enc = to_sde_encoder_virt(phys_enc->parent);
 	if (sde_enc->idle_pc_restore) {
 		qsync_mode = sde_connector_get_qsync_mode(phys_enc->connector);
-		if (qsync_mode)
+		if (qsync_mode && !test_bit(SDE_INTF_TE_LEVEL_TRIGGER,
+				&phys_enc->hw_intf->cap->features))
 			sde_enc->restore_te_rd_ptr = true;
 	}
 
@@ -1804,6 +1805,8 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 	struct sde_encoder_virt *sde_enc;
 	int ret = 0;
 	bool recovery_events;
+	u32 qsync_mode = 0;
+	bool panel_dead = false;
 
 	if (!phys_enc || !phys_enc->hw_pp) {
 		SDE_ERROR("invalid encoder\n");
@@ -1811,6 +1814,7 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 	}
 	SDE_DEBUG_CMDENC(cmd_enc, "pp %d\n", phys_enc->hw_pp->idx - PINGPONG_0);
 
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
 	phys_enc->frame_trigger_mode = params->frame_trigger_mode;
 	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_pp->idx - PINGPONG_0,
 			atomic_read(&phys_enc->pending_kickoff_cnt),
@@ -1859,11 +1863,20 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 		else if (phys_enc->hw_pp->ops.update_tearcheck)
 			phys_enc->hw_pp->ops.update_tearcheck(
 					phys_enc->hw_pp, &tc_cfg);
+
+		qsync_mode = sde_connector_get_qsync_mode(phys_enc->connector);
+		panel_dead = sde_connector_panel_dead(phys_enc->connector);
+
+		if (cmd_enc->base.hw_intf->ops.enable_te_level_trigger &&
+				!sde_enc->disp_info.is_te_using_watchdog_timer)
+			cmd_enc->base.hw_intf->ops.enable_te_level_trigger(cmd_enc->base.hw_intf,
+					qsync_mode && !panel_dead);
+
 		SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start, tc_cfg.start_pos,
-				SDE_EVTLOG_FUNC_CASE3);
+				qsync_mode, sde_enc->disp_info.is_te_using_watchdog_timer,
+				panel_dead, SDE_EVTLOG_FUNC_CASE3);
 	}
 
-	sde_enc = to_sde_encoder_virt(phys_enc->parent);
 	if (sde_enc->restore_te_rd_ptr) {
 		sde_encoder_restore_tearcheck_rd_ptr(phys_enc);
 		sde_enc->restore_te_rd_ptr = false;
@@ -2051,13 +2064,20 @@ static int _sde_encoder_phys_cmd_handle_wr_ptr_timeout(
 	bool switch_te;
 	int ret = -ETIMEDOUT;
 	unsigned long lock_flags;
+	struct sde_encoder_virt *sde_enc;
 
 	switch_te = _sde_encoder_phys_cmd_needs_vsync_change(
 				phys_enc, profile_timestamp);
+	sde_enc = to_sde_encoder_virt(phys_enc->parent);
 
 	SDE_EVT32(DRMID(phys_enc->parent), switch_te, SDE_EVTLOG_FUNC_ENTRY);
 
 	if (sde_connector_panel_dead(phys_enc->connector)) {
+		if (cmd_enc->base.hw_intf->ops.enable_te_level_trigger &&
+				!sde_enc->disp_info.is_te_using_watchdog_timer)
+			cmd_enc->base.hw_intf->ops.enable_te_level_trigger(cmd_enc->base.hw_intf,
+					false);
+
 		ret = _sde_encoder_phys_cmd_wait_for_wr_ptr(phys_enc);
 	} else if (switch_te) {
 		SDE_DEBUG_CMDENC(cmd_enc,

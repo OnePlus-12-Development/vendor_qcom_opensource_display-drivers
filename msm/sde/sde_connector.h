@@ -953,6 +953,15 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 		int connector_type);
 
 /**
+ * sde_connector_fence_error_ctx_signal - sde fence error context update for retire fence
+ * @conn: Pointer to drm connector object
+ * @input_fence_status: input fence status, negative if input fence error
+ * @is_vid：if encoder is video mode
+ */
+void sde_connector_fence_error_ctx_signal(struct drm_connector *conn, int input_fence_status,
+		bool is_vid);
+
+/**
  * sde_connector_prepare_fence - prepare fence support for current commit
  * @connector: Pointer to drm connector object
  */

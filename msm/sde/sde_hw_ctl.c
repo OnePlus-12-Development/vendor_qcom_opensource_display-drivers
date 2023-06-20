@@ -29,6 +29,7 @@
 #define CTL_SW_RESET                  0x030
 #define CTL_SW_RESET_OVERRIDE         0x060
 #define CTL_STATUS                    0x064
+#define CTL_FLUSH_MASK                0x090
 #define CTL_LAYER_EXTN_OFFSET         0x40
 #define CTL_ROT_TOP                   0x0C0
 #define CTL_ROT_FLUSH                 0x0C4
@@ -473,6 +474,15 @@ static inline int sde_hw_ctl_trigger_pending(struct sde_hw_ctl *ctx)
 		return -EINVAL;
 
 	SDE_REG_WRITE(&ctx->hw, CTL_PREPARE, 0x1);
+	return 0;
+}
+
+static inline int sde_hw_ctl_clear_flush_mask(struct sde_hw_ctl *ctx, bool clear)
+{
+	if (!ctx)
+		return -EINVAL;
+
+	SDE_REG_WRITE(&ctx->hw, CTL_FLUSH_MASK, clear ? 0xffffffff : 0);
 	return 0;
 }
 
@@ -1476,6 +1486,7 @@ static void _setup_ctl_ops(struct sde_hw_ctl_ops *ops,
 		ops->update_bitmask = sde_hw_ctl_update_bitmask;
 		ops->get_ctl_intf = sde_hw_ctl_get_intf;
 	}
+	ops->clear_flush_mask = sde_hw_ctl_clear_flush_mask;
 	ops->clear_pending_flush = sde_hw_ctl_clear_pending_flush;
 	ops->get_pending_flush = sde_hw_ctl_get_pending_flush;
 	ops->get_flush_register = sde_hw_ctl_get_flush_register;

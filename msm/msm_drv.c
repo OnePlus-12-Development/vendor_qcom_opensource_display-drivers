@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -911,9 +911,11 @@ static int msm_drm_component_init(struct device *dev)
 	INIT_LIST_HEAD(&priv->client_event_list);
 	INIT_LIST_HEAD(&priv->inactive_list);
 	INIT_LIST_HEAD(&priv->vm_client_list);
+	INIT_LIST_HEAD(&priv->fence_error_client_list);
 	mutex_init(&priv->mm_lock);
 
 	mutex_init(&priv->vm_client_lock);
+	mutex_init(&priv->fence_error_client_lock);
 
 	/* Bind all our sub-components: */
 	ret = msm_component_bind_all(dev, ddev);
@@ -2081,6 +2083,65 @@ static int add_display_components(struct device *dev,
 
 	return ret;
 }
+
+void *msm_register_fence_error_event(struct drm_device *ddev, struct msm_fence_error_ops *ops,
+		void *priv_data)
+{
+	struct msm_drm_private *priv;
+	struct msm_fence_error_client_entry *client_entry;
+
+	if (!ddev || !ddev->dev_private) {
+		DRM_ERROR("Invalid drm_device.\n");
+		return ERR_PTR(-EINVAL);
+	}
+	priv = ddev->dev_private;
+
+	if (!ops) {
+		DRM_ERROR("invalid msm_fence_error_ops.\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	client_entry = kzalloc(sizeof(*client_entry), GFP_KERNEL);
+	if (!client_entry) {
+		DRM_ERROR("invalid client_entry.\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	mutex_lock(&priv->fence_error_client_lock);
+	memcpy(&client_entry->ops, ops, sizeof(*ops));
+	client_entry->data = priv_data;
+	list_add(&client_entry->list, &priv->fence_error_client_list);
+	mutex_unlock(&priv->fence_error_client_lock);
+
+	return (void *)client_entry;
+}
+EXPORT_SYMBOL(msm_register_fence_error_event);
+
+int msm_unregister_fence_error_event(struct drm_device *ddev,
+		struct msm_fence_error_client_entry *client_entry_handle)
+{
+	struct msm_drm_private *priv;
+	struct msm_fence_error_client_entry *client_entry = client_entry_handle;
+
+	if (!ddev || !ddev->dev_private) {
+		DRM_ERROR("Invalid drm_device.\n");
+		return -EINVAL;
+	}
+	priv = ddev->dev_private;
+
+	if (IS_ERR_OR_NULL(client_entry_handle)) {
+		DRM_ERROR("Invalid client_entry handle.\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&priv->fence_error_client_lock);
+	list_del(&client_entry->list);
+	kfree(client_entry);
+	mutex_unlock(&priv->fence_error_client_lock);
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_unregister_fence_error_event);
 
 struct msm_gem_address_space *
 msm_gem_smmu_address_space_get(struct drm_device *dev,

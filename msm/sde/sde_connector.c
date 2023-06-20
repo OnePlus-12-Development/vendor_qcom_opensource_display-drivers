@@ -86,6 +86,11 @@ static const struct drm_prop_enum_list e_panel_mode[] = {
 	{MSM_DISPLAY_CMD_MODE, "command_mode"},
 	{MSM_DISPLAY_MODE_MAX, "none"},
 };
+static const struct drm_prop_enum_list e_bpp_mode[] = {
+	{MSM_DISPLAY_PIXEL_FORMAT_NONE, "none"},
+	{MSM_DISPLAY_PIXEL_FORMAT_RGB888, "dsi_24bpp"},
+	{MSM_DISPLAY_PIXEL_FORMAT_RGB101010, "dsi_30bpp"},
+};
 
 static void sde_dimming_bl_notify(struct sde_connector *conn, struct dsi_backlight_config *config)
 {
@@ -177,8 +182,14 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 		}
 		rc = c_conn->ops.set_backlight(&c_conn->base,
 				c_conn->display, bl_lvl);
-		if (!rc)
+
+		if (!rc) {
 			sde_dimming_bl_notify(c_conn, &display->panel->bl_config);
+			if (c_conn->base.state && c_conn->base.state->crtc) {
+				sde_crtc_backlight_notify(c_conn->base.state->crtc, brightness,
+					display->panel->bl_config.brightness_max_level);
+			}
+		}
 		c_conn->unset_bl_level = 0;
 	}
 
@@ -830,8 +841,16 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 		bl_config->bl_level);
 	rc = c_conn->ops.set_backlight(&c_conn->base,
 			dsi_display, bl_config->bl_level);
-	if (!rc)
+
+	if (!rc) {
 		sde_dimming_bl_notify(c_conn, bl_config);
+		if (c_conn->base.state && c_conn->base.state->crtc) {
+			sde_crtc_backlight_notify(c_conn->base.state->crtc,
+				dsi_display->panel->bl_config.brightness,
+				dsi_display->panel->bl_config.brightness_max_level);
+		}
+	}
+
 	c_conn->unset_bl_level = 0;
 
 	return rc;
@@ -1903,6 +1922,26 @@ void sde_conn_timeline_status(struct drm_connector *conn)
 
 	c_conn = to_sde_connector(conn);
 	sde_fence_timeline_status(c_conn->retire_fence, &conn->base);
+}
+
+void sde_connector_fence_error_ctx_signal(struct drm_connector *conn, int input_fence_status,
+	bool is_vid)
+{
+	struct sde_connector *sde_conn;
+	struct sde_fence_context *ctx;
+	ktime_t time_stamp;
+
+	sde_conn = to_sde_connector(conn);
+	if (!sde_conn)
+		return;
+
+	ctx = sde_conn->retire_fence;
+	sde_fence_error_ctx_update(ctx, input_fence_status,
+		is_vid ? SET_ERROR_ONLY_VID : SET_ERROR_ONLY_CMD_RETIRE);
+	time_stamp = ktime_get();
+
+	sde_fence_signal(ctx, time_stamp, SDE_FENCE_SIGNAL, NULL);
+	sde_fence_error_ctx_update(ctx, 0, NO_ERROR);
 }
 
 void sde_connector_prepare_fence(struct drm_connector *connector)
@@ -3224,6 +3263,9 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 			ARRAY_SIZE(e_panel_mode),
 			(dsi_display->panel->panel_mode == DSI_OP_VIDEO_MODE) ? 0 : 1,
 			CONNECTOR_PROP_SET_PANEL_MODE);
+
+		msm_property_install_enum(&c_conn->property_info, "bpp_mode", 0,
+			0, e_bpp_mode, ARRAY_SIZE(e_bpp_mode), 0, CONNECTOR_PROP_BPP_MODE);
 
 		if (test_bit(SDE_FEATURE_DEMURA, sde_kms->catalog->features)) {
 			msm_property_install_blob(&c_conn->property_info,

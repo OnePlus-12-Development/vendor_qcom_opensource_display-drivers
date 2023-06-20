@@ -451,6 +451,21 @@ static void sde_hw_intf_enable_timing_engine(struct sde_hw_intf *intf, u8 enable
 	}
 }
 
+static void sde_hw_intf_enable_te_level_trigger(struct sde_hw_intf *intf, bool enable)
+{
+	struct sde_hw_blk_reg_map *c = &intf->hw;
+	u32 intf_cfg = 0;
+
+	intf_cfg = SDE_REG_READ(c, INTF_CONFIG);
+
+	if (enable)
+		intf_cfg |= BIT(22);
+	else
+		intf_cfg &= ~BIT(22);
+
+	SDE_REG_WRITE(c, INTF_CONFIG, intf_cfg);
+}
+
 static void sde_hw_intf_setup_prg_fetch(
 		struct sde_hw_intf *intf,
 		const struct intf_prog_fetch *fetch)
@@ -1081,10 +1096,11 @@ static void _setup_intf_ops(struct sde_hw_intf_ops *ops,
 		ops->get_autorefresh = sde_hw_intf_get_autorefresh_config;
 		ops->poll_timeout_wr_ptr = sde_hw_intf_poll_timeout_wr_ptr;
 		ops->vsync_sel = sde_hw_intf_vsync_sel;
-		ops->check_and_reset_tearcheck =
-			sde_hw_intf_v1_check_and_reset_tearcheck;
-		ops->override_tear_rd_ptr_val =
-			sde_hw_intf_override_tear_rd_ptr_val;
+		ops->check_and_reset_tearcheck = sde_hw_intf_v1_check_and_reset_tearcheck;
+		ops->override_tear_rd_ptr_val = sde_hw_intf_override_tear_rd_ptr_val;
+
+		if (cap & BIT(SDE_INTF_TE_LEVEL_TRIGGER))
+			ops->enable_te_level_trigger = sde_hw_intf_enable_te_level_trigger;
 	}
 
 	if (cap & BIT(SDE_INTF_RESET_COUNTER))

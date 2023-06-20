@@ -65,6 +65,16 @@ enum sde_crtc_output_capture_point {
 };
 
 /**
+ * enum fence_error_handle_flag: the flag to enable/disable fence error handling in kernel
+ * @FENCE_ERROR_HANDLE_DISABLE : disable fence error handling in kernel
+ * @FENCE_ERROR_HANDLE_ENABLE : enable fence error handling in kernel
+ */
+enum fence_error_handle_flag {
+	FENCE_ERROR_HANDLE_DISABLE,
+	FENCE_ERROR_HANDLE_ENABLE,
+};
+
+/**
  * enum sde_crtc_idle_pc_state: states of idle power collapse
  * @IDLE_PC_NONE: no-op
  * @IDLE_PC_ENABLE: enable idle power-collapse
@@ -365,6 +375,11 @@ enum sde_crtc_hw_fence_flags {
  *                          sde_crtc_hw_fence_flags for available fields.
  * @hwfence_out_fences_skip: number of frames to skip before create a new hw-fence, this can be
  *                   used to slow-down creation of output hw-fences for debugging purposes.
+ * @input_fence_status : input fence status, negative if the fence has been completed with error.
+ * @hanle_fence_error_bw_update: bool to indicate if it is fence error and need to avoid bw vote.
+ * @back_light: backlight value
+ * @back_light_max: max backlight value
+ * @back_light_pending: flag to indicate if backlight update is pending
  */
 struct sde_crtc {
 	struct drm_crtc base;
@@ -479,6 +494,12 @@ struct sde_crtc {
 
 	DECLARE_BITMAP(hwfence_features_mask, HW_FENCE_FEATURES_MAX);
 	u32 hwfence_out_fences_skip;
+	int input_fence_status;
+	bool handle_fence_error_bw_update;
+
+	u32 back_light;
+	u32 back_light_max;
+	u32 back_light_pending;
 };
 
 enum sde_crtc_dirty_flags {
@@ -1186,5 +1207,13 @@ bool sde_crtc_is_line_insertion_supported(struct drm_crtc *crtc);
  */
 void sde_crtc_calc_vpadding_param(struct drm_crtc_state *state, u32 crtc_y, u32 crtc_h,
 				  u32 *padding_y, u32 *padding_start, u32 *padding_height);
+
+/**
+ * sde_crtc_backlight_notify - notify backlight
+ * @crtc: Pointer to drm_crtc.
+ * @bl_val: Backlight value.
+ * @bl_max: Max backlight value.
+ */
+void sde_crtc_backlight_notify(struct drm_crtc *crtc, u32 bl_val, u32 bl_max);
 
 #endif /* _SDE_CRTC_H_ */

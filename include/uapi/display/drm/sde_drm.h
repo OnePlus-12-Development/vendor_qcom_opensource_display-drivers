@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -930,6 +930,13 @@ struct sde_drm_dnsc_blur_cfg {
 #endif
 #ifndef DRM_MODE_FLAG_CMD_MODE_PANEL
 #define DRM_MODE_FLAG_CMD_MODE_PANEL        0x02
+#endif
+
+#ifndef DRM_MODE_FLAG_DSI_24BPP
+#define DRM_MODE_FLAG_DSI_24BPP             0x01
+#endif
+#ifndef DRM_MODE_FLAG_DSI_30BPP
+#define DRM_MODE_FLAG_DSI_30BPP             0x02
 #endif
 
 /* display hint flags*/

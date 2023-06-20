@@ -1721,6 +1721,8 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 			break;
 		}
 
+		sde_encoder_hw_fence_error_handle(encoder);
+
 		sde_crtc_complete_flip(crtc, NULL);
 
 		if (cwb_disabling)
@@ -4185,7 +4187,8 @@ retry:
 			continue;
 
 		lp = sde_connector_get_lp(conn);
-		if (lp == SDE_MODE_DPMS_LP1) {
+		if (lp == SDE_MODE_DPMS_LP1 &&
+			!sde_encoder_check_curr_mode(conn->encoder, MSM_DISPLAY_VIDEO_MODE)) {
 			/* transition LP1->LP2 on pm suspend */
 			ret = sde_connector_set_property_for_commit(conn, state,
 					CONNECTOR_PROP_LP, SDE_MODE_DPMS_LP2);
@@ -4197,7 +4200,8 @@ retry:
 			}
 		}
 
-		if (lp != SDE_MODE_DPMS_LP2) {
+		if (lp != SDE_MODE_DPMS_LP2 ||
+			sde_encoder_check_curr_mode(conn->encoder, MSM_DISPLAY_VIDEO_MODE)) {
 			/* force CRTC to be inactive */
 			crtc_state = drm_atomic_get_crtc_state(state,
 					conn->state->crtc);
@@ -4209,7 +4213,8 @@ retry:
 				goto unlock;
 			}
 
-			if (lp != SDE_MODE_DPMS_LP1)
+			if (lp != SDE_MODE_DPMS_LP1 ||
+				sde_encoder_check_curr_mode(conn->encoder, MSM_DISPLAY_VIDEO_MODE))
 				crtc_state->active = false;
 			++num_crtcs;
 		}

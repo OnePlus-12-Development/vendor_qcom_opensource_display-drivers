@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -214,7 +214,7 @@ static int dsi_pll_parse_dfps_from_dt(struct platform_device *pdev,
 	code_entry = (struct pll_codes_entry *)&pll_codes_info->pll_code_data;
 
 	for (i = 0; i < header.num_entries; i++) {
-		if (code_entry[i].device_id == DISPLAY_PLL_CODEID_DSI0) {
+		if (code_entry[i].device_id == pll_res->index) {
 			codes_dfps = &pll_res->dfps->codes_dfps[vco_rate_cnt];
 			codes_dfps->is_valid = 1;
 			codes_dfps->clk_rate = code_entry[i].vco_rate;
@@ -351,7 +351,7 @@ int dsi_pll_init(struct platform_device *pdev, struct dsi_pll_resource **pll)
 
 void dsi_pll_parse_dfps_data(struct platform_device *pdev, struct dsi_pll_resource *pll_res)
 {
-	if (!(pll_res->index) && !(pll_res->in_trusted_vm)) {
+	if (!(pll_res->in_trusted_vm)) {
 		if (dsi_pll_parse_dfps_from_dt(pdev, pll_res))
 			dsi_pll_parse_dfps(pdev, pll_res);
 	}

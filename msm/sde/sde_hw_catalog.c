@@ -2508,6 +2508,7 @@ static int sde_intf_parse_dt(struct device_node *np,
 			set_bit(SDE_INTF_WD_LTJ_CTL, &intf->features);
 			set_bit(SDE_INTF_TE_DEASSERT_DETECT, &intf->features);
 			set_bit(SDE_INTF_VSYNC_TS_SRC_EN, &intf->features);
+			set_bit(SDE_INTF_TE_LEVEL_TRIGGER, &intf->features);
 		}
 	}
 
@@ -4573,12 +4574,44 @@ static void _sde_perf_parse_dt_cfg_populate(struct sde_mdss_cfg *cfg,
 			DEFAULT_AXI_BUS_WIDTH;
 }
 
+/**
+ * _sde_set_possible_cpu_mask - checks defective cores in qos mask and update the
+ * mask to avoid defective cores and add next possible cores for pm qos vote.
+ * @qos_mask:	qos_mask set from DT
+ */
+static int _sde_set_possible_cpu_mask(unsigned long qos_mask)
+{
+	int cpu = 0, defective_cores_count = 0;
+	struct cpumask *cpu_qos_mask = to_cpumask(&qos_mask);
+	unsigned long cpu_p_mask = cpu_possible_mask->bits[0];
+	unsigned long cpu_defective_qos = qos_mask & (~cpu_p_mask);
+
+	/* Count all the defective cores in cpu_defective_qos */
+	defective_cores_count = cpumask_weight(to_cpumask(&cpu_defective_qos));
+
+	for_each_cpu(cpu, cpu_all_mask) {
+		if (cpu_possible(cpu) && !cpumask_test_cpu(cpu, cpu_qos_mask) &&
+					defective_cores_count > 0) {
+			/* Set next possible cpu */
+			cpumask_set_cpu(cpu, cpu_qos_mask);
+			defective_cores_count--;
+		} else if (cpumask_test_cpu(cpu, cpu_qos_mask) && !cpu_possible(cpu)) {
+			/* Unset the defective core from qos mask */
+			cpumask_clear_cpu(cpu, cpu_qos_mask);
+		}
+	}
+
+	qos_mask = cpu_qos_mask->bits[0];
+	return qos_mask;
+}
+
 static int _sde_perf_parse_dt_cfg(struct device_node *np,
 	struct sde_mdss_cfg *cfg, int *prop_count,
 	struct sde_prop_value *prop_value, bool *prop_exists)
 {
 	int rc, j;
 	const char *str = NULL;
+	unsigned long qos_mask = 0;
 
 	/*
 	 * The following performance parameters (e.g. core_ib_ff) are
@@ -4622,14 +4655,16 @@ static int _sde_perf_parse_dt_cfg(struct device_node *np,
 		set_bit(SDE_FEATURE_CDP, cfg->features);
 	}
 
-	cfg->perf.cpu_mask =
-			prop_exists[PERF_CPU_MASK] ?
+	qos_mask = prop_exists[PERF_CPU_MASK] ?
 			PROP_VALUE_ACCESS(prop_value, PERF_CPU_MASK, 0) :
 			DEFAULT_CPU_MASK;
-	cfg->perf.cpu_mask_perf =
-			prop_exists[CPU_MASK_PERF] ?
+	cfg->perf.cpu_mask = _sde_set_possible_cpu_mask(qos_mask);
+
+	qos_mask = prop_exists[CPU_MASK_PERF] ?
 			PROP_VALUE_ACCESS(prop_value, CPU_MASK_PERF, 0) :
 			DEFAULT_CPU_MASK;
+	cfg->perf.cpu_mask_perf = _sde_set_possible_cpu_mask(qos_mask);
+
 	cfg->perf.cpu_dma_latency =
 			prop_exists[PERF_CPU_DMA_LATENCY] ?
 			PROP_VALUE_ACCESS(prop_value, PERF_CPU_DMA_LATENCY, 0) :

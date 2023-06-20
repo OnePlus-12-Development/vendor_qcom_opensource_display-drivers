@@ -47,6 +47,8 @@
 #define MSM_MODE_FLAG_SEAMLESS_POMS_VID			(1<<6)
 /* Request to switch the panel mode to command */
 #define MSM_MODE_FLAG_SEAMLESS_POMS_CMD			(1<<7)
+/* Request to switch bpp without DSC */
+#define MSM_MODE_FLAG_NONDSC_BPP_SWITCH			(1<<8)
 
 /* As there are different display controller blocks depending on the
  * snapdragon version, the kms support is split out and the appropriate
@@ -222,8 +224,7 @@ static inline bool msm_is_mode_seamless(const struct msm_display_mode *mode)
 
 static inline bool msm_is_mode_seamless_dms(const struct msm_display_mode *mode)
 {
-	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_DMS)
-		: false;
+	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_DMS) : false;
 }
 
 static inline bool msm_is_mode_dynamic_fps(const struct msm_display_mode *mode)
@@ -234,40 +235,36 @@ static inline bool msm_is_mode_dynamic_fps(const struct msm_display_mode *mode)
 
 static inline bool msm_is_mode_seamless_vrr(const struct msm_display_mode *mode)
 {
-	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_VRR)
-		: false;
+	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_VRR) : false;
 }
 
-static inline bool msm_is_mode_seamless_poms_to_vid(
-		const struct msm_display_mode *mode)
+static inline bool msm_is_mode_seamless_poms_to_vid(const struct msm_display_mode *mode)
 {
-	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_POMS_VID)
-		: false;
+	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_POMS_VID) : false;
 }
 
-static inline bool msm_is_mode_seamless_poms_to_cmd(
-		const struct msm_display_mode *mode)
+static inline bool msm_is_mode_seamless_poms_to_cmd(const struct msm_display_mode *mode)
 {
-	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_POMS_CMD)
-		: false;
+	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_POMS_CMD) : false;
 }
 
-static inline bool msm_is_mode_seamless_poms(
-			const struct msm_display_mode *mode)
+static inline bool msm_is_mode_seamless_poms(const struct msm_display_mode *mode)
 {
 	return (msm_is_mode_seamless_poms_to_vid(mode) ||
 		msm_is_mode_seamless_poms_to_cmd(mode));
 }
 
-static inline bool msm_is_mode_seamless_dyn_clk(
-					const struct msm_display_mode *mode)
+static inline bool msm_is_mode_seamless_dyn_clk(const struct msm_display_mode *mode)
 {
-	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_DYN_CLK)
-		: false;
+	return mode ? (mode->private_flags & MSM_MODE_FLAG_SEAMLESS_DYN_CLK) : false;
 }
 
-static inline bool msm_needs_vblank_pre_modeset(
-		const struct msm_display_mode *mode)
+static inline bool msm_is_mode_bpp_switch(const struct msm_display_mode *mode)
+{
+	return mode ? (mode->private_flags & MSM_MODE_FLAG_NONDSC_BPP_SWITCH) : false;
+}
+
+static inline bool msm_needs_vblank_pre_modeset(const struct msm_display_mode *mode)
 {
 	return (mode->private_flags & MSM_MODE_FLAG_VBLANK_PRE_MODESET);
 }
@@ -301,6 +298,9 @@ static inline bool msm_is_private_mode_changed(
 		return true;
 
 	if (msm_is_mode_seamless_dms(msm_mode))
+		return true;
+
+	if (msm_is_mode_bpp_switch(msm_mode))
 		return true;
 
 	return false;

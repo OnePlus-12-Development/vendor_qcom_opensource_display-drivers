@@ -3091,6 +3091,22 @@ struct dp_catalog *dp_catalog_get(struct device *dev, struct dp_parser *parser)
 
 	strlcpy(catalog->exe_mode, "hw", sizeof(catalog->exe_mode));
 
+	if (parser->valid_lt_params) {
+		ctrl.swing_hbr2_3 = parser->swing_hbr2_3;
+		ctrl.pre_emp_hbr2_3 = parser->pre_emp_hbr2_3;
+
+		ctrl.swing_hbr_rbr = parser->swing_hbr_rbr;
+		ctrl.pre_emp_hbr_rbr = parser->pre_emp_hbr_rbr;
+		ctrl.valid_lt_params = true;
+	} else {
+		ctrl.swing_hbr2_3 = NULL;
+		ctrl.pre_emp_hbr2_3 = NULL;
+
+		ctrl.swing_hbr_rbr = NULL;
+		ctrl.pre_emp_hbr_rbr = NULL;
+		ctrl.valid_lt_params = false;
+	}
+
 	dp_catalog = &catalog->dp_catalog;
 
 	dp_catalog->aux   = aux;

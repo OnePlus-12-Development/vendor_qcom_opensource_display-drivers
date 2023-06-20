@@ -81,6 +81,7 @@ enum dsi_op_mode {
  *         Seamless transition is dynamic panel operating mode switch to video
  * @DSI_MODE_FLAG_POMS_TO_CMD:
  *         Seamless transition is dynamic panel operating mode switch to cmd
+ * @DSI_MODE_FLAG_NONDSC_BPP_SWITCH:  Transition is bpp mode switch without DSC.
  */
 enum dsi_mode_flags {
 	DSI_MODE_FLAG_SEAMLESS			= BIT(0),
@@ -91,7 +92,8 @@ enum dsi_mode_flags {
 	DSI_MODE_FLAG_DYN_CLK			= BIT(5),
 	DSI_MODE_FLAG_DMS_FPS                   = BIT(6),
 	DSI_MODE_FLAG_POMS_TO_VID		= BIT(7),
-	DSI_MODE_FLAG_POMS_TO_CMD		= BIT(8)
+	DSI_MODE_FLAG_POMS_TO_CMD		= BIT(8),
+	DSI_MODE_FLAG_NONDSC_BPP_SWITCH		= BIT(9)
 };
 
 /**
@@ -474,6 +476,7 @@ struct dsi_split_link_config {
  * @data_lanes:          Physical data lanes to be enabled.
  * @num_data_lanes:      Number of physical data lanes.
  * @bpp:                 Number of bits per pixel.
+ * @bpp_switch_enabled:  Check if bpp switch is enabled without DSC.
  * @en_crc_check:        Enable CRC checks.
  * @en_ecc_check:        Enable ECC checks.
  * @te_mode:             Source for TE signalling.
@@ -511,6 +514,7 @@ struct dsi_host_common_cfg {
 	enum dsi_data_lanes data_lanes;
 	u8 num_data_lanes;
 	u8 bpp;
+	bool bpp_switch_enabled;
 	bool en_crc_check;
 	bool en_ecc_check;
 	enum dsi_te_mode te_mode;
@@ -681,6 +685,8 @@ struct dsi_display_mode_priv_info {
  * @pixel_clk_khz:  Pixel clock in Khz.
  * @dsi_mode_flags: Flags to signal other drm components via private flags
  * @panel_mode_caps: panel mode capabilities.
+ * @pixel_format_caps: pixel format capabilities.
+ * @bpp:               bits per pixel.
  * @is_preferred:   Is mode preferred
  * @mode_idx:       Mode index as defined by devicetree.
  * @priv_info:      Mode private info
@@ -690,6 +696,8 @@ struct dsi_display_mode {
 	u32 pixel_clk_khz;
 	u32 dsi_mode_flags;
 	u32 panel_mode_caps;
+	u32 pixel_format_caps;
+	u32 bpp;
 	bool is_preferred;
 	u32 mode_idx;
 	struct dsi_display_mode_priv_info *priv_info;

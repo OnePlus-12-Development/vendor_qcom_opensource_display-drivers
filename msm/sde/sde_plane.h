@@ -336,9 +336,10 @@ int sde_plane_validate_src_addr(struct drm_plane *plane,
  * sde_plane_wait_input_fence - wait for input fence object
  * @plane:   Pointer to DRM plane object
  * @wait_ms: Wait timeout value
+ * @error_status: Status of input fence
  * Returns: Zero on success
  */
-int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms);
+int sde_plane_wait_input_fence(struct drm_plane *plane, uint32_t wait_ms, int *error_status);
 
 /**
  * sde_plane_color_fill - enables color fill on plane
