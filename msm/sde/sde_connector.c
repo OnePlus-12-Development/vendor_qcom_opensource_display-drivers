@@ -1850,8 +1850,14 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		break;
 	case CONNECTOR_PROP_LP:
 		/* suspend case: clear stale MISR */
-		if (val == SDE_MODE_DPMS_OFF)
+		if (val == SDE_MODE_DPMS_OFF) {
 			memset(&c_conn->previous_misr_sign, 0, sizeof(struct sde_misr_sign));
+			/* reset backlight scale of LTM */
+			if (c_conn->bl_scale_sv != MAX_SV_BL_SCALE_LEVEL) {
+				c_conn->bl_scale_sv = MAX_SV_BL_SCALE_LEVEL;
+				c_conn->bl_scale_dirty = true;
+			}
+		}
 		break;
 	default:
 		break;
