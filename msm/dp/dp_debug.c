@@ -660,13 +660,12 @@ static ssize_t dp_debug_write_mst_con_id(struct file *file,
 	if (!dp_panel)
 		goto out;
 
-	if (debug->dp_debug.sim_mode) {
-		dp_sim_update_port_status(debug->sim_bridge,
-				mst_port->port_num, status);
-	} else {
+	if (debug->dp_debug.sim_mode)
+		dp_sim_update_port_status(debug->sim_bridge, mst_port->port_num, status);
+	else
 		dp_panel->mst_hide = (status == connector_status_disconnected);
-		drm_kms_helper_hotplug_event(connector->dev);
-	}
+
+	drm_kms_helper_hotplug_event(connector->dev);
 
 out:
 	drm_connector_put(connector);
