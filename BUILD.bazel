@@ -6,14 +6,6 @@ package(
 )
 
 ddk_headers(
-    name = "display_drivers_configs",
-    hdrs  = glob([
-      "config/*.h",
-    ]),
-    includes = ["config"]
-)
-
-ddk_headers(
     name = "linux_includes",
     hdrs = glob([
       "include/linux/*.h",
@@ -73,7 +65,7 @@ ddk_headers(
 
 ddk_headers(
     name = "display_drivers_headers",
-    hdrs = [":display_drivers_configs", ":linux_includes", ":uapi_headers", ":msm_headers",":dp_headers",":dsi_headers",":sde_headers",":rotator_headers"]
+    hdrs = [ ":linux_includes", ":uapi_headers", ":msm_headers",":dp_headers",":dsi_headers",":sde_headers",":rotator_headers"]
 )
 
 load(":target.bzl", "define_pineapple")

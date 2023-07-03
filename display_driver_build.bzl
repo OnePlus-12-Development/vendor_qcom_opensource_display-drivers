@@ -1,6 +1,5 @@
 load("//build/kernel/kleaf:kernel.bzl", "ddk_module", "ddk_submodule")
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
-load("//msm-kernel:target_variants.bzl", "get_all_variants")
 
 def _register_module_to_map(module_map, name, path, config_option, srcs, config_srcs, deps, config_deps):
     processed_config_srcs = {}
@@ -45,7 +44,6 @@ def _get_kernel_build_options(modules, config_options):
 
 def _get_kernel_build_module_srcs(module, options, formatter):
     srcs = module.srcs + _get_config_choices(module.config_srcs, options)
-    print("-",module.name,",",module.config_option,",srcs =",srcs)
     module_path = "{}/".format(module.path) if module.path else ""
     return ["{}{}".format(module_path, formatter(src)) for src in srcs]
 
@@ -77,7 +75,7 @@ def define_target_variant_modules(target, variant, registry, modules, config_opt
     for module in modules:
         rule_name = "{}_{}".format(kernel_build, module.name)
         module_srcs = _get_kernel_build_module_srcs(module, options, formatter)
-
+        print(rule_name)
         if not module_srcs:
             continue
 
@@ -105,7 +103,3 @@ def define_target_variant_modules(target, variant, registry, modules, config_opt
         mode_overrides = {"**/*": "644"},
         log = "info",
     )
-
-def define_consolidate_gki_modules(target, registry, modules, config_options = []):
-    for (targets, variant) in get_all_variants():
-        define_target_variant_modules(targets, variant, registry, modules, config_options)
