@@ -398,6 +398,8 @@ static ssize_t dp_debug_read_crc(struct file *file, char __user *user_buff, size
 
 		sde_conn = to_sde_connector(drm_conn);
 		panel = sde_conn->drv_panel;
+		drm_connector_put(drm_conn);
+
 		if (!panel)
 			goto bail;
 	} else {
