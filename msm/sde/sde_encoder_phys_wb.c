@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2073,6 +2073,7 @@ static void _sde_encoder_phys_wb_reset_state(struct sde_encoder_phys *phys_enc)
 {
 	struct sde_encoder_phys_wb *wb_enc = to_sde_encoder_phys_wb(phys_enc);
 	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(phys_enc->parent);
+	struct sde_wb_device *wb_dev = wb_enc->wb_dev;
 	struct sde_crtc *sde_crtc;
 
 	phys_enc->enable_state = SDE_ENC_DISABLED;
@@ -2093,6 +2094,9 @@ static void _sde_encoder_phys_wb_reset_state(struct sde_encoder_phys *phys_enc)
 	phys_enc->hw_cdm = NULL;
 	phys_enc->hw_ctl = NULL;
 	phys_enc->in_clone_mode = false;
+	kfree(wb_dev->modes);
+	wb_dev->modes = NULL;
+	wb_dev->count_modes = 0;
 	atomic_set(&phys_enc->pending_kickoff_cnt, 0);
 	atomic_set(&phys_enc->pending_retire_fence_cnt, 0);
 	atomic_set(&phys_enc->pending_ctl_start_cnt, 0);
