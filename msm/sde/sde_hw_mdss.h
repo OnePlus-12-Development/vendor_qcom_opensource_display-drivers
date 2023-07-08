@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -815,6 +815,7 @@ struct sde_splash_data {
  * @rd_ptr_irq:	The read pointer line at which interrupt has to be generated
  * @wr_ptr_irq:	The write pointer line at which interrupt has to be generated
  * @hw_vsync_mode:	Sync with external frame sync input
+ * @detect_ctrl:	Tearing Detection Control is set to default configuration
  */
 struct sde_hw_tear_check {
 	u32 vsync_count;
@@ -826,6 +827,7 @@ struct sde_hw_tear_check {
 	u32 rd_ptr_irq;
 	u32 wr_ptr_irq;
 	u8 hw_vsync_mode;
+	u32 detect_ctrl;
 };
 
 /**

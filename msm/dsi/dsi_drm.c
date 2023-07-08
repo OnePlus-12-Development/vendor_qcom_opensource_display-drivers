@@ -422,6 +422,15 @@ static bool _dsi_bridge_mode_validate_and_fixup(struct drm_bridge *bridge,
 	msm_parse_mode_priv_info(&old_conn_state->msm_mode, &cur_dsi_mode);
 	cur_dsi_mode.pixel_format_caps = display->panel->host_config.dst_format;
 
+	if (cur_dsi_mode.priv_info) {
+		// in TUI, sometimes msm_mode->private == NULL
+		rc = dsi_display_restore_bit_clk(display, &cur_dsi_mode);
+		if (rc) {
+			DSI_WARN("couldn't restore dsi bit clk");
+			return rc;
+		}
+	}
+
 	rc = dsi_display_validate_mode_change(c_bridge->display, &cur_dsi_mode, adj_mode);
 	if (rc) {
 		DSI_ERR("[%s] seamless mode mismatch failure rc=%d\n", c_bridge->display->name, rc);
@@ -695,7 +704,7 @@ int dsi_conn_get_mode_info(struct drm_connector *connector,
 	if (mode_info->comp_info.comp_type) {
 		tar_bpp = dsi_mode->priv_info->pclk_scale.numer;
 		src_bpp = dsi_mode->priv_info->pclk_scale.denom;
-		mode_info->comp_info.comp_ratio = mult_frac(1, src_bpp,
+		mode_info->comp_info.comp_ratio = mult_frac(100, src_bpp,
 				tar_bpp);
 		mode_info->wide_bus_en = dsi_mode->priv_info->widebus_support;
 	}

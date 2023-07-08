@@ -23,5 +23,8 @@ def define_pineapple():
             "CONFIG_DRM_SDE_VM",
             "CONFIG_QCOM_WCD939X_I2C",
             "CONFIG_THERMAL_OF",
+            "CONFIG_MSM_MMRM",
+            "CONFIG_QTI_HW_FENCE",
+            "CONFIG_QCOM_SPEC_SYNC",
         ],
 )

@@ -36,6 +36,7 @@
 #define AUTOREFRESH_SEQ1_POLL_TIME	2000
 #define AUTOREFRESH_SEQ2_POLL_TIME	25000
 #define AUTOREFRESH_SEQ2_POLL_TIMEOUT	1000000
+#define TEAR_DETECT_CTRL	0x14
 
 static inline int _sde_encoder_phys_cmd_get_idle_timeout(
 		struct sde_encoder_phys *phys_enc)
@@ -1308,7 +1309,7 @@ static void _get_tearcheck_cfg(struct sde_encoder_phys *phys_enc,
 	struct msm_mode_info *info = &sde_enc->mode_info;
 	struct drm_display_mode *mode = &phys_enc->cached_mode;
 	enum sde_rm_qsync_modes qsync_mode;
-	ktime_t qsync_time_ns, default_time_ns, default_line_time_ns, ept_time_ns;
+	ktime_t qsync_time_ns, default_time_ns, default_line_time_ns, ept_time_ns = 0;
 	ktime_t extra_time_ns = 0, ept_extra_time_ns = 0, qsync_l_bound_ns, qsync_u_bound_ns;
 	u32 threshold_lines, ept_threshold_lines = 0, yres;
 	u32 default_fps, qsync_min_fps = 0, ept_fps = 0;
@@ -1498,6 +1499,7 @@ static void sde_encoder_phys_cmd_tearcheck_config(
 	tc_cfg.sync_threshold_continue = DEFAULT_TEARCHECK_SYNC_THRESH_CONTINUE;
 	tc_cfg.rd_ptr_irq = mode->vdisplay + 1;
 	tc_cfg.wr_ptr_irq = 1;
+	tc_cfg.detect_ctrl = tc_cfg.vsync_init_val + TEAR_DETECT_CTRL;
 	cmd_enc->qsync_threshold_lines = tc_cfg.sync_threshold_start;
 
 	SDE_DEBUG_CMDENC(cmd_enc,
