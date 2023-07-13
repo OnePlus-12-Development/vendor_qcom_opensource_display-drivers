@@ -4072,7 +4072,7 @@ static bool _sde_crtc_wait_for_fences(struct drm_crtc *crtc)
 		MAX_HW_FENCES);
 
 	/* register the hw-fences for hw-wait */
-	if (num_hw_fences) {
+	if (num_hw_fences > 0 && num_hw_fences <= MAX_HW_FENCES) {
 
 		ret = sde_fence_register_hw_fences_wait(hw_ctl, dma_hw_fences, num_hw_fences);
 		if (ret) {
