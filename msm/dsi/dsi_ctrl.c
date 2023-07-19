@@ -2731,8 +2731,8 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 
 	/* DTLN PHY error */
 	if (error & 0x3000E00)
-		DSI_CTRL_ERR(dsi_ctrl, "dsi PHY contention error: 0x%lx\n",
-				error);
+		pr_err_ratelimited("[%s] dsi PHY contention error: 0x%lx\n",
+				dsi_ctrl->name, error);
 
 	/* ignore TX timeout if blpp_lp11 is disabled */
 	if (dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE &&

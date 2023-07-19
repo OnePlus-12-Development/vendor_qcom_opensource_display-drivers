@@ -813,12 +813,11 @@ static void msm_gem_vunmap_locked(struct drm_gem_object *obj)
 	if (obj->import_attach) {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 		dma_buf_vunmap(obj->import_attach->dmabuf, &map);
-		dma_buf_end_cpu_access(obj->import_attach->dmabuf, DMA_BIDIRECTIONAL);
 #else
 		dma_buf_vunmap(obj->import_attach->dmabuf, msm_obj->vaddr);
+#endif
 		if (obj->dev && obj->dev->dev && !dev_is_dma_coherent(obj->dev->dev))
 			dma_buf_end_cpu_access(obj->import_attach->dmabuf, DMA_BIDIRECTIONAL);
-#endif
 	} else {
 		vunmap(msm_obj->vaddr);
 	}

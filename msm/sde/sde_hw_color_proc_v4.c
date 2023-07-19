@@ -493,8 +493,13 @@ void sde_demura_backlight_cfg(struct sde_hw_dspp *ctx, u64 val, struct sde_hw_cp
 		return;
 	}
 
-	if (!hw_cfg || !hw_cfg->payload) {
+	if (!hw_cfg) {
 		DRM_ERROR("invalid parameter hw_cfg");
+		return;
+	}
+
+	if (!hw_cfg->payload) {
+		DRM_DEBUG_DRIVER("disable demura feature\n");
 		return;
 	}
 
