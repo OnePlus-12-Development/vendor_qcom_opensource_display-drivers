@@ -2065,8 +2065,14 @@ static int sde_encoder_hw_fence_signal(struct sde_encoder_phys *phys_enc)
 	/* out of order hw fence error signal is needed for video panel. */
 	if (sde_encoder_check_curr_mode(phys_enc->parent, MSM_DISPLAY_VIDEO_MODE)) {
 		/* out of order hw fence error signal */
-		msm_hw_fence_update_txq_error(hwfence_data->hw_fence_handle,
-			phys_enc->sde_hw_fence_handle, 1, MSM_HW_FENCE_UPDATE_ERROR_WITH_MOVE);
+		rc = msm_hw_fence_update_txq_error(hwfence_data->hw_fence_handle,
+			phys_enc->sde_hw_fence_handle, phys_enc->sde_hw_fence_error_value,
+			MSM_HW_FENCE_UPDATE_ERROR_WITH_MOVE);
+		if (rc) {
+			SDE_ERROR("msm_hw_fence_update_txq_error failed, rc = %d\n", rc);
+			SDE_EVT32(DRMID(phys_enc->parent), rc, SDE_EVTLOG_ERROR);
+		}
+
 	/* wait for frame done to avoid out of order signalling for cmd mode. */
 	} else if (pending_kickoff_cnt) {
 		SDE_EVT32(DRMID(phys_enc->parent), SDE_EVTLOG_FUNC_CASE1);
