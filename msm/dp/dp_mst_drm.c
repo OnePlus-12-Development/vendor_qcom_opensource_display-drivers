@@ -723,6 +723,12 @@ static void _dp_mst_bridge_pre_enable_part2(struct dp_mst_bridge *dp_bridge)
 		return;
 	}
 
+	if (payload->vc_start_slot == -1) {
+		DP_ERR("mst bridge [%d] _pre enable part-2 failed, payload alloc part 1 failed\n",
+				dp_bridge->id);
+		return;
+	}
+
 	mst->mst_fw_cbs->update_payload_part2(&mst->mst_mgr, mst_state->base.state, payload);
 #else
 	mst->mst_fw_cbs->update_payload_part2(&mst->mst_mgr);
