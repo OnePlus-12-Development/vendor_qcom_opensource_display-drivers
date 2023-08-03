@@ -1662,7 +1662,7 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 		struct drm_crtc *crtc)
 {
 	struct sde_kms *sde_kms;
-	struct drm_encoder *encoder, *cwb_enc = NULL;
+	struct drm_encoder *encoder;
 	struct drm_device *dev;
 	int ret;
 	bool cwb_disabling;
@@ -1694,10 +1694,9 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
 		cwb_disabling = false;
 		if (encoder->crtc != crtc) {
-			cwb_disabling = sde_encoder_is_cwb_disabling(encoder, crtc);
-			if (cwb_disabling)
-				cwb_enc = encoder;
-			else
+			cwb_disabling = sde_encoder_is_cwb_disabling(encoder,
+					crtc);
+			if (!cwb_disabling)
 				continue;
 		}
 
@@ -1715,16 +1714,20 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 			SDE_EVT32(DRMID(crtc), DRMID(encoder), cwb_disabling,
 					ret, SDE_EVTLOG_ERROR);
 			sde_crtc_request_frame_reset(crtc, encoder);
+
+			/* call ensure virt_reset for cwb encoder before exiting the loop */
+			if (cwb_disabling)
+				sde_encoder_virt_reset(encoder);
 			break;
 		}
 
 		sde_encoder_hw_fence_error_handle(encoder);
 
 		sde_crtc_complete_flip(crtc, NULL);
-	}
 
-	if (cwb_disabling && cwb_enc)
-		sde_encoder_virt_reset(cwb_enc);
+		if (cwb_disabling)
+			sde_encoder_virt_reset(encoder);
+	}
 
 	/* avoid system cache update to set rd-noalloc bit when NSE feature is enabled */
 	if (!test_bit(SDE_FEATURE_SYS_CACHE_NSE, sde_kms->catalog->features))
