@@ -17,10 +17,10 @@ def _register_module_to_map(module_map, name, path, config_option, srcs, config_
             nested_config = config_src
 
             for nested_src, nest_name in nested_config.items():
-                if nested_src == "True":
-                    for nest_src in nest_name:
-                        final_srcs = nest_name[nest_src]
-                        processed_config_srcs[nest_src] = final_srcs
+                if nested_src == True:
+                    processed_config_srcs[config_src_name] = {True: nest_name}
+                else:
+                    processed_config_srcs[nested_src] = {True: nest_name}
 
     for config_deps_name in config_deps:
          config_dep = config_deps[config_deps_name]
