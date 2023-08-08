@@ -658,7 +658,14 @@ static int _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 	}
 
 	drm_dp_mst_update_slots(mst_state, DP_CAP_ANSI_8B10B);
-	mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr, mst_state, payload);
+
+	rc = mst->mst_fw_cbs->update_payload_part1(&mst->mst_mgr,
+			mst_state, payload);
+	if (rc) {
+		DP_ERR("payload allocation failure for conn:%d\n", DP_MST_CONN_ID(dp_bridge));
+		goto end;
+	}
+
 #else
 	ret = mst->mst_fw_cbs->allocate_vcpi(&mst->mst_mgr, port, pbn, slots);
 	if (!ret) {
@@ -701,7 +708,17 @@ static void _dp_mst_bridge_pre_enable_part2(struct dp_mst_bridge *dp_bridge)
 	payload = drm_atomic_get_mst_payload_state(mst_state, port);
 
 	if (!payload) {
-		DP_ERR("mst bridge [%d] _pre enable part-2 failed, null payload\n",
+		DP_ERR("mst bridge [%d] _pre enable part-2 failed, null payload\n", dp_bridge->id);
+		return;
+	}
+
+	if (!payload->port) {
+		DP_ERR("mst bridge [%d] _pre enable part-2 failed, null port\n", dp_bridge->id);
+		return;
+	}
+
+	if (!payload->port->connector) {
+		DP_ERR("mst bridge [%d] _pre enable part-2 failed, null connector\n",
 				dp_bridge->id);
 		return;
 	}

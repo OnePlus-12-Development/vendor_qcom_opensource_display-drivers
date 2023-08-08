@@ -1541,7 +1541,7 @@ static bool _sde_rm_check_dsc(struct sde_rm *rm,
 	 * DSC blks to any of the odd numbered PP blks.
 	 */
 	if (!pp_blk || !IS_COMPATIBLE_PP_DSC(pp_blk->id, dsc->id)) {
-		SDE_DEBUG("dsc %d can't match of pp %d\n", dsc_cfg->id, pp_blk->id);
+		SDE_DEBUG("dsc %d can't match of pp %d\n", dsc_cfg->id, pp_blk ? pp_blk->id : -1);
 		return false;
 	}
 
