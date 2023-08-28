@@ -1816,6 +1816,12 @@ static int _sde_encoder_update_rsc_client(
 				sde_enc->cur_master->connector);
 		sde_enc->autorefresh_solver_disable =
 			 _sde_encoder_is_autorefresh_enabled(sde_enc) ? true : false;
+
+		if (sde_enc->cur_master->ops.is_autoref_disable_pending)
+			sde_enc->autorefresh_solver_disable =
+				(sde_enc->autorefresh_solver_disable ||
+				 sde_enc->cur_master->ops.is_autoref_disable_pending(
+					 sde_enc->cur_master));
 	}
 
 	/* left primary encoder keep vote */
