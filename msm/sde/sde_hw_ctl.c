@@ -994,11 +994,13 @@ static void sde_hw_ctl_clear_all_blendstages(struct sde_hw_ctl *ctx)
 		return;
 
 	c = &ctx->hw;
+	SDE_REG_WRITE(c, CTL_FETCH_PIPE_ACTIVE, 0);
+
 	for (i = 0; i < ctx->mixer_count; i++) {
 		int mixer_id = ctx->mixer_hw_caps[i].id;
 
 		if (mixer_id >= LM_DCWB_DUMMY_0)
-			return;
+			break;
 
 		SDE_REG_WRITE(c, CTL_LAYER(mixer_id), 0);
 		SDE_REG_WRITE(c, CTL_LAYER_EXT(mixer_id), 0);
@@ -1006,7 +1008,6 @@ static void sde_hw_ctl_clear_all_blendstages(struct sde_hw_ctl *ctx)
 		SDE_REG_WRITE(c, CTL_LAYER_EXT3(mixer_id), 0);
 		SDE_REG_WRITE(c, CTL_LAYER_EXT4(mixer_id), 0);
 	}
-	SDE_REG_WRITE(c, CTL_FETCH_PIPE_ACTIVE, 0);
 }
 
 static void _sde_hw_ctl_get_mixer_cfg(struct sde_hw_ctl *ctx,
