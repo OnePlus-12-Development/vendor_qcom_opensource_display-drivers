@@ -848,4 +848,11 @@ int dsi_display_update_transfer_time(void *display, u32 transfer_time);
  */
 int dsi_display_get_panel_scan_line(void *display, u16 *scan_line, ktime_t *scan_line_ts);
 
+/**
+ * dsi_display_report_dead() - report panel dead and cancel work queue
+ * @display:     handle to display
+ *
+ */
+void dsi_display_report_dead(struct dsi_display *display);
+
 #endif /* _DSI_DISPLAY_H_ */
