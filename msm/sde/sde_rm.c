@@ -1644,16 +1644,15 @@ static int _sde_rm_reserve_dsc(
 	/* Find a first DSC */
 	while (alloc_count != num_dsc_enc &&
 			_sde_rm_get_hw_locked(rm, &iter_i, list_forward)) {
-		const struct sde_hw_dsc *hw_dsc = to_sde_hw_dsc(
-				iter_i.blk->hw);
+		int req_index = list_forward ? alloc_count : (num_dsc_enc - alloc_count - 1);
+		const struct sde_hw_dsc *hw_dsc = to_sde_hw_dsc(iter_i.blk->hw);
 		unsigned long features = hw_dsc->caps->features;
-		bool has_422_420_support =
-			BIT(SDE_DSC_NATIVE_422_EN) & features;
+		bool has_422_420_support = BIT(SDE_DSC_NATIVE_422_EN) & features;
 
 		if (reserve_mask & (1 << iter_i.blk->id))
 			continue;
 
-		if (_dsc_ids && (iter_i.blk->id != _dsc_ids[alloc_count]))
+		if (_dsc_ids && (iter_i.blk->id != _dsc_ids[req_index]))
 			continue;
 
 		/* if this hw block does not support required feature */
@@ -1668,7 +1667,7 @@ static int _sde_rm_reserve_dsc(
 		SDE_DEBUG("blk id = %d, _dsc_ids[%d] = %d\n",
 			iter_i.blk->id,
 			alloc_count,
-			_dsc_ids ? _dsc_ids[alloc_count] : -1);
+			_dsc_ids ? _dsc_ids[req_index] : -1);
 
 		/* reset and restart from current block if allocated dsc blocks are not contiguous */
 		if (alloc_count >= 1 && (abs(dsc[alloc_count - 1]->id - iter_i.blk->id) != 1)) {
@@ -1687,11 +1686,12 @@ static int _sde_rm_reserve_dsc(
 		sde_rm_init_hw_iter(&iter_j, 0, SDE_HW_BLK_DSC);
 
 		while (_sde_rm_get_hw_locked(rm, &iter_j, list_forward)) {
+			req_index = list_forward ? alloc_count : (num_dsc_enc - alloc_count - 1);
 			if (reserve_mask & (1 << iter_j.blk->id))
 				continue;
 
 			if (_dsc_ids && (iter_j.blk->id !=
-					_dsc_ids[alloc_count]))
+					_dsc_ids[req_index]))
 				continue;
 
 			if (!_sde_rm_check_dsc(rm, rsvp, iter_j.blk,
@@ -1701,7 +1701,7 @@ static int _sde_rm_reserve_dsc(
 			SDE_DEBUG("blk id = %d, _dsc_ids[%d] = %d\n",
 				iter_j.blk->id,
 				alloc_count,
-				_dsc_ids ? _dsc_ids[alloc_count] : -1);
+				_dsc_ids ? _dsc_ids[req_index] : -1);
 
 			reserve_mask |= (1 << iter_j.blk->id);
 			dsc[alloc_count++] = iter_j.blk;
