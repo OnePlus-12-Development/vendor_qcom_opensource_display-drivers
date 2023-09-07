@@ -155,6 +155,7 @@ struct sde_encoder_virt_ops {
  * @add_to_minidump:		Add this phys_enc data to minidumps
  * @disable_autorefresh:	Disable autorefresh
  * @idle_pc_cache_display_status:	caches display status at idle power collapse
+ * @wait_for_vsync_on_autorefresh_busy:	Wait for vsync if autorefresh status busy
  */
 
 struct sde_encoder_phys_ops {
@@ -213,6 +214,7 @@ struct sde_encoder_phys_ops {
 	void (*add_to_minidump)(struct sde_encoder_phys *phys);
 	void (*disable_autorefresh)(struct sde_encoder_phys *phys);
 	void (*idle_pc_cache_display_status)(struct sde_encoder_phys *phys);
+	void (*wait_for_vsync_on_autorefresh_busy)(struct sde_encoder_phys *phys_enc);
 };
 
 /**
