@@ -1,7 +1,11 @@
 DISPLAY_SELECT := CONFIG_DRM_MSM=m
 
 LOCAL_PATH := $(call my-dir)
+ifeq ($(TARGET_BOARD_PLATFORM), pitti)
+LOCAL_MODULE_DDK_BUILD := false
+else
 LOCAL_MODULE_DDK_BUILD := true
+endif
 include $(CLEAR_VARS)
 
 # This makefile is only for DLKM
@@ -24,7 +28,9 @@ KBUILD_OPTIONS += BOARD_PLATFORM=$(TARGET_BOARD_PLATFORM)
 KBUILD_OPTIONS += $(DISPLAY_SELECT)
 
 ifneq ($(TARGET_BOARD_AUTO),true)
+ifneq ($(TARGET_BOARD_PLATFORM), pitti)
 KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,mmrm-module-symvers)/Module.symvers
+endif
 ifneq ($(TARGET_BOARD_PLATFORM), taro)
 	KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,sync-fence-module-symvers)/Module.symvers
 	KBUILD_OPTIONS += KBUILD_EXTRA_SYMBOLS+=$(PWD)/$(call intermediates-dir-for,DLKM,msm-ext-disp-module-symvers)/Module.symvers
@@ -43,8 +49,10 @@ LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 
 ifneq ($(TARGET_BOARD_AUTO),true)
+ifneq ($(TARGET_BOARD_PLATFORM), pitti)
 LOCAL_REQUIRED_MODULES    += mmrm-module-symvers
 LOCAL_ADDITIONAL_DEPENDENCIES += $(call intermediates-dir-for,DLKM,mmrm-module-symvers)/Module.symvers
+endif
 ifneq ($(TARGET_BOARD_PLATFORM), taro)
 	LOCAL_REQUIRED_MODULES    += sync-fence-module-symvers
 	LOCAL_REQUIRED_MODULES    += msm-ext-disp-module-symvers
