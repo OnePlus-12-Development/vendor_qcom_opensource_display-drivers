@@ -1453,7 +1453,7 @@ static void _sde_encoder_phys_wb_update_cwb_flush_helper(
 		src_pp_idx = (enum sde_cwb) (src_pp_idx + i);
 
 		if (test_bit(SDE_WB_DCWB_CTRL, &hw_wb->caps->features)) {
-			dcwb_idx = (enum sde_dcwb) ((hw_pp->idx - (PINGPONG_CWB_0 - 1)) + i);
+			dcwb_idx = hw_pp->dcwb_idx + i;
 			if ((test_bit(SDE_WB_CWB_DITHER_CTRL, &hw_wb->caps->features)) &&
 				hw_wb->ops.program_cwb_dither_ctrl){
 				hw_wb->ops.program_cwb_dither_ctrl(hw_wb,
