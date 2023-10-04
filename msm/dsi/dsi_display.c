@@ -9131,6 +9131,16 @@ int dsi_display_unprepare(struct dsi_display *display)
 	return rc;
 }
 
+void dsi_display_report_dead(struct dsi_display *display)
+{
+	struct sde_connector *c_conn = to_sde_connector(display->drm_conn);
+
+	/* disable work queue */
+	sde_connector_schedule_status_work(display->drm_conn, false);
+
+	sde_connector_report_panel_dead(c_conn, false);
+}
+
 void __init dsi_display_register(void)
 {
 	dsi_phy_drv_register();

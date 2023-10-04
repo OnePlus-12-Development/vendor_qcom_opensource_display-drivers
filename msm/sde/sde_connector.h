@@ -1386,4 +1386,11 @@ const char *sde_conn_get_topology_name(struct drm_connector *conn,
  */
 bool sde_connector_is_line_insertion_supported(struct sde_connector *sde_conn);
 
+/*
+ * sde_connector_report_panel_dead - report panel dead notification
+ * @sde_conn:    Pointer to sde connector structure
+ * @skip_pre_kickoff: boolean to skip pre kickoff
+ */
+void sde_connector_report_panel_dead(struct sde_connector *conn, bool skip_pre_kickoff);
+
 #endif /* _SDE_CONNECTOR_H_ */

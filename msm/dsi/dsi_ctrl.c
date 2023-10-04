@@ -17,6 +17,7 @@
 #include "dsi_ctrl.h"
 #include "dsi_ctrl_hw.h"
 #include "dsi_clk.h"
+#include "dsi_display.h"
 #include "dsi_pwr.h"
 #include "dsi_catalog.h"
 #include "dsi_panel.h"
@@ -2717,6 +2718,8 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 				unsigned long error)
 {
 	struct dsi_event_cb_info cb_info;
+	struct dsi_display *display;
+	bool skip_irq_enable = false;
 
 	cb_info = dsi_ctrl->irq_info.irq_err_cb;
 
@@ -2766,6 +2769,9 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 						cb_info.event_idx,
 						dsi_ctrl->cell_index,
 						0, 0, 0, 0);
+			display = cb_info.event_usr_ptr;
+			dsi_display_report_dead(display);
+			skip_irq_enable = true;
 		}
 	}
 
@@ -2777,6 +2783,9 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 						cb_info.event_idx,
 						dsi_ctrl->cell_index,
 						0, 0, 0, 0);
+			display = cb_info.event_usr_ptr;
+			dsi_display_report_dead(display);
+			skip_irq_enable = true;
 		}
 	}
 
@@ -2802,7 +2811,7 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 	}
 
 	/* enable back DSI interrupts */
-	if (dsi_ctrl->hw.ops.error_intr_ctrl)
+	if (dsi_ctrl->hw.ops.error_intr_ctrl && !skip_irq_enable)
 		dsi_ctrl->hw.ops.error_intr_ctrl(&dsi_ctrl->hw, true);
 }
 
