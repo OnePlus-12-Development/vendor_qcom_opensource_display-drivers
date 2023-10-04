@@ -1188,6 +1188,11 @@ static void dp_display_host_deinit(struct dp_display_private *dp)
 		return;
 	}
 
+	if (dp_display_state_is(DP_STATE_READY)) {
+		DP_DEBUG("dp deinit before unready\n");
+		dp_display_host_unready(dp);
+	}
+
 	dp_display_abort_hdcp(dp, true);
 	dp->ctrl->deinit(dp->ctrl);
 	dp->hpd->host_deinit(dp->hpd, &dp->catalog->hpd);
