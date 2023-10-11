@@ -8043,6 +8043,11 @@ static void dsi_display_handle_fifo_underflow(struct work_struct *work)
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 
 	mutex_unlock(&display->display_lock);
+
+	if (display->is_spurious_interrupt) {
+		display->is_spurious_interrupt = false;
+		dsi_display_report_dead(display);
+	}
 }
 
 static void dsi_display_handle_fifo_overflow(struct work_struct *work)
@@ -8124,6 +8129,11 @@ end:
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 
 	mutex_unlock(&display->display_lock);
+
+	if (display->is_spurious_interrupt) {
+		display->is_spurious_interrupt = false;
+		dsi_display_report_dead(display);
+	}
 }
 
 static void dsi_display_handle_lp_rx_timeout(struct work_struct *work)
