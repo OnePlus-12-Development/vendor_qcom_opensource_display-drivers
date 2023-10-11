@@ -102,6 +102,7 @@
 #define INTF_TEAR_LINE_COUNT            0x2B0
 #define INTF_TEAR_AUTOREFRESH_CONFIG    0x2B4
 #define INTF_TEAR_TEAR_DETECT_CTRL      0x2B8
+#define INTF_TEAR_AUTOREFRESH_STATUS    0x2C0
 #define INTF_TEAR_PROG_FETCH_START      0x2C4
 #define INTF_TEAR_DSI_DMA_SCHD_CTRL0    0x2C8
 #define INTF_TEAR_DSI_DMA_SCHD_CTRL1    0x2CC
@@ -827,6 +828,17 @@ static int sde_hw_intf_get_autorefresh_config(struct sde_hw_intf *intf,
 	return 0;
 }
 
+static u32 sde_hw_intf_get_autorefresh_status(struct sde_hw_intf *intf)
+{
+	struct sde_hw_blk_reg_map *c;
+	u32 val;
+
+	c = &intf->hw;
+	val = SDE_REG_READ(c, INTF_TEAR_AUTOREFRESH_STATUS);
+
+	return val;
+}
+
 static int sde_hw_intf_poll_timeout_wr_ptr(struct sde_hw_intf *intf,
 		u32 timeout_us)
 {
@@ -1095,6 +1107,8 @@ static void _setup_intf_ops(struct sde_hw_intf_ops *ops,
 		ops->get_vsync_info = sde_hw_intf_get_vsync_info;
 		ops->setup_autorefresh = sde_hw_intf_setup_autorefresh_config;
 		ops->get_autorefresh = sde_hw_intf_get_autorefresh_config;
+		ops->get_autorefresh_status =
+			sde_hw_intf_get_autorefresh_status;
 		ops->poll_timeout_wr_ptr = sde_hw_intf_poll_timeout_wr_ptr;
 		ops->vsync_sel = sde_hw_intf_vsync_sel;
 		ops->check_and_reset_tearcheck = sde_hw_intf_v1_check_and_reset_tearcheck;
