@@ -5423,6 +5423,20 @@ u32 sde_encoder_helper_get_kickoff_timeout_ms(struct drm_encoder *drm_enc)
 		return (SEC_TO_MILLI_SEC / fps) * 2;
 }
 
+void sde_encoder_reset_kickoff_timeout_ms(struct drm_encoder *drm_enc)
+{
+	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
+
+	if (!sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_CMD_MODE))
+		return;
+
+	for (int i = 0; i < sde_enc->num_phys_encs; i++) {
+		if (sde_enc->phys_encs[i])
+			sde_enc->phys_encs[i]->kickoff_timeout_ms =
+				sde_encoder_helper_get_kickoff_timeout_ms(drm_enc);
+	}
+}
+
 int sde_encoder_get_avr_status(struct drm_encoder *drm_enc)
 {
 	struct sde_encoder_virt *sde_enc;

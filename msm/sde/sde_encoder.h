@@ -387,6 +387,12 @@ int sde_encoder_prepare_for_kickoff(struct drm_encoder *encoder,
 void sde_encoder_trigger_kickoff_pending(struct drm_encoder *encoder);
 
 /**
+ * sde_encoder_reset_kickoff_timeout_ms - Reset the kickoff_timout after modeset
+ *        commit for command mode display.
+ * @encoder:	encoder pointer
+ */
+void sde_encoder_reset_kickoff_timeout_ms(struct drm_encoder *encoder);
+/**
  * sde_encoder_kickoff - trigger a double buffer flip of the ctl path
  *	(i.e. ctl flush and start) immediately.
  * @encoder:	encoder pointer

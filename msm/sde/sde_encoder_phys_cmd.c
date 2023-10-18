@@ -827,7 +827,8 @@ static void sde_encoder_phys_cmd_mode_set(
 	_sde_encoder_phys_cmd_setup_irq_hw_idx(phys_enc);
 
 	phys_enc->kickoff_timeout_ms =
-		sde_encoder_helper_get_kickoff_timeout_ms(phys_enc->parent);
+			max(phys_enc->kickoff_timeout_ms,
+			sde_encoder_helper_get_kickoff_timeout_ms(phys_enc->parent));
 }
 
 static int _sde_encoder_phys_cmd_handle_framedone_timeout(
