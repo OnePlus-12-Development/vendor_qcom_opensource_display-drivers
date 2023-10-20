@@ -1607,8 +1607,9 @@ static void _sde_crtc_program_lm_output_roi(struct drm_crtc *crtc)
 
 		lm_roi = &cstate->lm_roi[lm_idx];
 		hw_lm = sde_crtc->mixers[lm_idx].hw_lm;
-		if (!sde_crtc->mixers_swapped)
-			right_mixer = lm_idx % MAX_MIXERS_PER_LAYOUT;
+		right_mixer = lm_idx % MAX_MIXERS_PER_LAYOUT;
+		if (sde_crtc->mixers_swapped)
+			right_mixer = !right_mixer;
 
 		if (lm_roi->w != hw_lm->cfg.out_width ||
 				lm_roi->h != hw_lm->cfg.out_height ||
@@ -6582,6 +6583,8 @@ static void sde_crtc_install_perf_properties(struct sde_crtc *sde_crtc,
 static void sde_crtc_setup_capabilities_blob(struct sde_kms_info *info,
 		struct sde_mdss_cfg *catalog)
 {
+	enum sde_ddr_type ddr_type;
+
 	sde_kms_info_reset(info);
 
 	sde_kms_info_add_keyint(info, "hw_version", catalog->hw_rev);
@@ -6607,10 +6610,21 @@ static void sde_crtc_setup_capabilities_blob(struct sde_kms_info *info,
 				catalog->mdp[0].ubwc_swizzle);
 	}
 
-	if (of_fdt_get_ddrtype() == LP_DDR4_TYPE)
+	ddr_type = of_fdt_get_ddrtype();
+	switch (ddr_type) {
+	case LP_DDR4:
 		sde_kms_info_add_keystr(info, "DDR version", "DDR4");
-	else
+		break;
+	case LP_DDR5:
 		sde_kms_info_add_keystr(info, "DDR version", "DDR5");
+		break;
+	case LP_DDR5X:
+		sde_kms_info_add_keystr(info, "DDR version", "DDR5X");
+		break;
+	default:
+		SDE_INFO("ddr type : 0x%x not in list\n", ddr_type);
+		break;
+	}
 
 	if (sde_is_custom_client()) {
 		/* No support for SMART_DMA_V1 yet */

@@ -114,6 +114,14 @@ static void _sde_encoder_phys_cmd_config_autorefresh(
 		hw_pp->ops.setup_autorefresh(hw_pp, cfg_cur);
 }
 
+static bool sde_encoder_phys_cmd_is_autoref_disable_pending(struct sde_encoder_phys *phys_enc)
+{
+	if (!phys_enc)
+		return true;
+
+	return phys_enc->autorefresh_disable_trans;
+}
+
 static void _sde_encoder_phys_cmd_update_flush_mask(
 		struct sde_encoder_phys *phys_enc)
 {
@@ -2540,8 +2548,8 @@ static void sde_encoder_phys_cmd_init_ops(struct sde_encoder_phys_ops *ops)
 	ops->update_split_role = sde_encoder_phys_cmd_update_split_role;
 	ops->restore = sde_encoder_phys_cmd_enable_helper;
 	ops->control_te = sde_encoder_phys_cmd_connect_te;
-	ops->is_autorefresh_enabled =
-			sde_encoder_phys_cmd_is_autorefresh_enabled;
+	ops->is_autorefresh_enabled = sde_encoder_phys_cmd_is_autorefresh_enabled;
+	ops->is_autoref_disable_pending = sde_encoder_phys_cmd_is_autoref_disable_pending;
 	ops->get_line_count = sde_encoder_phys_cmd_te_get_line_count;
 	ops->wait_for_active = NULL;
 	ops->setup_vsync_source = sde_encoder_phys_cmd_setup_vsync_source;
