@@ -27,6 +27,11 @@ ifeq ($(CONFIG_ARCH_PITTI), y)
 	LINUX_INC +=	-include $(DISPLAY_ROOT)/config/gki_pittidispconf.h
 endif
 
+ifeq ($(CONFIG_ARCH_NIOBE), y)
+	include $(DISPLAY_ROOT)/config/gki_niobedisp.conf
+	LINUX_INC +=	-include $(DISPLAY_ROOT)/config/gki_niobedispconf.h
+endif
+
 ifeq ($(CONFIG_ARCH_PINEAPPLE), y)
 ifeq ($(CONFIG_ARCH_QTI_VM), y)
     include $(DISPLAY_ROOT)/config/gki_pineappledisptui.conf

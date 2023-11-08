@@ -3,6 +3,8 @@ DISPLAY_SELECT := CONFIG_DRM_MSM=m
 LOCAL_PATH := $(call my-dir)
 ifeq ($(TARGET_BOARD_PLATFORM), pitti)
 LOCAL_MODULE_DDK_BUILD := false
+else ifeq ($(TARGET_BOARD_PLATFORM), niobe)
+LOCAL_MODULE_DDK_BUILD := false
 else
 LOCAL_MODULE_DDK_BUILD := true
 endif
