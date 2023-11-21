@@ -33,7 +33,7 @@
  * When disabling INIT property, we don't want to reset those bits since
  * they are needed for both LTM histogram and VLUT.
  */
-#define REG_DMA_LTM_INIT_ENABLE_OP_MASK 0xFFFF8CAB
+#define REG_DMA_LTM_INIT_ENABLE_OP_MASK 0x1100153
 #define REG_DMA_LTM_INIT_DISABLE_OP_MASK 0xFFFF8CAF
 #define REG_DMA_LTM_ROI_OP_MASK 0xFEFFFFFF
 /**
@@ -4202,22 +4202,16 @@ void reg_dmav1_setup_ltm_initv1(struct sde_hw_dspp *ctx, void *cfg)
 		}
 
 		if (init_param->init_param_01) {
-			if (ltm_vlut_ops_mask[dspp_idx[i]] & ltm_vlut)
-				opmode |= BIT(6);
 			ltm_vlut_ops_mask[dspp_idx[i]] |= ltm_dither;
 			opmode |= ((init_param->init_param_02 & 0x7) << 12);
 		} else {
-			opmode &= ~BIT(6);
 			ltm_vlut_ops_mask[dspp_idx[i]] &= ~ltm_dither;
 		}
 
 		if (init_param->init_param_03) {
-			if (ltm_vlut_ops_mask[dspp_idx[i]] & ltm_vlut)
-				opmode |= BIT(4);
 			ltm_vlut_ops_mask[dspp_idx[i]] |= ltm_unsharp;
 			opmode |= ((init_param->init_param_04 & 0x3) << 8);
 		} else {
-			opmode &= ~BIT(4);
 			ltm_vlut_ops_mask[dspp_idx[i]] &= ~ltm_unsharp;
 		}
 
@@ -4396,8 +4390,6 @@ void reg_dmav1_setup_ltm_roiv1(struct sde_hw_dspp *ctx, void *cfg)
 			return;
 		}
 
-		if (ltm_vlut_ops_mask[dspp_idx[i]] & ltm_vlut)
-			opmode |= BIT(24);
 		ltm_vlut_ops_mask[dspp_idx[i]] |= ltm_roi;
 
 		REG_DMA_SETUP_OPS(dma_write_cfg, 0x04, &opmode, sizeof(opmode),
