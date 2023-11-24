@@ -8045,8 +8045,8 @@ static void dsi_display_handle_fifo_underflow(struct work_struct *work)
 	mutex_unlock(&display->display_lock);
 
 	if (display->is_spurious_interrupt) {
-		display->is_spurious_interrupt = false;
 		dsi_display_report_dead(display);
+		display->is_spurious_interrupt = false;
 	}
 }
 
@@ -8131,8 +8131,8 @@ end:
 	mutex_unlock(&display->display_lock);
 
 	if (display->is_spurious_interrupt) {
-		display->is_spurious_interrupt = false;
 		dsi_display_report_dead(display);
+		display->is_spurious_interrupt = false;
 	}
 }
 

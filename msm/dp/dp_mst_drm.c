@@ -965,7 +965,7 @@ static void dp_mst_bridge_disable(struct drm_bridge *drm_bridge)
 
 static void dp_mst_bridge_post_disable(struct drm_bridge *drm_bridge)
 {
-	int rc = 0;
+	int rc = 0, conn = 0;
 	struct dp_mst_bridge *bridge;
 	struct dp_display *dp;
 	struct dp_mst_private *mst;
@@ -981,8 +981,10 @@ static void dp_mst_bridge_post_disable(struct drm_bridge *drm_bridge)
 		return;
 	}
 
+	conn = DP_MST_CONN_ID(bridge);
+
 	DP_MST_DEBUG_V("enter\n");
-	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, DP_MST_CONN_ID(bridge));
+	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, conn);
 
 	dp = bridge->display;
 	mst = dp->dp_mst_prv_info;
@@ -990,19 +992,19 @@ static void dp_mst_bridge_post_disable(struct drm_bridge *drm_bridge)
 	rc = dp->disable(dp, bridge->dp_panel);
 	if (rc)
 		DP_MST_INFO("bridge:%d conn:%d display disable failed, rc=%d\n",
-				bridge->id, DP_MST_CONN_ID(bridge), rc);
+				bridge->id, conn, rc);
 
 	rc = dp->unprepare(dp, bridge->dp_panel);
 	if (rc)
 		DP_MST_INFO("bridge:%d conn:%d display unprepare failed, rc=%d\n",
-				bridge->id, DP_MST_CONN_ID(bridge), rc);
+				bridge->id, conn, rc);
 
 	bridge->connector = NULL;
 	bridge->dp_panel =  NULL;
 
 	DP_MST_INFO("mst bridge:%d conn:%d post disable complete\n",
-			bridge->id, DP_MST_CONN_ID(bridge));
-	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, DP_MST_CONN_ID(bridge));
+			bridge->id, conn);
+	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, conn);
 }
 
 static void dp_mst_bridge_mode_set(struct drm_bridge *drm_bridge,
