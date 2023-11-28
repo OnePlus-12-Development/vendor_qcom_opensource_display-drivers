@@ -7286,7 +7286,10 @@ int dsi_display_get_modes_helper(struct dsi_display *display,
 
 			dsi_display_get_dfps_timing(display, sub_mode,
 					curr_refresh_rate);
-			sub_mode->panel_mode_caps = DSI_OP_VIDEO_MODE;
+
+			/* Avoid override for first sub mode in POMS enabled video mode usecase */
+			if ((i != start) && support_cmd_mode && support_video_mode)
+				sub_mode->panel_mode_caps = DSI_OP_VIDEO_MODE;
 		}
 		end = array_idx;
 
