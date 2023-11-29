@@ -1842,6 +1842,7 @@ static void _sde_cp_crtc_commit_feature(struct sde_cp_node *prop_node,
 	hw_cfg.skip_blend_plane = sde_crtc->skip_blend_plane;
 	hw_cfg.skip_blend_plane_h = sde_crtc->skip_blend_plane_h;
 	hw_cfg.skip_blend_plane_w = sde_crtc->skip_blend_plane_w;
+	hw_cfg.is_crtc_enabled = sde_crtc->enabled;
 
 	hw_cfg.num_ds_enabled = sde_crtc_state->num_ds_enabled;
 
