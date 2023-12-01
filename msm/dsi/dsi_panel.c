@@ -3146,6 +3146,7 @@ static int dsi_panel_parse_topology(
 		goto parse_fail;
 	}
 
+parse_done:
 	if (!(priv_info->dsc_enabled || priv_info->vdc_enabled) !=
 			!topology[top_sel].num_enc) {
 		DSI_ERR("topology and compression info mismatch dsc:%d vdc:%d num_enc:%d\n",
@@ -3164,7 +3165,6 @@ static int dsi_panel_parse_topology(
 		topology[top_sel].num_enc,
 		topology[top_sel].num_intf);
 
-parse_done:
 	memcpy(&priv_info->topology, &topology[top_sel],
 		sizeof(struct msm_display_topology));
 parse_fail:
