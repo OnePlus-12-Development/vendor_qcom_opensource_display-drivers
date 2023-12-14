@@ -6475,7 +6475,11 @@ static bool __reg_dmav1_valid_hfc_en_cfg(struct drm_msm_dem_cfg *dcfg,
 {
 	u32 h, w, temp;
 	if (!hw_cfg->valid_skip_blend_plane) {
-		DRM_ERROR("HFC plane not set\n");
+		if (hw_cfg->is_crtc_enabled)
+			DRM_ERROR("HFC plane not set\n");
+		else
+			DRM_WARN("Crtc is disabled, HFC plane not set\n");
+
 		return false;
 	}
 
