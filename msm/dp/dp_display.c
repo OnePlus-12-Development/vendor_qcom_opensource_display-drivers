@@ -1535,6 +1535,9 @@ static void dp_display_clear_reservation(struct dp_display *dp, struct dp_panel 
 	dp_display->tot_lm_blks_in_use -= panel->max_lm;
 	panel->max_lm = 0;
 
+	if (!dp_display->active_stream_cnt)
+		dp_display->tot_lm_blks_in_use = 0;
+
 	mutex_unlock(&dp_display->accounting_lock);
 }
 
