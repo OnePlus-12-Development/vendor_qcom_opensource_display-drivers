@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -188,6 +189,8 @@ struct sde_vm_ops {
  * @msgq_listener_thread - handle to msgq receiver thread
  * @vm_work - kthread work obj for msgq
  * @msgq_handle - handle to display msgq
+ * @lastclose_in_progress - boolean entry to check if
+ *                          lastclose is in progress
  */
 struct sde_vm {
 	struct mutex vm_res_lock;
@@ -199,6 +202,7 @@ struct sde_vm {
 	struct task_struct *msgq_listener_thread;
 	struct sde_vm_msg_work vm_work;
 	void *msgq_handle;
+	bool lastclose_in_progress;
 };
 
 /**
