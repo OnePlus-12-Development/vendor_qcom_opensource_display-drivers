@@ -54,9 +54,33 @@ def define_blair(t, v):
         ],
 )
 
+def define_pitti(t, v):
+    define_target_variant_modules(
+        target = t,
+        variant = v,
+        registry = display_driver_modules,
+        modules = [
+            "msm_drm",
+        ],
+         config_options = [
+            "CONFIG_DRM_MSM_SDE",
+            "CONFIG_DRM_MSM_DSI",
+            "CONFIG_THERMAL_OF",
+            "CONFIG_DSI_PARSER",
+            "CONFIG_DRM_MSM_REGISTER_LOGGING",
+            "CONFIG_QCOM_MDSS_PLL",
+            "CONFIG_MSM_SDE_ROTATOR",
+            "CONFIG_SYNC_FILE",
+            "CONFIG_MSM_SDE_ROTATOR_EVTLOG_DEBUG",
+            "CONFIG_DEBUG_FS",
+        ],
+)
+
 def define_display_target():
     for (t, v) in get_all_la_variants() + get_all_le_variants() + get_all_lxc_variants():
         if t == "blair":
             define_blair(t, v)
-        else:
+        if t == "pitti":
+            define_pitti(t, v)
+        if t == "pineapple":
             define_pineapple(t, v)
