@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -54,6 +54,7 @@
 #define SDE_HW_VER_810	SDE_HW_VER(8, 1, 0) /* waipio */
 #define SDE_HW_VER_820	SDE_HW_VER(8, 2, 0) /* diwali */
 #define SDE_HW_VER_850	SDE_HW_VER(8, 5, 0) /* cape */
+#define SDE_HW_VER_870	SDE_HW_VER(8, 7, 0) /* pitti */
 #define SDE_HW_VER_900	SDE_HW_VER(9, 0, 0) /* kalama */
 #define SDE_HW_VER_A00	SDE_HW_VER(10, 0, 0) /* pineapple */
 #define SDE_HW_VER_A10	SDE_HW_VER(10, 1, 0) /* cliffs */
@@ -86,6 +87,7 @@
 #define IS_WAIPIO_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_810)
 #define IS_DIWALI_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_820)
 #define IS_CAPE_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_850)
+#define IS_PITTI_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_870)
 #define IS_KALAMA_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_900)
 #define IS_PINEAPPLE_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_A00)
 #define IS_CLIFFS_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_A10)
