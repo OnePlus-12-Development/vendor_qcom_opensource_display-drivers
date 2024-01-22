@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -5373,6 +5373,7 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 			crtc->state->enable, sde_crtc->cached_encoder_mask);
 	sde_crtc->enabled = false;
 	sde_crtc->cached_encoder_mask = 0;
+	cstate->cached_cwb_enc_mask = 0;
 
 	/* Try to disable uidle */
 	sde_core_perf_crtc_update_uidle(crtc, false);
