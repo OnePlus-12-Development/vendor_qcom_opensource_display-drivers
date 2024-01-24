@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -1498,6 +1498,11 @@ int sde_kms_vm_trusted_post_commit(struct sde_kms *sde_kms,
 	vm_ops = sde_vm_get_ops(sde_kms);
 
 	crtc = sde_kms_vm_get_vm_crtc(state);
+
+	if (sde_kms->vm->lastclose_in_progress && !crtc) {
+		sde_dbg_set_hw_ownership_status(false);
+		goto relase_vm;
+	}
 	if (!crtc)
 		return 0;
 
@@ -1507,6 +1512,7 @@ int sde_kms_vm_trusted_post_commit(struct sde_kms *sde_kms,
 	if (vm_req != VM_REQ_RELEASE)
 		return 0;
 
+relase_vm:
 	sde_kms_vm_pre_release(sde_kms, state, false);
 	sde_kms_vm_set_sid(sde_kms, 0);
 
@@ -1723,7 +1729,7 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 		sde_crtc_complete_flip(crtc, NULL);
 	}
 
-	if (cwb_disabling && cwb_enc)
+	if (cwb_enc)
 		sde_encoder_virt_reset(cwb_enc);
 
 	if (drm_atomic_crtc_needs_modeset(crtc->state)) {
@@ -2915,6 +2921,10 @@ static void sde_kms_lastclose(struct msm_kms *kms)
 
 	sde_kms = to_sde_kms(kms);
 	dev = sde_kms->dev;
+
+	if (sde_kms && sde_kms->vm)
+		sde_kms->vm->lastclose_in_progress = true;
+
 	drm_modeset_acquire_init(&ctx, 0);
 
 	state = drm_atomic_state_alloc(dev);
@@ -2949,6 +2959,9 @@ out_ctx:
 		SDE_ERROR("kms lastclose failed: %d\n", ret);
 
 	SDE_EVT32(ret, SDE_EVTLOG_FUNC_EXIT);
+
+	if (sde_kms && sde_kms->vm)
+		sde_kms->vm->lastclose_in_progress = false;
 	return;
 
 backoff:
