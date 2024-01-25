@@ -50,6 +50,7 @@
 #define SDE_MDP_HW_REV_630	SDE_MDP_REV(6, 3, 0)	/* bengal v1.0 */
 #define SDE_MDP_HW_REV_660	SDE_MDP_REV(6, 6, 0)	/* holi */
 #define SDE_MDP_HW_REV_690	SDE_MDP_REV(6, 9, 0)	/* blair */
+#define SDE_MDP_HW_REV_870	SDE_MDP_REV(8, 7, 0)    /* pitti */
 
 #define SDE_MDP_VBIF_4_LEVEL_REMAPPER	4
 #define SDE_MDP_VBIF_8_LEVEL_REMAPPER	8
