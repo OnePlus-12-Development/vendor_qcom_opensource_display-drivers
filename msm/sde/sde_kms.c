@@ -3058,8 +3058,11 @@ static int _sde_kms_validate_vm_request(struct drm_atomic_state *state, struct s
 			return rc;
 		}
 
-		if (vm_ops->vm_resource_init)
+		if (vm_ops->vm_resource_init) {
 			rc = vm_ops->vm_resource_init(sde_kms, state);
+			if (rc && vm_ops->vm_release)
+				rc = vm_ops->vm_release(sde_kms);
+		}
 	}
 
 	return rc;
